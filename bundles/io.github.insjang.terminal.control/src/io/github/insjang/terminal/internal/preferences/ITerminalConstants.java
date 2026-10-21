@@ -40,10 +40,10 @@ public interface ITerminalConstants {
 	 * @since 5.0
 	 */
 	public static final String PREF_FONT_DEFINITION = "TerminalFontDefinition"; //$NON-NLS-1$
-	public static final int DEFAULT_BUFFERLINES = 1000;
+	public static final int DEFAULT_BUFFERLINES = 10000;
 	public static final boolean DEFAULT_INVERT_COLORS = false;
-	public static final boolean DEFAULT_BAR_CURSOR = false;
-	public static final boolean DEFAULT_AUTO_COPY_SELECTION = false;
+	public static final boolean DEFAULT_BAR_CURSOR = true;
+	public static final boolean DEFAULT_AUTO_COPY_SELECTION = true;
 	public static final boolean DEFAULT_PREF_RESTORE_TERMINALS = true;
 	/**
 	 * @since 5.0
