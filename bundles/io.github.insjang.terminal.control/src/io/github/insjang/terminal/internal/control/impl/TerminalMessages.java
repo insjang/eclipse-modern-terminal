@@ -24,7 +24,8 @@ public class TerminalMessages extends NLS {
 	public static String TerminalColorPresets_EclipseLight;
 	public static String TerminalColorPresets_TangoDark;
 	public static String TerminalColorPresets_TangoLight;
-	public static String TerminalColorPresets_TerminalDefaults;
+	public static String TerminalColorPresets_ClassicTerminal;
+	public static String TerminalColorPresets_ModernDefaults;
 	public static String TerminalColorsFieldEditor_Background;
 	public static String TerminalColorsFieldEditor_Black;
 	public static String TerminalColorsFieldEditor_Blue;
