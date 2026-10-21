@@ -35,6 +35,7 @@ import org.apache.sshd.common.AttributeRepository.AttributeKey;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClient.Attributes;
 import org.apache.sshd.sftp.client.SftpClient.DirEntry;
+import org.apache.sshd.sftp.client.SftpClient.OpenMode;
 import org.apache.sshd.sftp.client.SftpClientFactory;
 import org.apache.sshd.sftp.client.extensions.openssh.OpenSSHPosixRenameExtension;
 import org.apache.sshd.sftp.common.SftpConstants;
@@ -267,41 +268,49 @@ public final class RemoteFiles implements AutoCloseable {
 	/**
 	 * Uploads one file to a remote path (replaced), returning the remote entry as written.
 	 * <p>
-	 * When the server has posix-rename@openssh.com, the file is written to a temporary name in the same
-	 * folder and then renamed over the target, keeping its permissions: a cancel, an error or a lost
-	 * connection leaves the old file as it was. Written in place (a cancel then leaves the file cut)
-	 * without the extension, when the folder is not writable, for a link or other non-regular file, and
-	 * for a file of another owner (a rename would make it ours).
+	 * When the server has posix-rename@openssh.com, the file is written to a temporary file and then
+	 * renamed over the target, keeping its permissions (a new file gets the server's default): a cancel, an error or a lost connection leaves
+	 * the old file as it was. The temporary file is {@code .<name>.mt-upload-<random>/<name>} in the same
+	 * folder: a new folder (mkdir fails on any existing name or link), made 0700 before the file is
+	 * created in it with CREATE|EXCL and made 0600 before any data is written. Others can never open it:
+	 * a file created 0644 under umask and chmod-ed later could be opened in between and read once
+	 * written (the SFTP client cannot send the mode with the open request).
+	 * <p>
+	 * Written in place (a cancel then leaves the file cut) without the extension, when the folder is not
+	 * writable, for a link or other non-regular file, and for a file of another owner or of a group the
+	 * new file cannot get (a rename would change them).
 	 */
 	public Entry put(Path local, String remote, IProgressMonitor monitor) throws IOException {
 		monitor.subTask(remote);
 		Attributes old = lstat(remote);
 		OpenSSHPosixRenameExtension rename = client.getExtension(OpenSSHPosixRenameExtension.class);
 		if ((old == null || old.isRegularFile()) && rename.isSupported()) {
-			String temp = tempName(remote);
+			String dir = tempName(remote);
+			String temp = join(dir, name(remote));
 			OutputStream out = null;
+			int mode = -1;
 			try {
-				out = client.write(temp);
-			} catch (SftpException e) {
-				// e.g. a folder we may not write: in place below
+				int created = privateDir(dir);
+				// a new file gets what the server would give it: 0666 less the umask the new folder shows
+				mode = old != null ? old.getPermissions() & 07777 : created & 0666;
+				out = created >= 0 ? createPrivate(temp, old) : null;
+			} finally {
+				if (out == null) {
+					rmdirQuietly(dir); // in place below
+				}
 			}
 			if (out != null) {
 				try {
 					try (InputStream in = Files.newInputStream(local); OutputStream o = out) {
 						copy(in, o, monitor);
 					}
-					if (old == null || old.getUserId() == client.lstat(temp).getUserId()) {
-						if (old != null) {
-							client.setStat(temp, new Attributes().perms(old.getPermissions() & 07777));
-						}
-						rename.posixRename(temp, remote);
-						return stat(remote);
-					}
-				} catch (IOException | RuntimeException x) {
-					removeQuietly(temp);
-					throw x;
+					client.setStat(temp, new Attributes().perms(mode));
+					rename.posixRename(temp, remote);
+					return stat(remote);
+				} finally {
+					removeQuietly(temp); // gone after the rename
+					rmdirQuietly(dir);
 				}
-				removeQuietly(temp); // someone else's file
 			}
 		}
 		try (InputStream in = Files.newInputStream(local); OutputStream out = client.write(remote)) {
@@ -326,6 +335,63 @@ public final class RemoteFiles implements AutoCloseable {
 		}
 	}
 
+	// makes a new folder only we can enter; its mode as made (0777 less the umask), or -1
+	private int privateDir(String dir) throws IOException {
+		try {
+			client.mkdir(dir);
+		} catch (SftpException e) {
+			return -1; // the folder is not writable, or the name exists
+		}
+		try {
+			int made = client.lstat(dir).getPermissions() & 0777;
+			client.setStat(dir, new Attributes().perms(0700));
+			Attributes a = client.lstat(dir);
+			return a.isDirectory() && (a.getPermissions() & 0777) == 0700 ? made : -1;
+		} catch (SftpException e) {
+			return -1; // removed by the caller
+		}
+	}
+
+	// the file in the private folder, 0600, with the owner and group of the old file; else null
+	private OutputStream createPrivate(String temp, Attributes old) throws IOException {
+		OutputStream out;
+		try {
+			out = client.write(temp, OpenMode.Write, OpenMode.Create, OpenMode.Exclusive);
+		} catch (SftpException e) {
+			return null;
+		}
+		try {
+			client.setStat(temp, new Attributes().perms(0600));
+			Attributes made = client.lstat(temp);
+			if (old != null && made.getGroupId() != old.getGroupId()) {
+				try {
+					client.setStat(temp, new Attributes().owner(made.getUserId(), old.getGroupId()));
+				} catch (SftpException e) {
+					// not a member of that group: checked below
+				}
+				made = client.lstat(temp);
+			}
+			if (old == null || made.getUserId() == old.getUserId() && made.getGroupId() == old.getGroupId()) {
+				return out;
+			}
+		} catch (IOException | RuntimeException x) {
+			out.close();
+			removeQuietly(temp);
+			throw x;
+		}
+		out.close();
+		removeQuietly(temp);
+		return null;
+	}
+
+	private void rmdirQuietly(String path) {
+		try {
+			client.rmdir(path);
+		} catch (IOException ignored) {
+			// already gone, or left over
+		}
+	}
+
 	private void removeQuietly(String path) {
 		try {
 			client.remove(path);
@@ -334,7 +400,7 @@ public final class RemoteFiles implements AutoCloseable {
 		}
 	}
 
-	/** ".name.mt-upload-<random>" next to the file. */
+	/** ".name.mt-upload-<random>" next to the file (the folder of the temporary copy). */
 	static String tempName(String remote) {
 		return join(parent(remote), '.' + name(remote) + ".mt-upload-" //$NON-NLS-1$
 				+ Long.toHexString(ThreadLocalRandom.current().nextLong() >>> 1));
