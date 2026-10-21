@@ -304,9 +304,11 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 				if (e.character == SWT.CR || e.character == SWT.LF) {
 					e.doit = false;
 					String line = fInputField.getText();
-					if (!terminal.pasteString(line + '\r')) {
+					// the line is pasted, but the return is typed: in a bracketed paste it would be text, not Enter
+					if (!terminal.isConnected() || !line.isEmpty() && !terminal.pasteString(line)) {
 						return;
 					}
+					terminal.sendKey('\r');
 					pushLine(line);
 					setCommand("");//$NON-NLS-1$
 				} else if (e.keyCode == SWT.ARROW_UP || e.keyCode == SWT.PAGE_UP) {
