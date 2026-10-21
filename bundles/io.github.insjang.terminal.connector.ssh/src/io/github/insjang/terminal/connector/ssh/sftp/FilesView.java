@@ -95,7 +95,7 @@ public class FilesView extends ViewPart {
 	private Text pathText;
 	private TableViewer viewer;
 	private final List<Action> selectionActions = new ArrayList<>();
-	private Action upAction, homeAction, refreshAction, uploadAction, newFolderAction;
+	private Action openAction, upAction, homeAction, refreshAction, uploadAction, newFolderAction;
 
 	// the terminal followed, and its SFTP client once open (UI thread only)
 	private ITerminalViewControl terminal;
@@ -156,7 +156,7 @@ public class FilesView extends ViewPart {
 			Entry entry = first();
 			if (entry != null && entry.dir()) {
 				navigate(entry.path());
-			} else if (entry != null) {
+			} else if (entry != null && files != null) {
 				open(entry);
 			}
 		});
@@ -209,6 +209,7 @@ public class FilesView extends ViewPart {
 		refreshAction = action(FilesMessages.refresh, ResourceLocator
 				.imageDescriptorFromBundle("org.eclipse.ui", "icons/full/elcl16/refresh_nav.png").orElse(null), //$NON-NLS-1$ //$NON-NLS-2$
 				this::refresh);
+		openAction = action(FilesMessages.open, null, () -> open(first()));
 		uploadAction = action(FilesMessages.upload, null, this::uploadFromDialog);
 		newFolderAction = action(FilesMessages.newFolder, images.getImageDescriptor(ISharedImages.IMG_OBJ_FOLDER),
 				this::newFolder);
@@ -224,6 +225,7 @@ public class FilesView extends ViewPart {
 		toolbar.add(refreshAction);
 
 		MenuManager menu = new MenuManager();
+		menu.add(openAction);
 		selectionActions.forEach(menu::add);
 		menu.add(new Separator());
 		menu.add(uploadAction);
@@ -247,6 +249,7 @@ public class FilesView extends ViewPart {
 	private void updateActions() {
 		boolean ready = files != null && cwd != null;
 		int n = selection().size();
+		openAction.setEnabled(ready && n == 1 && !first().dir());
 		upAction.setEnabled(ready && !cwd.equals("/")); //$NON-NLS-1$
 		homeAction.setEnabled(ready);
 		refreshAction.setEnabled(ready);
@@ -474,8 +477,8 @@ public class FilesView extends ViewPart {
 		return list;
 	}
 
-	/** Opens a remote file in an editor; nothing yet. */
 	private void open(Entry entry) {
+		RemoteEditor.open(getSite().getPage(), files, entry);
 	}
 
 	// ---- actions ----

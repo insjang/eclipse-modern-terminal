@@ -17,6 +17,7 @@ import org.eclipse.jface.resource.ImageRegistry;
 import org.apache.sshd.client.SshClient;
 import org.eclipse.swt.graphics.Image;
 import io.github.insjang.terminal.connector.ssh.connector.SshConnection;
+import io.github.insjang.terminal.connector.ssh.sftp.RemoteEditor;
 import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.BundleContext;
 
@@ -59,6 +60,7 @@ public class UIPlugin extends AbstractUIPlugin {
 	public void start(BundleContext context) throws Exception {
 		super.start(context);
 		plugin = this;
+		RemoteEditor.cleanArea();
 	}
 
 	@Override

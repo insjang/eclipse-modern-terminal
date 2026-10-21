@@ -54,4 +54,14 @@ public class FilesMessages extends NLS {
 	public static String overwrite;
 	public static String overwriteAll;
 	public static String skip;
+	public static String open;
+	public static String downloadingFile;
+	public static String uploadingFile;
+	public static String largeFile;
+	public static String externalEditor;
+	public static String notUploaded;
+	public static String uploadFailed;
+	public static String remoteChanged;
+	public static String remoteDeleted;
+	public static String keptCopy;
 }
