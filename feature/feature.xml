@@ -14,4 +14,5 @@ https://github.com/insjang/eclipse-modern-terminal/blob/main/NOTICE
 	<plugin id="io.github.insjang.terminal.view.ui" version="0.0.0"/>
 	<plugin id="io.github.insjang.terminal.connector.process" version="0.0.0"/>
 	<plugin id="io.github.insjang.terminal.connector.local" version="0.0.0"/>
+	<plugin id="io.github.insjang.terminal.connector.ssh" version="0.0.0"/>
 </feature>
