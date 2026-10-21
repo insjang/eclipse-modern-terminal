@@ -91,7 +91,7 @@ public final class HostKeys {
 		for (KnownHostEntry entry : KnownHostEntry.readKnownHostEntries(file)) {
 			String marker = entry.getMarker();
 			// @cert-authority lines hold CA keys, not host keys
-			if (entry.getKeyEntry() == null || "cert-authority".equals(marker) || !entry.isHostMatch(host, port)) { //$NON-NLS-1$
+			if (entry.getKeyEntry() == null || "cert-authority".equals(marker) || !matches(entry, host, port)) { //$NON-NLS-1$
 				continue;
 			}
 			try {
@@ -104,6 +104,15 @@ public final class HostKeys {
 			}
 		}
 		return new Known(keys, revoked);
+	}
+
+	/**
+	 * MINA applies patterns without a port (such as "*") to port 22 only; OpenSSH matches them
+	 * against "[host]:port" on other ports, so "@revoked *" covers every port.
+	 */
+	private static boolean matches(KnownHostEntry entry, String host, int port) {
+		return entry.isHostMatch(host, port)
+				|| (port != DEFAULT_PORT && entry.isHostMatch("[" + host + "]:" + port, DEFAULT_PORT)); //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/** Appends host:port with the key to known_hosts, creating its directory if needed. */

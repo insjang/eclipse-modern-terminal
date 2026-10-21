@@ -81,4 +81,13 @@ public class HostKeysTest {
 		assertEquals(List.of(), HostKeys.load(file, "example.org", 22).keys());
 		assertEquals(3, Files.readAllLines(file).size());
 	}
+
+	@Test
+	public void wildcardsCoverOtherPorts() throws Exception {
+		Path file = Files.createTempDirectory("kh").resolve("known_hosts");
+		PublicKey rsa = key("ssh-rsa", 2048);
+		Files.writeString(file, "@revoked * " + PublicKeyEntry.toString(rsa) + "\n[example.org]:2222 "
+				+ PublicKeyEntry.toString(rsa) + "\n");
+		assertEquals(Decision.REFUSE, HostKeys.decide(HostKeys.load(file, "example.org", 2222), rsa));
+	}
 }

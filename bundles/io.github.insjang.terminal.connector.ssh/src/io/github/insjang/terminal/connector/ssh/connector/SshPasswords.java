@@ -9,6 +9,8 @@
  *******************************************************************************/
 package io.github.insjang.terminal.connector.ssh.connector;
 
+import java.io.IOException;
+
 import org.eclipse.equinox.security.storage.EncodingUtils;
 import org.eclipse.equinox.security.storage.ISecurePreferences;
 import org.eclipse.equinox.security.storage.SecurePreferencesFactory;
@@ -55,8 +57,11 @@ public final class SshPasswords {
 		try {
 			node.put(PASSWORD, password, true);
 			node.put(HOST, host, false);
+			preferences.flush(); // else it is only written when Eclipse exits normally
 		} catch (StorageException e) {
 			node.removeNode(); // never keep it unencrypted
+		} catch (IOException e) {
+			// kept in memory, written on exit
 		}
 	}
 
