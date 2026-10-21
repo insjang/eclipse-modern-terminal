@@ -28,15 +28,19 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | 파일 끌어 놓기 | 지원 안 함 | 경로 입력, 셸에 맞게 따옴표 처리 (bash, cmd, PowerShell) |
 | 색 | 글자색을 시스템에서 가져옴: 다크 테마에서 거의 검정 | Tango 기반, Eclipse 테마에 맞춤, Tango Dark·Light·Classic 프리셋 |
 | 기본값 | 블록 커서, 1000줄 | 세로 막대 커서, 선택 시 복사, 10000줄 |
+| SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH 방식 known_hosts, 세션 저장 |
+| SFTP | 없음 | Files 뷰: 탐색, 전송, 원격 파일을 Eclipse에서 편집, 셸 폴더 따라가기 |
 
-- 현재는 로컬 셸만 지원 (cmd, PowerShell, Git Bash, WSL 배포판은 시작 시 자동 감지)
-- SSH, SFTP는 1.1에서 추가 예정
+- 로컬 셸 (cmd, PowerShell, Git Bash, WSL 배포판은 시작 시 자동 감지)과 SSH 지원
 
 ## 요구 사항
 
 - Eclipse 2026-09 (4.41)에서 확인, 2026-06 (4.40)도 동작 예상, Java 21 이상
 - Eclipse Terminal이 들어 있는 Eclipse IDE 패키지 (PTY 라이브러리 `org.eclipse.cdt.core.native` 사용)
 - Windows 10/11, Linux에서 확인 (macOS는 미확인)
+- SSH와 Files 뷰: Apache MINA SSHD 2.19 이상 2.x (`org.apache.sshd.osgi`, `org.apache.sshd.sftp`)
+  - EGit이 들어 있는 Eclipse IDE 패키지에는 모두 포함 (JGit이 SSH에 사용), 예: IDE for Java Developers, IDE for Enterprise Java, Eclipse 2026-09는 2.19.0
+  - 그 밖의 패키지: 설치할 때 켜져 있는 업데이트 사이트(예: Eclipse 릴리스 사이트 `https://download.eclipse.org/releases/2026-09`)에서 받을 수 있어야 함
 
 ## 설치
 
@@ -53,6 +57,71 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 - Preferences → Modern Terminal (하위에 Local Terminal)
 - 색, 커서, 선택 시 복사, 버퍼 줄 수, 셸 목록은 Eclipse Terminal 설정과 별개
 - Load Presets: Modern Terminal Defaults (Restore Defaults 값), Tango Dark, Tango Light, Classic Terminal (Eclipse Terminal 색), Eclipse Light, Eclipse Dark
+
+## SSH
+
+- Ctrl+Alt+Shift+M (또는 뷰 툴바의 Open Modern Terminal...) → Choose terminal: SSH Terminal
+  - 호스트, 사용자, 포트, 키 파일(선택), 타임아웃, keepalive 입력
+- 세션 저장: Session에서 고르면 값이 채워짐, Save...는 현재 값을 이름 붙여 저장, Delete는 세션과 저장된 비밀번호 삭제
+- 인증: OpenSSH와 같은 순서로 시도
+  - 키: 키 파일 칸 먼저, 다음 `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`, `~/.ssh/config`의 `IdentityFile`, 필요하면 암호(passphrase) 입력 창
+  - 비밀번호, keyboard-interactive (일회용 코드 등)
+- 비밀번호는 "Save password"를 체크했을 때만 저장, 저장 위치는 Eclipse Secure Storage뿐
+- 호스트 키: OpenSSH와 같이 `~/.ssh/known_hosts`로 확인
+  - 처음 보는 호스트: 지문(fingerprint)을 보여 주고, 수락하면 키 추가
+  - 키가 바뀐 호스트: 연결 거부, 바뀐 것이 맞으면 `known_hosts`에서 이전 줄 삭제
+
+## Files 뷰 (SFTP)
+
+- Window → Show View → Other... → Modern Terminal → Modern Terminal Files
+- Modern Terminal에서 선택한 SSH 탭의 파일을 같은 연결로 표시: 다시 로그인하지 않음
+- 탐색, Upload... (바탕 화면에서 파일·폴더 끌어 놓기도 가능), Download..., New Folder..., Rename..., Delete
+- 파일을 더블클릭하면 Eclipse 편집기로 열림, 저장하면 업로드
+  - 연 뒤에 서버에서 파일이 바뀌었으면 덮어쓰기 전에 확인
+  - 바이너리로 보이는 파일은 열기 전에 확인: 텍스트 편집기로 저장하면 손상될 수 있음
+  - 원격 파일을 외부 프로그램으로 열지 않음
+- 업로드는 임시 이름으로 쓴 뒤 원래 이름으로 바꿈: 취소하거나 연결이 끊겨도 원래 파일 유지
+  - `posix-rename@openssh.com` 확장 필요 (OpenSSH는 지원), 없으면 그 자리에 씀
+
+### 셸 폴더 따라가기 (OSC 7)
+
+- 원격 셸이 현재 폴더를 알려 주면 `cd` 할 때마다 Files 뷰가 따라감
+- 뷰 툴바의 Follow Terminal Folder로 켜고 끔
+- 원격 셸에 아무것도 자동으로 넣지 않음: 서버의 셸 시작 파일에 아래 중 하나를 추가
+
+bash (`~/.bashrc`):
+
+```bash
+# Modern Terminal: report the current folder (OSC 7) at every prompt
+__mt_osc7() {
+	local LC_ALL=C s=$PWD out= c i
+	for ((i = 0; i < ${#s}; i++)); do
+		c=${s:i:1}
+		case $c in
+		[-/._~A-Za-z0-9]) out+=$c ;;
+		*) printf -v c '%%%02X' "'$c"; out+=$c ;;
+		esac
+	done
+	printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$out"
+}
+PROMPT_COMMAND="__mt_osc7${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+```
+
+zsh (`~/.zshrc`):
+
+```zsh
+# Modern Terminal: report the current folder (OSC 7) at every prompt
+__mt_osc7() {
+	emulate -L zsh
+	setopt extended_glob
+	local LC_ALL=C
+	printf '\e]7;file://%s%s\e\\' "$HOST" "${PWD//(#m)[^-\/._~A-Za-z0-9]/%${(l:2::0:)$(([##16]#MATCH))}}"
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd __mt_osc7
+```
+
+- `vte.sh`가 이미 OSC 7을 보내는 시스템(Fedora 등)은 설정 불필요
 
 ## 빌드
 

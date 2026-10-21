@@ -27,15 +27,19 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Drop files | not supported | types their paths, quoted for the shell (bash, cmd, PowerShell) |
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
 | Defaults | block cursor, 1000 lines | bar cursor, copy on select, 10000 lines |
+| SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH-style known_hosts, saved sessions |
+| SFTP | none | Files view: browse, transfer, edit remote files in Eclipse, follows the shell's folder |
 
-Local shells only for now (cmd, PowerShell, Git Bash, WSL distributions, detected on start).
-SSH and SFTP are planned for 1.1.
+Local shells (cmd, PowerShell, Git Bash, WSL distributions, detected on start) and SSH.
 
 ## Requirements
 
 - Eclipse 2026-09 (4.41), tested; 2026-06 (4.40) should work. Java 21 or later
 - An Eclipse IDE package that has the Eclipse Terminal (for its PTY library, `org.eclipse.cdt.core.native`)
 - Windows 10/11 and Linux; macOS should work but is not tested
+- For SSH and the Files view: Apache MINA SSHD 2.19 or later in 2.x (`org.apache.sshd.osgi`, `org.apache.sshd.sftp`)
+  - Every Eclipse IDE package with EGit has it (JGit uses it for SSH), e.g. the IDE for Java Developers and for Enterprise Java; Eclipse 2026-09 ships 2.19.0
+  - Other packages: the install needs it from an enabled update site, such as the Eclipse release site `https://download.eclipse.org/releases/2026-09`
 
 ## Install
 
@@ -52,6 +56,72 @@ SSH and SFTP are planned for 1.1.
 Preferences > Modern Terminal (and Local Terminal under it).
 Colors, cursor, copy on select, buffer lines and the shell list are separate from the Eclipse Terminal's.
 Load Presets offers Modern Terminal Defaults (what Restore Defaults gives), Tango Dark, Tango Light, Classic Terminal (the Eclipse Terminal's colors), Eclipse Light and Eclipse Dark.
+
+## SSH
+
+- Ctrl+Alt+Shift+M (or Open Modern Terminal... in the view toolbar) > Choose terminal: SSH Terminal
+  - Host, user, port, an optional key file, timeout and keepalive
+- Saved sessions: pick one under Session, Save... stores the fields under a name, Delete removes it and its saved password
+- Authentication, as OpenSSH tries it:
+  - Keys: the key file field first, then `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` and `IdentityFile` entries of `~/.ssh/config`; a passphrase is asked when needed
+  - Password and keyboard-interactive (e.g. one-time codes)
+- Passwords are kept only when "Save password" is checked, and then only in the Eclipse Secure Storage
+- Host keys are checked against `~/.ssh/known_hosts` like OpenSSH:
+  - Unknown host: the fingerprint is shown, and the key is added if you accept
+  - Changed key: the connection is refused; remove the old line from `known_hosts` if the change is expected
+
+## Files view (SFTP)
+
+Window > Show View > Other... > Modern Terminal > Modern Terminal Files.
+
+- Shows the files of the SSH tab selected in Modern Terminal, on the same connection: no second login
+- Browse, Upload... (or drop files and folders from the desktop), Download..., New Folder..., Rename..., Delete
+- Double-click a file to open it in the Eclipse editor; saving uploads it
+  - If the file has changed on the server since it was opened, you are asked before it is overwritten
+  - Files that look binary are asked about first, since a text editor can damage them
+  - Remote files are never opened in an external program
+- Uploads are written to a temporary name and then renamed over the file, so a cancel or a dropped connection keeps the original
+  - This needs the `posix-rename@openssh.com` extension (OpenSSH has it); without it the file is written in place
+
+### Follow the shell's folder (OSC 7)
+
+When the remote shell reports its current folder, the Files view follows the terminal as you `cd`.
+Follow Terminal Folder in the view toolbar turns it off and on.
+Nothing is injected into the remote shell: add one of these to the server's shell startup file.
+
+bash (`~/.bashrc`):
+
+```bash
+# Modern Terminal: report the current folder (OSC 7) at every prompt
+__mt_osc7() {
+	local LC_ALL=C s=$PWD out= c i
+	for ((i = 0; i < ${#s}; i++)); do
+		c=${s:i:1}
+		case $c in
+		[-/._~A-Za-z0-9]) out+=$c ;;
+		*) printf -v c '%%%02X' "'$c"; out+=$c ;;
+		esac
+	done
+	printf '\e]7;file://%s%s\e\\' "$HOSTNAME" "$out"
+}
+PROMPT_COMMAND="__mt_osc7${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+```
+
+zsh (`~/.zshrc`):
+
+```zsh
+# Modern Terminal: report the current folder (OSC 7) at every prompt
+__mt_osc7() {
+	emulate -L zsh
+	setopt extended_glob
+	local LC_ALL=C
+	printf '\e]7;file://%s%s\e\\' "$HOST" "${PWD//(#m)[^-\/._~A-Za-z0-9]/%${(l:2::0:)$(([##16]#MATCH))}}"
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd __mt_osc7
+```
+
+Systems whose `vte.sh` already sends OSC 7 (Fedora, for example) need nothing.
 
 ## Build
 

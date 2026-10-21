@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<feature id="io.github.insjang.terminal" label="Modern Terminal" version="1.0.0.qualifier" provider-name="insjang">
+<feature id="io.github.insjang.terminal" label="Modern Terminal" version="1.1.0.qualifier" provider-name="insjang">
 	<description url="https://github.com/insjang/eclipse-modern-terminal">
-A terminal view for Eclipse that gets CJK wide characters, alternate screen, mouse reporting, grapheme clusters, split tabs and Shift+Enter right, so that Claude Code, Codex CLI, vim and htop work as in a native terminal. Installs beside the Eclipse Terminal.
+A terminal view for Eclipse that gets CJK wide characters, alternate screen, mouse reporting, grapheme clusters, split tabs and Shift+Enter right, so that Claude Code, Codex CLI, vim and htop work as in a native terminal. Local shells and SSH, with an SFTP Files view that follows the SSH tab. Installs beside the Eclipse Terminal.
 	</description>
 	<copyright>Copyright (c) 2026 insjang and the Eclipse Terminal contributors</copyright>
 	<license url="https://www.eclipse.org/legal/epl-2.0/">
