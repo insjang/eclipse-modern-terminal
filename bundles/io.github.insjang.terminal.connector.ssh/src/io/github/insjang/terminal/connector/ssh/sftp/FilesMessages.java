@@ -58,7 +58,6 @@ public class FilesMessages extends NLS {
 	public static String downloadingFile;
 	public static String uploadingFile;
 	public static String largeFile;
-	public static String externalEditor;
 	public static String notUploaded;
 	public static String uploadFailed;
 	public static String remoteChanged;

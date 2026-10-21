@@ -9,7 +9,7 @@ Require-Bundle: org.eclipse.core.runtime;bundle-version="[3.33.0,4)",
  org.eclipse.equinox.security;bundle-version="[1.4.600,2)",
  org.eclipse.ui;bundle-version="[3.208.0,4)",
  org.eclipse.ui.ide;bundle-version="[3.22.0,4)",
- org.eclipse.core.filesystem;bundle-version="[1.10.0,2)"
+ org.eclipse.ui.editors;bundle-version="[3.20.0,4)"
 Bundle-RequiredExecutionEnvironment: JavaSE-21
 Bundle-ActivationPolicy: lazy
 Bundle-Localization: plugin

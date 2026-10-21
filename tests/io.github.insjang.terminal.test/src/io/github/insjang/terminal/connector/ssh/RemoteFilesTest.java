@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.insjang.terminal.connector.ssh.sftp.RemoteEditor;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
 
@@ -71,5 +72,17 @@ public class RemoteFilesTest {
 		assertFalse(RemoteFiles.unchanged(read, new Entry("f", "/f", false, false, 11, 1000, 0100644)));
 		assertFalse(RemoteFiles.unchanged(read, new Entry("f", "/f", false, false, 10, 2000, 0100644)));
 		assertFalse(RemoteFiles.unchanged(read, null)); // deleted
+	}
+
+	@Test
+	public void remoteFilesNeverOpenOutsideEclipse() {
+		String text = "org.eclipse.ui.DefaultTextEditor";
+		assertEquals("org.eclipse.jdt.ui.CompilationUnitEditor",
+				RemoteEditor.editorFor("org.eclipse.jdt.ui.CompilationUnitEditor", true, false));
+		assertEquals(text, RemoteEditor.editorFor(null, false, false)); // nothing registered (x.bat)
+		assertEquals(text, RemoteEditor.editorFor("org.eclipse.ui.systemExternalEditor", false, false));
+		assertEquals(text, RemoteEditor.editorFor("org.eclipse.ui.systemInPlaceEditor", false, true));
+		assertEquals(text, RemoteEditor.editorFor("some.external.Program", false, false)); // user association
+		assertEquals(text, RemoteEditor.editorFor("org.eclipse.ui.systemExternalEditor", true, false));
 	}
 }

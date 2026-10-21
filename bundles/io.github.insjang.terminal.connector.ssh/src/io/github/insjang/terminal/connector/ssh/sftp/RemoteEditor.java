@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import org.apache.sshd.client.session.ClientSession;
-import org.eclipse.core.filesystem.EFS;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.OperationCanceledException;
@@ -33,12 +32,16 @@ import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorPart;
+import org.eclipse.ui.IEditorRegistry;
 import org.eclipse.ui.IPartListener2;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.IWorkbenchPartReference;
 import org.eclipse.ui.PartInitException;
+import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.editors.text.EditorsUI;
 import org.eclipse.ui.ide.IDE;
 
 import io.github.insjang.terminal.connector.ssh.activator.UIPlugin;
@@ -117,15 +120,17 @@ public final class RemoteEditor {
 
 	private void openEditor(IWorkbenchPage page) {
 		try {
-			editor = IDE.openEditorOnFileStore(page, EFS.getLocalFileSystem().getStore(local.toUri()));
+			// never the system editor: on Windows that runs a remote .bat, .exe, .lnk, .js ... locally
+			IEditorDescriptor d = PlatformUI.getWorkbench().getEditorRegistry()
+					.getDefaultEditor(local.getFileName().toString());
+			editor = IDE.openEditor(page, local.toUri(),
+					editorFor(d != null ? d.getId() : null, d != null && d.isInternal(), d != null && d.isOpenInPlace()),
+					true);
 		} catch (PartInitException e) {
 			MessageDialog.openError(page.getWorkbenchWindow().getShell(), FilesMessages.errorTitle, e.getMessage());
 			return;
 		}
 		if (editor == null) {
-			// opened outside Eclipse (system editor): no save to hear about, the copy stays until restart
-			MessageDialog.openInformation(page.getWorkbenchWindow().getShell(), FilesMessages.errorTitle,
-					NLS.bind(FilesMessages.externalEditor, remote, local));
 			return;
 		}
 		EDITS.put(local, this);
@@ -230,6 +235,15 @@ public final class RemoteEditor {
 		} else {
 			deleteTree(local.getParent());
 		}
+	}
+
+	/** The editor registered for the name if it runs inside Eclipse, else the text editor (never external or OLE). */
+	public static String editorFor(String id, boolean internal, boolean inPlace) {
+		if (id == null || !internal || inPlace || id.equals(IEditorRegistry.SYSTEM_EXTERNAL_EDITOR_ID)
+				|| id.equals(IEditorRegistry.SYSTEM_INPLACE_EDITOR_ID)) {
+			return EditorsUI.DEFAULT_TEXT_EDITOR_ID;
+		}
+		return id;
 	}
 
 	/** A folder name for user@host:port and the remote path. */
