@@ -1383,6 +1383,11 @@ public class VT100EmulatorBackendTest {
 		String heart = "\u2764\ufe0f"; // heavy black heart + emoji presentation
 		String thumbs = "\ud83d\udc4d\ud83c\udffd"; // thumbs up + medium skin tone
 		String flag = "\ud83c\uddf0\ud83c\uddf7"; // regional indicators K R
+		// marks past the cap are dropped, still taking no cell
+		vt100.setCursor(3, 0);
+		vt100.appendString(heart + "\u20e3".repeat(100) + "|");
+		assertEquals(32, term.getCluster(3, 0).length());
+		assertEquals('|', term.getChar(3, 2));
 		// a cluster takes two cells however many characters it runs to
 		vt100.setCursor(0, 0);
 		vt100.appendString(family + "|");

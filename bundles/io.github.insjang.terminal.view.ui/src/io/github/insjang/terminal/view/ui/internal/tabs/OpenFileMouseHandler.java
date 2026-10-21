@@ -17,6 +17,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -158,7 +159,7 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				}
 				// try an external file, if it exists
 				File file = new File(location);
-				if (file.exists() && !file.isDirectory()) {
+				if (!isNetworkPath(location) && file.exists() && !file.isDirectory()) {
 					try {
 						IEditorPart editor = IDE.openEditor(site.getPage(), file.toURI(),
 								IDE.getEditorDescriptor(file.getName(), true, true).getId(), true);
@@ -216,6 +217,16 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	 * D:/a, and the rest of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;.
 	 * Anything else, and anything on another platform, is left as it is.
 	 */
+	/**
+	 * A UNC path other than WSL's: probing it would hand the Windows credentials to whatever host the terminal
+	 * output named.
+	 */
+	static boolean isNetworkPath(String path) {
+		String p = path.replace('\\', '/').toLowerCase(Locale.ROOT);
+		return File.separatorChar == '\\' && p.startsWith("//") && !p.startsWith("//wsl.localhost/") //$NON-NLS-1$ //$NON-NLS-2$
+				&& !p.startsWith("//wsl$/"); //$NON-NLS-1$
+	}
+
 	private static String toWindowsPath(String path) {
 		if (File.separatorChar != '\\' || !path.startsWith("/")) { //$NON-NLS-1$
 			return path;

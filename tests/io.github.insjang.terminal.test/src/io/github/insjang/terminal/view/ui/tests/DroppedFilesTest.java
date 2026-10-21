@@ -52,8 +52,20 @@ public class DroppedFilesTest {
 	}
 
 	@Test
-	public void cmdQuotesOnlyPathsWithSpaces() {
-		assertEquals("C:\\a.txt \"C:\\my docs\\b.txt\"",
-				DroppedFiles.format(new String[] { "C:\\a.txt", "C:\\my docs\\b.txt" }, null, true));
+	public void cmdQuotesEveryPath() {
+		// unquoted, a & in a name would run what follows it once the line is entered
+		assertEquals("\"C:\\a&calc.txt\" \"C:\\my docs\\b.txt\"",
+				DroppedFiles.format(new String[] { "C:\\a&calc.txt", "C:\\my docs\\b.txt" }, null, true));
+	}
+
+	@Test
+	public void powerShellQuotesSingly() {
+		assertEquals("'C:\\$(calc).txt' 'C:\\it''s.txt'", DroppedFiles.format(
+				new String[] { "C:\\$(calc).txt", "C:\\it's.txt" }, "C:\\Program Files\\PowerShell\\7\\pwsh.exe", true));
+	}
+
+	@Test
+	public void controlCharactersAreDropped() {
+		assertEquals("'/tmp/arm'", DroppedFiles.format(new String[] { "/tmp/a\nr\rm" }, null, false));
 	}
 }

@@ -522,6 +522,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private static final int ZWJ = 0x200D, VS15 = 0xFE0E, VS16 = 0xFE0F;
 	/** a zero width joiner was the last thing written: whatever comes next joins the cluster before it */
 	private boolean fJoinPending;
+	/** Longest cluster kept, in chars; the longest emoji sequences are about 15. */
+	private static final int MAX_CLUSTER = 32;
 
 	/**
 	 * A grapheme cluster takes two cells however many characters it runs to, which
@@ -579,6 +581,9 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		String cluster = clusterBefore(line);
 		if (cluster == null) {
 			return false;
+		}
+		if (cluster.length() >= MAX_CLUSTER) {
+			return true; // still takes no cell, but is dropped: a flood of marks must not grow one cell without bound
 		}
 		fTerminal.setCluster(line, endColumn() - 2, cluster + new String(Character.toChars(codePoint)));
 		return true;

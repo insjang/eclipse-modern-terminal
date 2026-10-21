@@ -41,11 +41,15 @@ public final class DroppedFiles {
 			argument = p -> posixQuote(toWsl(p));
 		} else if (shell.endsWith("/sh.exe") || shell.endsWith("/bash.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
 			argument = p -> posixQuote(toMsys(p));
+		} else if (shell.endsWith("/powershell.exe") || shell.endsWith("/pwsh.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
+			// single quotes: in double quotes PowerShell would run a $(...) in the name
+			argument = p -> "'" + p.replace("'", "''") + "'"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		} else {
-			// cmd.exe and PowerShell
-			argument = p -> p.contains(" ") ? '"' + p + '"' : p; //$NON-NLS-1$
+			// cmd.exe, or unknown: a name never holds a double quote, and inside them & | < > ^ are plain text
+			argument = p -> '"' + p + '"';
 		}
-		return Arrays.stream(paths).map(argument).collect(Collectors.joining(" ")); //$NON-NLS-1$
+		// a control character in a name (a newline is legal on Linux) must not reach the shell as a key
+		return Arrays.stream(paths).map(p -> p.replaceAll("\\p{Cntrl}", "")).map(argument).collect(Collectors.joining(" ")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 	}
 
 	/** C:\a\b is /mnt/c/a/b, \\wsl$\Ubuntu\home\a (or \\wsl.localhost\...) is /home/a. */
