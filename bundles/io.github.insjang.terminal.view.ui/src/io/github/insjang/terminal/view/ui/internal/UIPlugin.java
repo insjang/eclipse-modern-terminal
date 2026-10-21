@@ -25,6 +25,7 @@ import org.eclipse.swt.custom.CTabFolder;
 import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.Display;
+import io.github.insjang.terminal.view.ui.internal.local.showin.ExternalExecutablesManager;
 import io.github.insjang.terminal.connector.TerminalState;
 import io.github.insjang.terminal.control.ITerminalViewControl;
 import io.github.insjang.terminal.view.core.ITerminalService;
@@ -116,6 +117,7 @@ public class UIPlugin extends AbstractUIPlugin {
 		consoleManagerTracker = new ServiceTracker<>(context, ITerminalConsoleViewManager.class, null);
 		consoleManagerTracker.open();
 		plugin = this;
+		ExternalExecutablesManager.startDetection();
 		// Create and register the workbench listener instance
 		listener = new IWorkbenchListener() {
 

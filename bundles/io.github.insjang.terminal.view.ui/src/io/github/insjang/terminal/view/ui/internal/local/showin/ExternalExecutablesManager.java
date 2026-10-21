@@ -42,6 +42,14 @@ public class ExternalExecutablesManager {
 	// XXX: This may make a useful extension point?
 	private static List<IDetectExternalExecutable> detectors = List.of(new DetectGitBash(), new DetectWSL());
 
+	/**
+	 * Starts the detectors, so that the WSL distributions, which take a while to list, are known when the
+	 * launch dialog first opens.
+	 */
+	public static void startDetection() {
+		detectors.forEach(IDetectExternalExecutable::hasEntries);
+	}
+
 	public static boolean hasEntries() {
 		IPath stateLocation = UIPlugin.getDefault().getStateLocation();
 		if (stateLocation != null) {
