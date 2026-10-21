@@ -5,9 +5,11 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 
 [한국어 README](README.ko.md)
 
-| Claude Code in Modern Terminal | Split tabs |
+![Modern Terminal split three ways beside the Markdown Viewer: Claude Code, htop and a shell](docs/images/overview.png)
+
+| Claude Code with Korean text | Claude Code above, htop below |
 |---|---|
-| ![Claude Code running in Modern Terminal, Korean text aligned](docs/images/claude-code.png) | ![Two terminals side by side in one view](docs/images/split.png) |
+| ![Claude Code running in Modern Terminal, Korean table aligned](docs/images/claude-code.png) | ![Claude Code and htop split in one view](docs/images/split.png) |
 
 ## What it fixes and adds
 

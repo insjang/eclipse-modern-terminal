@@ -2,9 +2,11 @@
 
 [English README](README.md)
 
-| Modern Terminal에서 실행한 Claude Code | 탭 분할 |
+![Markdown Viewer 옆에 Modern Terminal을 세 칸으로 분할: Claude Code, htop, 셸](docs/images/overview.png)
+
+| 한글을 출력하는 Claude Code | 위 Claude Code, 아래 htop |
 |---|---|
-| ![Modern Terminal에서 실행한 Claude Code, 한글 정렬 정상](docs/images/claude-code.png) | ![한 뷰 안에 터미널 두 개를 나란히 배치](docs/images/split.png) |
+| ![Modern Terminal에서 실행한 Claude Code, 한글 표 정렬 정상](docs/images/claude-code.png) | ![한 뷰 안에 Claude Code와 htop을 분할](docs/images/split.png) |
 
 Eclipse용 터미널 뷰.
 한글 등 넓은 문자, 전체 화면 프로그램, 최신 키 입력을 제대로 처리: Claude Code, Codex CLI, vim, less, htop이 Windows Terminal과 같이 동작.
