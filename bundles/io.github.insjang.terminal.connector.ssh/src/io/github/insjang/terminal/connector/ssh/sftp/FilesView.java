@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Predicate;
 
@@ -112,6 +113,9 @@ public class FilesView extends ViewPart {
 	private Consumer<TerminalDirectory> directoryListener;
 	private final List<String> hostNames = new ArrayList<>();
 	private String followed;
+	// OSC 7 coalescing: the latest directory not yet handled, and whether a followed listing runs
+	private final AtomicReference<TerminalDirectory> pendingDirectory = new AtomicReference<>();
+	private boolean followListing;
 	private final AtomicInteger running = new AtomicInteger(); // user jobs: transfers, deletes
 
 	private final ISelectionListener selectionListener = (part, selection) -> {
@@ -352,11 +356,13 @@ public class FilesView extends ViewPart {
 				terminal.removeWorkingDirectoryListener(directoryListener);
 			}
 			if (t != null) {
-				directoryListener = dir -> ui(() -> {
-					if (t == terminal) {
-						followTerminal(dir);
+				// a flood of OSC 7 (e.g. cat of a file full of them) must not flood the UI or the server:
+				// only the latest is kept, one handling is pending at a time, one followed listing runs
+				directoryListener = dir -> {
+					if (pendingDirectory.getAndSet(dir) == null) {
+						ui(() -> takeDirectory(t));
 					}
-				});
+				};
 				t.addWorkingDirectoryListener(directoryListener);
 			}
 		}
@@ -365,6 +371,8 @@ public class FilesView extends ViewPart {
 		files = null;
 		cwd = null;
 		followed = null;
+		pendingDirectory.set(null);
+		followListing = false;
 		hostNames.clear();
 		viewer.setInput(null);
 		updateActions();
@@ -459,6 +467,22 @@ public class FilesView extends ViewPart {
 	 *
 	 * @return whether it navigates
 	 */
+	private void takeDirectory(ITerminalViewControl t) {
+		if (t != terminal) {
+			return;
+		}
+		if (followListing) {
+			// look again once it is done; what arrives meanwhile replaces the pending value
+			stack.getDisplay().timerExec(100, () -> {
+				if (!stack.isDisposed()) {
+					takeDirectory(t);
+				}
+			});
+			return;
+		}
+		followTerminal(pendingDirectory.getAndSet(null));
+	}
+
 	private boolean followTerminal(TerminalDirectory dir) {
 		if (dir == null || !followAction.isChecked() || files == null || running.get() > 0
 				|| !RemoteFiles.sameHost(dir.host(), hostNames)) {
@@ -469,7 +493,8 @@ public class FilesView extends ViewPart {
 			return false;
 		}
 		followed = path;
-		navigate(path);
+		followListing = true;
+		navigate(path, () -> followListing = false);
 		return true;
 	}
 
@@ -486,41 +511,59 @@ public class FilesView extends ViewPart {
 	// ---- browsing ----
 
 	private void navigate(String dir) {
+		navigate(dir, null);
+	}
+
+	/** Lists a folder in a job; {@code done} runs in the UI thread after it, whatever the outcome. */
+	private void navigate(String dir, Runnable done) {
 		RemoteFiles f = files;
 		if (f == null) {
+			if (done != null) {
+				done.run();
+			}
 			return;
 		}
 		background(FilesMessages.openSftp, false, monitor -> {
-			List<Entry> entries;
 			try {
-				entries = f.list(dir);
-			} catch (IOException e) {
-				ui(() -> {
-					statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, dir, e.getMessage()));
-					pathText.setText(cwd != null ? cwd : dir);
-					if (cwd == null && files == f && !dir.equals(home)) {
-						navigate(home); // nothing shown yet, e.g. the shell's folder is not readable over SFTP
-					}
-				});
+				list(f, dir);
+			} finally {
+				if (done != null) {
+					ui(done);
+				}
+			}
+		});
+	}
+
+	private void list(RemoteFiles f, String dir) {
+		List<Entry> entries;
+		try {
+			entries = f.list(dir);
+		} catch (IOException e) {
+			ui(() -> {
+				statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, dir, e.getMessage()));
+				pathText.setText(cwd != null ? cwd : dir);
+				if (cwd == null && files == f && !dir.equals(home)) {
+					navigate(home); // nothing shown yet, e.g. the shell's folder is not readable over SFTP
+				}
+			});
+			return;
+		}
+		ui(() -> {
+			if (files != f) {
 				return;
 			}
-			ui(() -> {
-				if (files != f) {
-					return;
-				}
-				boolean same = dir.equals(cwd);
-				cwd = dir;
-				pathText.setText(dir);
-				ISelection keep = same ? viewer.getSelection() : null;
-				viewer.setInput(entries);
-				if (keep != null) {
-					viewer.setSelection(keep);
-				}
-				statusLine().setErrorMessage(null);
-				statusLine().setMessage(NLS.bind(FilesMessages.items, entries.size()));
-				top(browser);
-				updateActions();
-			});
+			boolean same = dir.equals(cwd);
+			cwd = dir;
+			pathText.setText(dir);
+			ISelection keep = same ? viewer.getSelection() : null;
+			viewer.setInput(entries);
+			if (keep != null) {
+				viewer.setSelection(keep);
+			}
+			statusLine().setErrorMessage(null);
+			statusLine().setMessage(NLS.bind(FilesMessages.items, entries.size()));
+			top(browser);
+			updateActions();
 		});
 	}
 

@@ -17,6 +17,7 @@ import java.nio.charset.StandardCharsets;
  *
  * @param host the host name as sent, "" when the URI has none
  * @param path the absolute path, percent-decoded as UTF-8
+ * @since 1.1
  */
 public record TerminalDirectory(String host, String path) {
 	private static final String FILE = "file://"; //$NON-NLS-1$

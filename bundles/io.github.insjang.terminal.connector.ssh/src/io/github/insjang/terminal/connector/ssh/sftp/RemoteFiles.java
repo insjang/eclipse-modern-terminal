@@ -19,6 +19,8 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -106,13 +108,26 @@ public final class RemoteFiles implements AutoCloseable {
 	 */
 	public String hostName() {
 		try (ChannelExec channel = session.createExecChannel("hostname")) { //$NON-NLS-1$
-			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			ByteArrayOutputStream out = new ByteArrayOutputStream() {
+				// keeps the first 256 bytes: a host name is at most 255
+				@Override
+				public synchronized void write(byte[] b, int off, int len) {
+					super.write(b, off, Math.max(0, Math.min(len, 256 - count)));
+				}
+
+				@Override
+				public synchronized void write(int b) {
+					if (count < 256) {
+						super.write(b);
+					}
+				}
+			};
 			channel.setOut(out);
 			channel.setErr(OutputStream.nullOutputStream());
 			channel.open().verify(5, TimeUnit.SECONDS);
 			channel.waitFor(EnumSet.of(ClientChannelEvent.CLOSED), TimeUnit.SECONDS.toMillis(5));
-			String name = out.toString(StandardCharsets.UTF_8).trim();
-			return name.isEmpty() || name.contains("\n") ? null : name; //$NON-NLS-1$
+			String name = out.toString(StandardCharsets.UTF_8).lines().findFirst().orElse("").trim(); //$NON-NLS-1$
+			return name.isEmpty() || name.length() > 255 ? null : name;
 		} catch (IOException e) {
 			return null;
 		}
@@ -219,11 +234,15 @@ public final class RemoteFiles implements AutoCloseable {
 			monitor.subTask(e.path());
 			// into a new file next to it, moved over the target when complete: a cancel or failure never
 			// truncates a file that was there, and only the file made here is deleted
-			Path temp = Files.createTempFile(local.toAbsolutePath().getParent(), ".mt-download-", ".tmp"); //$NON-NLS-1$ //$NON-NLS-2$
+			// made with CREATE_NEW, so it gets the default mode (umask) like any new file
+			Path temp = local.toAbsolutePath().getParent()
+					.resolve(".mt-download-" + Long.toHexString(ThreadLocalRandom.current().nextLong() >>> 1) + ".tmp"); //$NON-NLS-1$ //$NON-NLS-2$
+			OutputStream out = Files.newOutputStream(temp, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
 			try {
-				try (InputStream in = client.read(e.path()); OutputStream out = Files.newOutputStream(temp)) {
-					copy(in, out, monitor);
+				try (InputStream in = client.read(e.path()); OutputStream o = out) {
+					copy(in, o, monitor);
 				}
+				keepMode(local, temp);
 				try {
 					Files.move(temp, local, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 				} catch (AtomicMoveNotSupportedException x) {
@@ -233,6 +252,19 @@ public final class RemoteFiles implements AutoCloseable {
 				Files.deleteIfExists(temp);
 				throw x;
 			}
+		}
+	}
+
+	// a file replaced keeps its POSIX permissions (e.g. the x bit of a script); nothing on Windows
+	private static void keepMode(Path old, Path temp) {
+		try {
+			PosixFileAttributeView view = Files.getFileAttributeView(old, PosixFileAttributeView.class,
+					LinkOption.NOFOLLOW_LINKS);
+			if (view != null && Files.isRegularFile(old, LinkOption.NOFOLLOW_LINKS)) {
+				Files.setPosixFilePermissions(temp, view.readAttributes().permissions());
+			}
+		} catch (IOException | UnsupportedOperationException e) {
+			// the default mode then
 		}
 	}
 
@@ -285,14 +317,16 @@ public final class RemoteFiles implements AutoCloseable {
 	 * written (the SFTP client cannot send the mode with the open request).
 	 * <p>
 	 * Written in place (a cancel then leaves the file cut) without the extension, when the folder is not
-	 * writable, for a link or other non-regular file, and for a file of another owner or of a group the
+	 * writable or the temporary name cannot be made, for a link or other non-regular file, for a file
+	 * without the owner write bit, and for a file of another owner or of a group the
 	 * new file cannot get (a rename would change them).
 	 */
 	public Entry put(Path local, String remote, IProgressMonitor monitor) throws IOException {
 		monitor.subTask(remote);
 		Attributes old = lstat(remote);
 		OpenSSHPosixRenameExtension rename = client.getExtension(OpenSSHPosixRenameExtension.class);
-		if ((old == null || old.isRegularFile()) && rename.isSupported()) {
+		// a file without the owner write bit is written in place, so the server refuses it as before
+		if ((old == null || old.isRegularFile() && (old.getPermissions() & 0200) != 0) && rename.isSupported()) {
 			String dir = tempName(remote);
 			String temp = join(dir, name(remote));
 			OutputStream out = null;

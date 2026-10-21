@@ -175,14 +175,21 @@ public interface ITerminalViewControl {
 
 	/**
 	 * The working directory the shell last reported with OSC 7, or null if it never did.
+	 *
+	 * @since 1.1
 	 */
 	TerminalDirectory getWorkingDirectory();
 
 	/**
 	 * Tells the listener each time the shell reports its working directory (OSC 7), also when it is
 	 * the same as before (shells report it at every prompt). Called in the terminal's reader thread.
+	 *
+	 * @since 1.1
 	 */
 	void addWorkingDirectoryListener(Consumer<TerminalDirectory> listener);
 
+	/**
+	 * @since 1.1
+	 */
 	void removeWorkingDirectoryListener(Consumer<TerminalDirectory> listener);
 }
