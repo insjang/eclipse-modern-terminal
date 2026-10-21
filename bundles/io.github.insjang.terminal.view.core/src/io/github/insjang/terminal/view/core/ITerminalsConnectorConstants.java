@@ -317,6 +317,13 @@ public interface ITerminalsConnectorConstants {
 	 */
 	public static final String PROP_SSH_USER = "ssh.user"; //$NON-NLS-1$
 
+	/**
+	 * Property: SSH private key file, tried before the default identities.
+	 * <p>
+	 * Property Type: {@link String}
+	 */
+	public static final String PROP_SSH_KEY_FILE = "ssh.key_file"; //$NON-NLS-1$
+
 	// ***** Serial specific properties *****
 
 	/**

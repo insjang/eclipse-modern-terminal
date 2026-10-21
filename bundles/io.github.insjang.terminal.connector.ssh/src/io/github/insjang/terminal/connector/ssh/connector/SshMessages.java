@@ -30,6 +30,10 @@ public class SshMessages extends NLS {
 	public static String TIMEOUT;
 	public static String KEEPALIVE;
 	public static String KEEPALIVE_Tooltip;
+	public static String KEY_FILE;
+	public static String KEY_FILE_Tooltip;
+	public static String KEY_FILE_NOT_FOUND;
+	public static String BROWSE;
 	public static String WARNING;
 	public static String INFO;
 

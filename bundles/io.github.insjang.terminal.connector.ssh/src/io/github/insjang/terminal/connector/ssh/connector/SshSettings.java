@@ -25,6 +25,7 @@ public class SshSettings implements ISshSettings {
 	protected String fPort;
 	protected String fTimeout;
 	protected String fKeepalive;
+	protected String fKeyFile;
 
 	@Override
 	public String getHost() {
@@ -55,6 +56,7 @@ public class SshSettings implements ISshSettings {
 		fPort = store.get("Port", String.valueOf(ISshSettings.DEFAULT_SSH_PORT));//$NON-NLS-1$
 		fTimeout = store.get("Timeout", "0");//$NON-NLS-1$ //$NON-NLS-2$
 		fKeepalive = store.get("Keepalive", "300");//$NON-NLS-1$ //$NON-NLS-2$
+		fKeyFile = store.get("KeyFile", "");//$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	@Override
@@ -67,6 +69,7 @@ public class SshSettings implements ISshSettings {
 		// in some settings file
 		store.put("Timeout", fTimeout);//$NON-NLS-1$
 		store.put("Keepalive", fKeepalive);//$NON-NLS-1$
+		store.put("KeyFile", fKeyFile);//$NON-NLS-1$
 	}
 
 	@Override
@@ -127,6 +130,15 @@ public class SshSettings implements ISshSettings {
 
 	public void setPort(String port) {
 		fPort = port;
+	}
+
+	@Override
+	public String getKeyFile() {
+		return fKeyFile == null || fKeyFile.isBlank() ? null : fKeyFile.trim();
+	}
+
+	public void setKeyFile(String keyFile) {
+		fKeyFile = keyFile;
 	}
 
 	@Override

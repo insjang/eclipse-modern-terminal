@@ -22,7 +22,13 @@ import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
+import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
+import java.nio.file.Path;
+
+import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Text;
 import io.github.insjang.terminal.connector.AbstractSettingsPage;
@@ -35,6 +41,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 	private final SshSettings fTerminalSettings;
 	private Text fPort;
 	private Text fPassword;
+	private Text fKeyFile;
 
 	public SshSettingsPage(SshSettings settings) {
 		fTerminalSettings = settings;
@@ -48,6 +55,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		fTerminalSettings.setPort(fPort.getText());
 		fTerminalSettings.setTimeout(fTimeout.getText());
 		fTerminalSettings.setKeepalive(fKeepalive.getText());
+		fTerminalSettings.setKeyFile(fKeyFile.getText());
 	}
 
 	@Override
@@ -59,6 +67,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 			fUser.setText(get(fTerminalSettings.getUser(), ""));//$NON-NLS-1$
 			fPort.setText(get(fTerminalSettings.getPortString(), String.valueOf(ISshSettings.DEFAULT_SSH_PORT)));
 			fPassword.setText(get(fTerminalSettings.getPassword(), ""));//$NON-NLS-1$
+			fKeyFile.setText(get(fTerminalSettings.getKeyFile(), ""));//$NON-NLS-1$
 		}
 	}
 
@@ -147,6 +156,19 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		} catch (Exception e) {
 			valid = false;
 		}
+		// a missing key file is only skipped at login: warn, but let it launch
+		String keyFile = fKeyFile.getText().trim();
+		if (!keyFile.isEmpty() && !keyFile.startsWith("~") && !isFile(keyFile)) { //$NON-NLS-1$
+			String m = SshMessages.KEY_FILE_NOT_FOUND;
+			int mt = IMessageProvider.WARNING;
+			updateControlDecoration(fKeyFile, m, mt);
+			if (mt > messageType) {
+				message = m;
+				messageType = mt;
+			}
+		} else {
+			updateControlDecoration(fKeyFile, null, IMessageProvider.NONE);
+		}
 
 		setMessage(message, messageType);
 		return valid;
@@ -169,7 +191,43 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		fKeepalive = createTextField(composite, SshMessages.KEEPALIVE);
 		fKeepalive.setToolTipText(SshMessages.KEEPALIVE_Tooltip);
 		fPort = createTextField(composite, SshMessages.PORT);
+		createKeyFileField(composite);
 		loadSettings();
+	}
+
+	private static boolean isFile(String path) {
+		try {
+			return Files.isRegularFile(Path.of(path));
+		} catch (InvalidPathException e) {
+			return false;
+		}
+	}
+
+	// text and Browse... in the second column
+	private void createKeyFileField(Composite composite) {
+		Label label = new Label(composite, SWT.RIGHT);
+		label.setText(SshMessages.KEY_FILE + ":"); //$NON-NLS-1$
+		Composite row = new Composite(composite, SWT.NONE);
+		GridLayout layout = new GridLayout(2, false);
+		layout.marginHeight = 0;
+		layout.marginWidth = 0;
+		row.setLayout(layout);
+		row.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+		fKeyFile = new Text(row, SWT.BORDER);
+		fKeyFile.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+		fKeyFile.setToolTipText(SshMessages.KEY_FILE_Tooltip);
+		fKeyFile.addModifyListener(e -> fireListeners(fKeyFile));
+		createControlDecoration(fKeyFile);
+		Button browse = new Button(row, SWT.PUSH);
+		browse.setText(SshMessages.BROWSE);
+		browse.addListener(SWT.Selection, e -> {
+			FileDialog dialog = new FileDialog(composite.getShell(), SWT.OPEN);
+			dialog.setFilterPath(Path.of(System.getProperty("user.home"), ".ssh").toString()); //$NON-NLS-1$ //$NON-NLS-2$
+			String file = dialog.open();
+			if (file != null) {
+				fKeyFile.setText(file);
+			}
+		});
 	}
 
 	private Text createTextField(Composite composite, String labelTxt, int textOptions) {

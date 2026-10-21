@@ -18,12 +18,11 @@ import org.eclipse.equinox.security.storage.StorageException;
 
 /**
  * Saved SSH passwords in the Eclipse secure storage, one node per user@host:port.
- * A host keeps at most one node: the one of its saved settings with "Save password" on.
+ * A node is kept only while a saved session of that user@host:port has "Save password" on.
  */
 public final class SshPasswords {
 	private static final String ROOT = "/io.github.insjang.terminal.ssh/passwords"; //$NON-NLS-1$
 	private static final String PASSWORD = "password"; //$NON-NLS-1$
-	private static final String HOST = "host"; //$NON-NLS-1$
 
 	private SshPasswords() {
 	}
@@ -46,17 +45,15 @@ public final class SshPasswords {
 		}
 	}
 
-	/** Saves the password for user@host:port, dropping any other saved for the host. */
+	/** Saves the password for user@host:port. */
 	public static void put(String user, String host, int port, String password) {
 		ISecurePreferences preferences = SecurePreferencesFactory.getDefault();
 		if (preferences == null || host == null) {
 			return;
 		}
-		remove(host);
 		ISecurePreferences node = preferences.node(path(user, host, port));
 		try {
 			node.put(PASSWORD, password, true);
-			node.put(HOST, host, false);
 			preferences.flush(); // else it is only written when Eclipse exits normally
 		} catch (StorageException e) {
 			node.removeNode(); // never keep it unencrypted
@@ -65,22 +62,17 @@ public final class SshPasswords {
 		}
 	}
 
-	/** Drops the passwords saved for the host, any user and port. */
-	public static void remove(String host) {
+	/** Drops the password saved for user@host:port. */
+	public static void remove(String user, String host, int port) {
 		ISecurePreferences preferences = SecurePreferencesFactory.getDefault();
-		if (preferences == null || host == null || !preferences.nodeExists(ROOT)) {
+		if (preferences == null || host == null || !preferences.nodeExists(path(user, host, port))) {
 			return;
 		}
-		ISecurePreferences root = preferences.node(ROOT);
-		for (String name : root.childrenNames()) {
-			ISecurePreferences node = root.node(name);
-			try {
-				if (host.equals(node.get(HOST, null))) {
-					node.removeNode();
-				}
-			} catch (StorageException e) {
-				// unreadable: leave it
-			}
+		preferences.node(path(user, host, port)).removeNode();
+		try {
+			preferences.flush();
+		} catch (IOException e) {
+			// written on exit
 		}
 	}
 }

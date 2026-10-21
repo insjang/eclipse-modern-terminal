@@ -1,0 +1,55 @@
+/*******************************************************************************
+ * Copyright (c) 2026 insjang and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 2.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *******************************************************************************/
+package io.github.insjang.terminal.connector.ssh;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.List;
+
+import org.junit.jupiter.api.Test;
+
+import io.github.insjang.terminal.connector.ssh.connector.SshSession;
+
+public class SshSessionTest {
+	@Test
+	public void defaultNameShowsThePortOnlyWhenNot22() {
+		assertEquals("me@h.example", SshSession.defaultName("me", "h.example", 22));
+		assertEquals("me@h.example:2222", SshSession.defaultName("me", "h.example", 2222));
+		assertEquals("h.example", SshSession.defaultName("", "h.example", 22));
+	}
+
+	@Test
+	public void roundTripKeepsAwkwardValues() {
+		// Windows path (':' and '\'), spaces, '|', a line break, non-ASCII, IPv6, nulls
+		SshSession a = new SshSession("prod | 운영 db", "fe80::1", 2222, "me", "C:\\Users\\me\\.ssh\\id ed25519", 5, 0,
+				"UTF-8", true);
+		SshSession b = new SshSession("b\nx", "h", 22, "u", null, 0, 300, null, false);
+		List<SshSession> back = SshSession.decode(SshSession.encode(List.of(b, a)));
+		assertEquals(List.of(b, a), back); // sorted by name: "b\nx" before "prod..."
+	}
+
+	@Test
+	public void brokenLinesAreSkipped() {
+		String good = SshSession.encode(List.of(new SshSession("n", "h", 22, "u", null, 0, 300, null, false)));
+		assertEquals(1, SshSession.decode("junk\n" + good + "\na b c d e x 0 0 false\n").size());
+		assertTrue(SshSession.decode("").isEmpty());
+		assertTrue(SshSession.decode(null).isEmpty());
+	}
+
+	@Test
+	public void sameLoginIsUserHostAndPort() {
+		SshSession a = new SshSession("a", "h", 22, "u", null, 0, 300, null, true);
+		assertTrue(a.sameLogin(new SshSession("b", "h", 22, "u", "k", 9, 9, "x", false)));
+		assertFalse(a.sameLogin(new SshSession("a", "h", 2222, "u", null, 0, 300, null, true)));
+		assertFalse(a.sameLogin(new SshSession("a", "h", 22, "v", null, 0, 300, null, true)));
+	}
+}

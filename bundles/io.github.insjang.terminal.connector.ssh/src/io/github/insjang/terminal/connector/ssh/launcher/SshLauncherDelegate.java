@@ -137,6 +137,7 @@ public class SshLauncherDelegate extends AbstractLauncherDelegate {
 		String keepAlive = value != null ? value.toString() : null;
 		String password = (String) properties.get(ITerminalsConnectorConstants.PROP_SSH_PASSWORD);
 		String user = (String) properties.get(ITerminalsConnectorConstants.PROP_SSH_USER);
+		String keyFile = (String) properties.get(ITerminalsConnectorConstants.PROP_SSH_KEY_FILE);
 
 		int portOffset = 0;
 		if (properties.get(ITerminalsConnectorConstants.PROP_IP_PORT_OFFSET) instanceof Integer) {
@@ -162,6 +163,7 @@ public class SshLauncherDelegate extends AbstractLauncherDelegate {
 		sshSettings.setKeepalive(keepAlive);
 		sshSettings.setPassword(password);
 		sshSettings.setUser(user);
+		sshSettings.setKeyFile(keyFile);
 
 		// And save the settings to the store
 		sshSettings.save(store);

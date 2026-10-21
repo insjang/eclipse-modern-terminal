@@ -61,6 +61,11 @@ public interface ISshSettings {
 	int getPort();
 
 	/**
+	 * @return The private key file tried before the default ~/.ssh identities, or <code>null</code>.
+	 */
+	String getKeyFile();
+
+	/**
 	 * Return a human-readable String summarizing all relevant connection data.
 	 * This String can be displayed in the Terminal caption, for instance.
 	 * @return a human-readable String summarizing relevant connection data.

@@ -38,7 +38,7 @@ if [ "${1:-}" != "--skip-tests" ]; then
 	java -Dslf4j.provider=org.slf4j.simple.SimpleServiceProvider -Dorg.slf4j.simpleLogger.defaultLogLevel=error -cp "$OUT/tests:$CP" RunTests $P.emulator.VT100EmulatorBackendTest $P.emulator.VT100EmulatorTest $P.emulator.MouseReportTest \
 		$P.model.CharWidthTest $P.model.TerminalTextDataStoreTest $P.model.TerminalTextDataTest $P.model.TerminalTextDataWindowTest \
 		$P.model.TerminalTextDataFastScrollTest $P.model.SynchronizedTerminalTextDataTest $P.model.TerminalTextDataSnapshotTest \
-		io.github.insjang.terminal.connector.ssh.HostKeysTest
+		io.github.insjang.terminal.connector.ssh.HostKeysTest io.github.insjang.terminal.connector.ssh.SshSessionTest
 fi
 
 if [ "${1:-}" = site ]; then

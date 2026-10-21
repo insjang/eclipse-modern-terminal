@@ -37,6 +37,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Stream;
 
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.auth.keyboard.UserInteraction;
@@ -94,8 +95,9 @@ public class SshConnection extends Thread {
 	}
 
 	/**
-	 * Creates the SSH client shared by all connections: ~/.ssh/known_hosts, the default
-	 * ~/.ssh identities (plus IdentityFile of ~/.ssh/config), prompts through the connection.
+	 * Creates the SSH client shared by all connections: ~/.ssh/known_hosts, the key file of the
+	 * connection and the default ~/.ssh identities (plus IdentityFile of ~/.ssh/config), prompts
+	 * through the connection.
 	 */
 	public static SshClient createClient() {
 		SshClient client = SshClient.setUpDefaultClient();
@@ -116,12 +118,24 @@ public class SshConnection extends Thread {
 		client.setFilePasswordProvider(passphrases);
 		// looked up on every login, so a key created later is found without a restart
 		client.setKeyIdentityProvider(session -> {
+			SshConnection connection = of(session);
 			FileKeyPairProvider keys = new FileKeyPairProvider(
-					DEFAULT_IDENTITIES.stream().map(SSH_DIR::resolve).filter(Files::isRegularFile).toList());
+					identities(connection != null ? connection.fConn.getSshSettings().getKeyFile() : null));
 			keys.setPasswordFinder(passphrases);
 			return keys.loadKeys(session);
 		});
 		return client;
+	}
+
+	/** The key file of the settings (if any, ~ for the home), then the default ~/.ssh identities that exist. */
+	/* default */ static List<Path> identities(String keyFile) {
+		Stream<Path> explicit = Stream.empty();
+		if (keyFile != null) {
+			explicit = Stream.of(keyFile.startsWith("~/") || keyFile.startsWith("~\\") //$NON-NLS-1$ //$NON-NLS-2$
+					? Path.of(System.getProperty("user.home"), keyFile.substring(2)) : Path.of(keyFile)); //$NON-NLS-1$
+		}
+		return Stream.concat(explicit, DEFAULT_IDENTITIES.stream().map(SSH_DIR::resolve)).filter(Files::isRegularFile)
+				.distinct().toList();
 	}
 
 	// offers the host key types known for the host first, as OpenSSH and JGit do
