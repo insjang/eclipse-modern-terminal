@@ -1,0 +1,4 @@
+io.github.insjang.terminal.control/debug/log = false
+io.github.insjang.terminal.control/debug/log/char = false
+io.github.insjang.terminal.control/debug/log/VT100Backend = false
+io.github.insjang.terminal.control/debug/log/hover = false

@@ -1,0 +1,3 @@
+io.github.insjang.terminal.view.ui/debugmode = 0
+io.github.insjang.terminal.view.ui/trace/outputStreamMonitor = false
+io.github.insjang.terminal.view.ui/trace/launchTerminalCommandHandler = false

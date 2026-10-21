@@ -1,0 +1,88 @@
+/*******************************************************************************
+ * Copyright (c) 2021, 2026 Kichwa Coders Canada Inc. and others.
+ *
+ * This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 2.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Contributors:
+ * Kichwa Coders Canada Inc. - initial API and implementation
+ * Alexander Fedorov (ArSysOp) - further evolution
+ *******************************************************************************/
+
+package io.github.insjang.terminal.view.ui.internal.actions;
+
+import org.eclipse.core.runtime.Assert;
+import org.eclipse.jface.dialogs.InputDialog;
+import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.window.Window;
+import org.eclipse.swt.custom.CTabItem;
+import org.eclipse.swt.widgets.Composite;
+import org.eclipse.swt.widgets.Control;
+import io.github.insjang.terminal.control.ITerminalViewControl;
+import io.github.insjang.terminal.control.TerminalTitleRequestor;
+import io.github.insjang.terminal.view.ui.internal.Messages;
+import io.github.insjang.terminal.view.ui.internal.tabs.TabFolderManager;
+
+/**
+ * @since 4.8
+ */
+public class RenameTerminalAction extends AbstractTerminalAction {
+
+	private final TabFolderManager tabFolderManager;
+
+	/**
+	 * Constructor.
+	 *
+	 * @param tabFolderManager The parent tab folder manager. Must not be <code>null</code>.
+	 */
+	public RenameTerminalAction(TabFolderManager tabFolderManager) {
+		super(RenameTerminalAction.class.getName());
+
+		Assert.isNotNull(tabFolderManager);
+		this.tabFolderManager = tabFolderManager;
+		setupAction(Messages.RenameTerminalAction_menu, Messages.RenameTerminalAction_tooltip, (ImageDescriptor) null,
+				(ImageDescriptor) null, (ImageDescriptor) null, true);
+	}
+
+	@Override
+	public void run() {
+		ITerminalViewControl target = getTarget();
+		if (target == null) {
+			return;
+		}
+		String currentTitle = Messages.RenameTerminalAction_inputdialog_defaulttext;
+		CTabItem activeTabItem = tabFolderManager.getActiveTabItem();
+		if (activeTabItem != null && !activeTabItem.isDisposed()) {
+			currentTitle = activeTabItem.getText();
+		}
+		InputDialog inputDialog = new InputDialog(target.getControl().getShell(), //
+				Messages.RenameTerminalAction_inputdialog_title, //
+				Messages.RenameTerminalAction_inputdialog_prompt, //
+				currentTitle, //
+				null) {
+				@Override
+				protected Control createDialogArea(Composite parent) {
+					Control area = super.createDialogArea(parent);
+					getText().selectAll();
+					return area;
+				}
+			};
+		if (inputDialog.open() == Window.OK) {
+			String value = inputDialog.getValue();
+			if (value != null) {
+				target.setTerminalTitle(value, TerminalTitleRequestor.MENU);
+			}
+		}
+
+	}
+
+	@Override
+	public void updateAction(boolean aboutToShow) {
+		setEnabled(aboutToShow && getTarget() != null);
+	}
+
+}

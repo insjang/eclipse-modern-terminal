@@ -1,0 +1,11 @@
+Modern Terminal
+
+A fork of the Eclipse Terminal (https://github.com/eclipse-platform/eclipse.platform, directory terminal/),
+taken from commit ea81a95 (2026-10-19) together with the changes proposed upstream in
+eclipse-platform/eclipse.platform pull requests 2894, 2899-2905, 2973 and 2979.
+
+Packages and bundle IDs were renamed from org.eclipse.terminal to io.github.insjang.terminal
+so that it installs beside the Eclipse Terminal.
+
+The original copyright notices are kept in each file.
+Licensed under the Eclipse Public License 2.0 (see LICENSE). SPDX-License-Identifier: EPL-2.0

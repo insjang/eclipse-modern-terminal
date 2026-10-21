@@ -1,0 +1,88 @@
+/*******************************************************************************
+ * Copyright (c) 2011, 2025 Wind River Systems, Inc. and others. All rights reserved.
+ * This program and the accompanying materials are made available under the terms
+ * of the Eclipse Public License 2.0 which accompanies this distribution, and is
+ * available at https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Contributors:
+ * Wind River Systems - initial API and implementation
+ * Max Weninger (Wind River) - [361363] [TERMINALS] Implement "Pin&Clone" for the "Terminals" view
+ * Alexander Fedorov (ArSysOp) - further evolution
+ *******************************************************************************/
+package io.github.insjang.terminal.view.ui.internal;
+
+/**
+ * Image registry constants.
+ *
+ * @noextend This interface is not intended to be extended by clients.
+ * @noimplement This interface is not intended to be implemented by clients.
+ */
+public interface ImageConsts {
+	/**
+	 * The root directory where to load the images from, relative to
+	 * the bundle directory.
+	 */
+	public final static String IMAGE_DIR_ROOT = "icons/"; //$NON-NLS-1$
+
+	/**
+	 * The directory where to load enabled local toolbar images from,
+	 * relative to the image root directory.
+	 */
+	public final static String IMAGE_DIR_ELCL = "elcl16/"; //$NON-NLS-1$
+
+	/**
+	 * The directory where to load view related images from, relative to
+	 * the image root directory.
+	 */
+	public final static String IMAGE_DIR_EVIEW = "eview16/"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the terminals console view image.
+	 */
+	public static final String VIEW_Terminals = "TerminalsView"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the clear action image (disabled).
+	 */
+	public static final String ACTION_ClearAll_disabled = "ImageDlclClearAll"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the clear action image (enabled).
+	 */
+	public static final String ACTION_ClearAll_enabled = "ImageElclClearAll"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the scroll lock action image (enabled).
+	 */
+	public static final String ACTION_ScrollLock_Enabled = "ScrollLockAction_enabled"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the scroll lock action image (disabled).
+	 */
+	public static final String ACTION_ScrollLock_Disabled = "ScrollLockAction_disabled"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the new terminal view action image (enabled).
+	 * @since 4.1
+	 */
+	public static final String ACTION_NewTerminalView_Enabled = "NewTerminalViewAction_enabled"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the new terminal view action image (disabled).
+	 * @since 4.1
+	 */
+	public static final String ACTION_NewTerminalView_Disabled = "NewTerminalViewAction_disabled"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the toggle command field action image (enabled).
+	 */
+	public static final String ACTION_ToggleCommandField_Enabled = "ToggleCommandField_enabled"; //$NON-NLS-1$
+
+	/**
+	 * The key to access the toggle command field action image (disabled).
+	 */
+	public static final String ACTION_ToggleCommandField_Disabled = "ToggleCommandField_disabled"; //$NON-NLS-1$
+
+}

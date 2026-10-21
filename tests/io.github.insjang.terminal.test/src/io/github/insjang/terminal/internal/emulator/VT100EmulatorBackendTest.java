@@ -1,0 +1,1470 @@
+/*******************************************************************************
+ * Copyright (c) 2007, 2018 Wind River Systems, Inc. and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 2.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/legal/epl-2.0/
+ *
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Contributors:
+ * Michael Scharf (Wind River) - initial API and implementation
+ * Martin Oberhuber (Wind River) - [168197] Fix Terminal for CDC-1.1/Foundation-1.1
+ * Anton Leherbauer (Wind River) - [453393] Add support for copying wrapped lines without line break
+ * Anton Leherbauer (Wind River) - [458218] Add support for ANSI insert mode
+ * Anton Leherbauer (Wind River) - [458402] Add support for scroll up/down and scroll region
+ *******************************************************************************/
+package io.github.insjang.terminal.internal.emulator;
+
+import static io.github.insjang.terminal.model.TerminalColor.BLACK;
+import static io.github.insjang.terminal.model.TerminalColor.GREEN;
+import static io.github.insjang.terminal.model.TerminalColor.WHITE;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.github.insjang.terminal.internal.model.TerminalTextData;
+import io.github.insjang.terminal.internal.model.TerminalTextDataStore;
+import io.github.insjang.terminal.internal.model.TerminalTextTestHelper;
+import io.github.insjang.terminal.model.ITerminalTextData;
+import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
+import io.github.insjang.terminal.model.TerminalStyle;
+import org.junit.jupiter.api.Test;
+
+public class VT100EmulatorBackendTest {
+
+	protected IVT100EmulatorBackend makeBakend(ITerminalTextData term) {
+		return new VT100EmulatorBackend(term);
+	}
+
+	protected ITerminalTextData makeITerminalTextData() {
+		return new TerminalTextDataStore();
+	}
+
+	protected String toSimple(ITerminalTextData term) {
+		return TerminalTextTestHelper.toSimple(term);
+	}
+
+	protected String toMultiLineText(ITerminalTextDataReadOnly term) {
+		return TerminalTextTestHelper.toMultiLineText(term);
+	}
+
+	protected void fill(ITerminalTextData term, String s) {
+		TerminalTextTestHelper.fill(term, s);
+	}
+
+	protected void fillSimple(ITerminalTextData term, String s) {
+		TerminalTextTestHelper.fillSimple(term, s);
+	}
+
+	/**
+	 * Used for multi line text
+	 * @param expected
+	 * @param actual
+	 */
+	protected void assertEqualsTerm(String expected, String actual) {
+		assertEquals(expected.replace(' ', '.'), actual.replace('\000', '.'));
+	}
+
+	/**
+	 * Used for simple text
+	 * @param expected
+	 * @param actual
+	 */
+	protected void assertEqualsSimple(String expected, String actual) {
+		assertEquals(-1, actual.indexOf('\n'));
+		assertEquals(expected, actual);
+	}
+
+	@Test
+	public void testClearAll() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		vt100.setDimensions(3, 4);
+		fill(term, "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "5555");
+		vt100.clearAll();
+		assertEqualsTerm("    \n" + "    \n" + "    ", toMultiLineText(term));
+	}
+
+	@Test
+	public void testSetDimensions() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		String s = "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "5555";
+		fill(term, s);
+		vt100.setDimensions(3, 4);
+		assertEquals(3, vt100.getLines());
+		assertEquals(4, vt100.getColumns());
+		assertEqualsTerm(s, toMultiLineText(term));
+
+		vt100.setCursor(0, 2);
+		vt100.setDimensions(2, 4);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+
+		vt100.setCursor(0, 2);
+		vt100.setDimensions(5, 4);
+		assertEquals(3, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+
+		assertEqualsTerm(s, toMultiLineText(term));
+
+		vt100.setCursor(0, 3);
+		vt100.setDimensions(5, 2);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(1, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testToAbsoluteLine() {
+		ITerminalTextData term = makeITerminalTextData();
+		VT100EmulatorBackend vt100 = new VT100EmulatorBackend(term);
+		vt100.setDimensions(2, 3);
+		assertEquals(vt100.toAbsoluteLine(0), 0);
+
+		term = makeITerminalTextData();
+		vt100 = new VT100EmulatorBackend(term);
+		vt100.setDimensions(1, 10);
+		assertEquals(vt100.toAbsoluteLine(0), 0);
+	}
+
+	@Test
+	public void testInsertCharacters() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		vt100.setDimensions(3, 4);
+		String s = "aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "1234\n" + "4567\n" + "9012";
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.insertCharacters(1);
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + " 123\n" + "4567\n" + "9012",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 1);
+		vt100.insertCharacters(1);
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "1234\n" + "4 56\n" + "9012",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 1);
+		vt100.insertCharacters(2);
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "1234\n" + "4  5\n" + "9012",
+				toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 0);
+		vt100.insertCharacters(10);
+		assertEqualsTerm("          ", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 0);
+		vt100.insertCharacters(14);
+		assertEqualsTerm("          ", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 3);
+		vt100.insertCharacters(14);
+		assertEqualsTerm("012       ", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 3);
+		vt100.insertCharacters(0);
+		assertEqualsTerm("0123456789", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 3);
+		vt100.insertCharacters(2);
+		assertEqualsTerm("012  34567", toMultiLineText(term));
+	}
+
+	@Test
+	public void testEraseToEndOfScreen() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		vt100.setDimensions(3, 4);
+		String s = "aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "4567\n" + "8901";
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.eraseToEndOfScreen();
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "    \n" + "    \n" + "    ",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 0);
+		vt100.eraseToEndOfScreen();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "    \n" + "    ",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 1);
+		vt100.eraseToEndOfScreen();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(1, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "4   \n" + "    ",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 4);
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		vt100.eraseToEndOfScreen();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "456.\n" + "    ",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 5);
+		vt100.eraseToEndOfScreen();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "456.\n" + "    ",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(2, 3);
+		vt100.eraseToEndOfScreen();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "4567\n" + "890 ",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(2, 5);
+		vt100.eraseToEndOfScreen();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "4567\n" + "890.",
+				toMultiLineText(term));
+	}
+
+	@Test
+	public void testEraseToCursor() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		vt100.setDimensions(3, 4);
+		String s = "aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "0123\n" + "4567\n" + "8901";
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.eraseToCursor();
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + " 123\n" + "4567\n" + "8901",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 0);
+		vt100.eraseToCursor();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "    \n" + " 567\n" + "8901",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 1);
+		vt100.eraseToCursor();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(1, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "    \n" + "  67\n" + "8901",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 4);
+		vt100.eraseToCursor();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "    \n" + "    \n" + "8901",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 5);
+		vt100.eraseToCursor();
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "    \n" + "    \n" + "8901",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(2, 3);
+		vt100.eraseToCursor();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "    \n" + "    \n" + "    ",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(2, 5);
+		vt100.eraseToCursor();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "    \n" + "    \n" + "    ",
+				toMultiLineText(term));
+	}
+
+	@Test
+	public void testEraseAll() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		vt100.setDimensions(3, 4);
+		fill(term, "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "5555");
+		vt100.eraseAll();
+		// the screen goes into the history; with no room to grow, the oldest lines make way
+		assertEqualsTerm("3333\n" + "4444\n" + "5555\n" + "    \n" + "    \n" + "    ", toMultiLineText(term));
+	}
+
+	@Test
+	public void testEraseAllKeepsTheScreenInHistory() {
+		// also on the buffer the terminal actually uses
+		for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
+			IVT100EmulatorBackend vt100 = makeBakend(term);
+			term.setMaxHeight(100);
+			vt100.setDimensions(4, 4);
+			fill(term, "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "    ");
+			vt100.setCursor(2, 1);
+			vt100.eraseAll();
+			// the screen was 2222, 3333, 4444 and a blank line, which is not kept
+			assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "    \n" + "    \n" + "    \n" + "    ",
+					toMultiLineText(term));
+			// erasing does not move the cursor
+			assertEquals(2, vt100.getCursorLine());
+			assertEquals(1, vt100.getCursorColumn());
+			// a blank screen adds nothing
+			vt100.eraseAll();
+			assertEquals(9, term.getHeight());
+		}
+	}
+
+	@Test
+	public void testEraseLine() {
+		String s = "abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "EFGHI";
+
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(0, 3);
+		vt100.eraseLine();
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "     \n" + "zABCD\n" + "EFGHI",
+				toMultiLineText(term));
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(2, 3);
+		vt100.eraseLine();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "     ",
+				toMultiLineText(term));
+	}
+
+	@Test
+	public void testEraseLineToEnd() {
+		String s = "abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "EFGHI";
+
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(0, 3);
+		vt100.eraseLineToEnd();
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvw  \n" + "zABCD\n" + "EFGHI",
+				toMultiLineText(term));
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.eraseLineToEnd();
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "     \n" + "zABCD\n" + "EFGHI",
+				toMultiLineText(term));
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(2, 3);
+		vt100.eraseLineToEnd();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "EFG  ",
+				toMultiLineText(term));
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+
+		vt100.setCursor(2, 4);
+		vt100.eraseLineToEnd();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(4, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "EFGH ",
+				toMultiLineText(term));
+
+		vt100.setCursor(2, 5);
+		vt100.eraseLineToEnd();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(4, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "EFGH ",
+				toMultiLineText(term));
+
+	}
+
+	@Test
+	public void testEraseLineToCursor() {
+		String s = "abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "EFGHI";
+
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(0, 3);
+		vt100.eraseLineToCursor();
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "    y\n" + "zABCD\n" + "EFGHI",
+				toMultiLineText(term));
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.eraseLineToCursor();
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + " vwxy\n" + "zABCD\n" + "EFGHI",
+				toMultiLineText(term));
+
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+		vt100.setCursor(2, 3);
+		vt100.eraseLineToCursor();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "    I",
+				toMultiLineText(term));
+		vt100.setDimensions(3, 5);
+		fill(term, s);
+
+		vt100.setCursor(2, 4);
+		vt100.eraseLineToCursor();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(4, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "     ",
+				toMultiLineText(term));
+
+		vt100.setCursor(2, 5);
+		vt100.eraseLineToCursor();
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(4, vt100.getCursorColumn());
+		assertEqualsTerm("abcde\n" + "fghij\n" + "klmno\n" + "pqrst\n" + "uvwxy\n" + "zABCD\n" + "     ",
+				toMultiLineText(term));
+
+	}
+
+	@Test
+	public void testInsertLines() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		String s = "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "5555";
+		vt100.setDimensions(3, 4);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.insertLines(1);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "    \n" + "3333\n" + "4444", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 0);
+		vt100.insertLines(1);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "    \n" + "4444", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 0);
+		vt100.insertLines(2);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "    \n" + "    ", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 3);
+		vt100.insertLines(2);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "    \n" + "    ", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(1, 3);
+		vt100.insertLines(2);
+		assertEqualsTerm("0000\n" + "    \n" + "    \n" + "1111\n" + "2222\n" + "3333", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(1, 3);
+		vt100.insertLines(7);
+		assertEqualsTerm("0000\n" + "    \n" + "    \n" + "    \n" + "    \n" + "    ", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.insertLines(7);
+		assertEqualsTerm("    \n" + "    \n" + "    \n" + "    \n" + "    \n" + "    ", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.insertLines(5);
+		assertEqualsTerm("    \n" + "    \n" + "    \n" + "    \n" + "    \n" + "0000", toMultiLineText(term));
+	}
+
+	@Test
+	public void testDeleteCharacters() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		vt100.setDimensions(3, 4);
+		String s = "aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "1234\n" + "4567\n" + "9012";
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.deleteCharacters(1);
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "234 \n" + "4567\n" + "9012",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 1);
+		vt100.deleteCharacters(1);
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "1234\n" + "467 \n" + "9012",
+				toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 1);
+		vt100.deleteCharacters(2);
+		assertEqualsTerm("aaaa\n" + "bbbb\n" + "cccc\n" + "dddd\n" + "eeee\n" + "ffff\n" + "1234\n" + "47  \n" + "9012",
+				toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 0);
+		vt100.deleteCharacters(10);
+		assertEqualsTerm("          ", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 0);
+		vt100.deleteCharacters(14);
+		assertEqualsTerm("          ", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 3);
+		vt100.deleteCharacters(0);
+		assertEqualsTerm("0123456789", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 3);
+		vt100.deleteCharacters(2);
+		assertEqualsTerm("01256789  ", toMultiLineText(term));
+
+		vt100.setDimensions(1, 10);
+		fill(term, "0123456789");
+		vt100.setCursor(0, 3);
+		vt100.deleteCharacters(14);
+		assertEqualsTerm("012       ", toMultiLineText(term));
+
+	}
+
+	@Test
+	public void testDeleteLines() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		String s = "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "5555";
+		vt100.setDimensions(3, 4);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.deleteLines(1);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "4444\n" + "5555\n" + "    ", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 0);
+		vt100.deleteLines(1);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "5555\n" + "    ", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 0);
+		vt100.deleteLines(2);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "    \n" + "    ", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 3);
+		vt100.deleteLines(2);
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "    \n" + "    ", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(1, 3);
+		vt100.deleteLines(2);
+		assertEqualsTerm("0000\n" + "3333\n" + "4444\n" + "5555\n" + "    \n" + "    ", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(1, 3);
+		vt100.deleteLines(7);
+		assertEqualsTerm("0000\n" + "    \n" + "    \n" + "    \n" + "    \n" + "    ", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.deleteLines(7);
+		assertEqualsTerm("    \n" + "    \n" + "    \n" + "    \n" + "    \n" + "    ", toMultiLineText(term));
+
+		vt100.setDimensions(6, 4);
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.deleteLines(5);
+		assertEqualsTerm("5555\n" + "    \n" + "    \n" + "    \n" + "    \n" + "    ", toMultiLineText(term));
+	}
+
+	@Test
+	public void testGetDefaultStyle() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		TerminalStyle style = TerminalStyle.getStyle(WHITE, BLACK);
+		vt100.setDefaultStyle(style);
+		assertSame(style, vt100.getDefaultStyle());
+		TerminalStyle style2 = style.setBold(true);
+		vt100.setDefaultStyle(style2);
+		assertSame(style2, vt100.getDefaultStyle());
+	}
+
+	@Test
+	public void testGetStyle() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		TerminalStyle style = TerminalStyle.getStyle(WHITE, BLACK);
+		vt100.setStyle(style);
+		assertSame(style, vt100.getStyle());
+		TerminalStyle style2 = style.setBold(true);
+		vt100.setStyle(style2);
+		assertSame(style2, vt100.getStyle());
+	}
+
+	@Test
+	public void testAppendString() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(6);
+		vt100.setDimensions(3, 4);
+		vt100.setCursor(0, 0);
+		assertEqualsTerm("    \n" + "    \n" + "    ", toMultiLineText(term));
+		vt100.appendString("012");
+		assertEqualsTerm("012 \n" + "    \n" + "    ", toMultiLineText(term));
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+		vt100.appendString("3");
+		assertEqualsTerm("0123\n" + "    \n" + "    ", toMultiLineText(term));
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+
+		vt100.appendString("567890");
+		assertEqualsTerm("0123\n" + "5678\n" + "90  ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+
+		vt100.appendString("a");
+		assertEqualsTerm("0123\n" + "5678\n" + "90a ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+
+		vt100.appendString("b");
+		assertEqualsTerm("0123\n" + "5678\n" + "90ab\n" + "    ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+
+		vt100.appendString("cd");
+		assertEqualsTerm("0123\n" + "5678\n" + "90ab\n" + "cd  ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+
+		vt100.appendString("efgh");
+		assertEqualsTerm("0123\n" + "5678\n" + "90ab\n" + "cdef\n" + "gh  ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+
+		vt100.appendString("ijklmnopqrstuvwx");
+		assertEqualsTerm("cdef\n" + "ghij\n" + "klmn\n" + "opqr\n" + "stuv\n" + "wx  ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+
+		vt100.setCursor(1, 1);
+		vt100.appendString("123");
+		assertEqualsTerm("cdef\n" + "ghij\n" + "klmn\n" + "opqr\n" + "s123\n" + "wx  ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+
+		vt100.setCursor(1, 1);
+		vt100.appendString("ABCDEFGHIJKL");
+		assertEqualsTerm("klmn\n" + "opqr\n" + "sABC\n" + "DEFG\n" + "HIJK\n" + "L   ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(1, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testProcessNewline() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		String s = "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444\n" + "5555";
+		term.setMaxHeight(6);
+		vt100.setDimensions(3, 4);
+		vt100.setCursor(0, 0);
+		fill(term, s);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.processNewline();
+		assertEqualsTerm(s, toMultiLineText(term));
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursorColumn(3);
+		vt100.processNewline();
+		assertEqualsTerm(s, toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+
+		vt100.processNewline();
+		assertEqualsTerm("1111\n" + "2222\n" + "3333\n" + "4444\n" + "5555\n" + "    ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+
+		vt100.processNewline();
+		assertEqualsTerm("2222\n" + "3333\n" + "4444\n" + "5555\n" + "    \n" + "    ", toMultiLineText(term));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testSetCursorLine() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(6);
+		vt100.setDimensions(3, 4);
+		// the cursor still at the beginning....
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(0, 2);
+		vt100.setCursorLine(1);
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+		vt100.setCursor(0, -2);
+		vt100.setCursorLine(-1);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(0, 10);
+		vt100.setCursorLine(10);
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testSetCursorAndSetDimensions() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(3, 4);
+		// the cursor still at the beginning....
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setDimensions(6, 4);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(2, 3);
+		vt100.setDimensions(8, 4);
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testSetCursorColumn() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(6);
+		vt100.setDimensions(3, 4);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(1, 0);
+		vt100.setCursorColumn(2);
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+		vt100.setCursor(-1, -2);
+		vt100.setCursorColumn(-2);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(10, 0);
+		vt100.setCursorColumn(10);
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testSetCursor() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(6);
+		vt100.setDimensions(3, 4);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(0, 0);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(1, 2);
+		assertEquals(1, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+		vt100.setCursor(-1, -2);
+		assertEquals(0, vt100.getCursorLine());
+		assertEquals(0, vt100.getCursorColumn());
+		vt100.setCursor(10, 10);
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(3, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testVT100LineWrappingOn() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(6, 4);
+		vt100.setVT100LineWrapping(true);
+		vt100.appendString("abcd");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("1234");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		assertEquals(2, vt100.getCursorLine());
+	}
+
+	@Test
+	public void testVT100LineWrappingOff() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(6, 4);
+		vt100.setVT100LineWrapping(false);
+		vt100.appendString("abcd");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("1234");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		assertEquals(4, vt100.getCursorLine());
+	}
+
+	@Test
+	public void testWrappedLines() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(6, 4);
+		vt100.setVT100LineWrapping(true);
+		vt100.appendString("abcd123");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("abc");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("1234abcd");
+		assertEquals(4, vt100.getCursorLine());
+		assertTrue(term.isWrappedLine(0));
+		assertFalse(term.isWrappedLine(1));
+		assertFalse(term.isWrappedLine(2));
+		assertTrue(term.isWrappedLine(3));
+	}
+
+	@Test
+	public void testInsertMode() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(4, 6);
+		// replace mode
+		vt100.appendString("123");
+		vt100.setCursorColumn(0);
+		vt100.appendString("abc");
+		assertEquals("abc", new String(term.getChars(0)));
+		vt100.clearAll();
+		// insert mode
+		vt100.setCursorColumn(0);
+		vt100.appendString("123");
+		vt100.setCursorColumn(0);
+		vt100.setInsertMode(true);
+		vt100.appendString("abc");
+		vt100.setInsertMode(false);
+		assertEquals("abc123", new String(term.getChars(0)));
+	}
+
+	@Test
+	public void testScrollRegion() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(8, 6);
+		vt100.appendString("123");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("456");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("789");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("abc");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("def");
+		vt100.setCursorColumn(0);
+		vt100.processNewline();
+		vt100.appendString("ghi");
+
+		// test scroll within region
+		vt100.setCursorLine(1);
+		vt100.setScrollRegion(1, 4);
+		vt100.scrollUp(1);
+		assertEquals("123", new String(term.getChars(0)));
+		assertEquals("789", new String(term.getChars(1)));
+		assertEquals("abc", new String(term.getChars(2)));
+		assertEquals("def", new String(term.getChars(3)));
+		assertNull(term.getChars(4));
+		assertEquals("ghi", new String(term.getChars(5)));
+		vt100.scrollDown(1);
+		assertEquals("123", new String(term.getChars(0)));
+		assertNull(term.getChars(1));
+		assertEquals("789", new String(term.getChars(2)));
+		assertEquals("abc", new String(term.getChars(3)));
+		assertEquals("def", new String(term.getChars(4)));
+		assertEquals("ghi", new String(term.getChars(5)));
+
+		// test scroll without region
+		vt100.setScrollRegion(-1, -1);
+		vt100.scrollDown(1);
+		assertNull(term.getChars(0));
+		assertEquals("123", new String(term.getChars(1)));
+		assertNull(term.getChars(2));
+		assertEquals("789", new String(term.getChars(3)));
+		assertEquals("abc", new String(term.getChars(4)));
+		assertEquals("def", new String(term.getChars(5)));
+		assertEquals("ghi", new String(term.getChars(6)));
+		vt100.scrollUp(1);
+		assertEquals("123", new String(term.getChars(0)));
+		assertNull(term.getChars(1));
+		assertEquals("789", new String(term.getChars(2)));
+		assertEquals("abc", new String(term.getChars(3)));
+		assertEquals("def", new String(term.getChars(4)));
+		assertEquals("ghi", new String(term.getChars(5)));
+
+		// test scroll by newline
+		vt100.setScrollRegion(1, 4);
+		vt100.setCursorLine(4);
+		vt100.processNewline();
+		assertEquals("123", new String(term.getChars(0)));
+		assertEquals("789", new String(term.getChars(1)));
+		assertEquals("abc", new String(term.getChars(2)));
+		assertEquals("def", new String(term.getChars(3)));
+		assertNull(term.getChars(4));
+		assertEquals("ghi", new String(term.getChars(5)));
+	}
+
+	@Test
+	public void testEraseCharacters() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		vt100.setDimensions(4, 4);
+		String s = "aaaa\n" + "bcde\n" + "1234\n" + "5678";
+		fill(term, s);
+		vt100.setCursor(0, 0);
+		vt100.eraseCharacters(1);
+		assertEqualsTerm(" aaa\n" + "bcde\n" + "1234\n" + "5678", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(1, 0);
+		vt100.eraseCharacters(1);
+		assertEqualsTerm("aaaa\n" + " cde\n" + "1234\n" + "5678", toMultiLineText(term));
+
+		fill(term, s);
+		vt100.setCursor(2, 1);
+		vt100.eraseCharacters(2);
+		assertEqualsTerm("aaaa\n" + "bcde\n" + "1  4\n" + "5678", toMultiLineText(term));
+	}
+
+	// ---------------------------------------------------------------------------------------------
+	// Characterization tests for the scrolling behavior.
+	//
+	// These lock the current behavior before any change to how scrolling interacts with the
+	// scroll-back history. The regression guards below MUST keep passing through such a change; the
+	// "currentlyDiscards" test documents the behavior that a future fix for top-anchored scroll
+	// regions (eclipse.platform issue 2680) is expected to change.
+	// ---------------------------------------------------------------------------------------------
+
+	/**
+	 * Regression guard: a newline at the bottom of the full window (no scroll region) grows the
+	 * scroll-back history. This is what makes ordinary command output scrollable and must not change.
+	 */
+	@Test
+	public void testNewlineWithoutScrollRegionGrowsHistory() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(6);
+		vt100.setDimensions(3, 4);
+		fill(term, "0000\n" + "1111\n" + "2222");
+		assertEquals(3, term.getHeight());
+
+		vt100.setCursor(2, 0);
+		vt100.processNewline();
+
+		// the model grew by one line: the former content is kept and a blank line was appended
+		assertEquals(4, term.getHeight());
+		assertEquals("0000", new String(term.getChars(0)));
+		assertEquals("1111", new String(term.getChars(1)));
+		assertEquals("2222", new String(term.getChars(2)));
+		assertNull(term.getChars(3));
+	}
+
+	/**
+	 * Regression guard: a newline at the bottom of a scroll region whose top margin is <em>not</em>
+	 * the top of the screen scrolls in place and discards the top line of the region. The lines above
+	 * and below the region are untouched and no history is created. This must not change.
+	 */
+	@Test
+	public void testNewlineInScrollRegionWithTopMarginDiscardsTopLine() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(5, 4);
+		fill(term, "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444");
+
+		vt100.setScrollRegion(1, 3); // rows 1..3, top margin is row 1 (not the top of the screen)
+		vt100.setCursorLine(3);
+		vt100.processNewline();
+
+		assertEquals(5, term.getHeight()); // no history created
+		assertEquals("0000", new String(term.getChars(0))); // header above the region is untouched
+		assertEquals("2222", new String(term.getChars(1))); // "1111" was discarded
+		assertEquals("3333", new String(term.getChars(2)));
+		assertNull(term.getChars(3)); // vacated line at the bottom of the region
+		assertEquals("4444", new String(term.getChars(4))); // footer below the region is untouched
+	}
+
+	/**
+	 * Regression guard: a reverse line feed at the top of a scroll region scrolls the region down in
+	 * place (used heavily by full screen applications such as Codex). Must not change.
+	 */
+	@Test
+	public void testReverseLineFeedAtTopOfRegionScrollsDown() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(5, 4);
+		fill(term, "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444");
+
+		vt100.setScrollRegion(1, 3);
+		vt100.setCursorLine(1); // top of the region
+		vt100.processReverseLineFeed();
+
+		assertEquals(5, term.getHeight());
+		assertEquals("0000", new String(term.getChars(0))); // header untouched
+		assertNull(term.getChars(1)); // new blank line at the top of the region
+		assertEquals("1111", new String(term.getChars(2)));
+		assertEquals("2222", new String(term.getChars(3))); // "3333" was discarded
+		assertEquals("4444", new String(term.getChars(4))); // footer untouched
+	}
+
+	/**
+	 * Characterization of the <em>current</em> behavior for a scroll region anchored at the top of
+	 * the screen: a newline at the region bottom scrolls in place and discards the top line, creating
+	 * no history. This is the behavior the planned fix for eclipse.platform issue 2680 will change so
+	 * that the discarded line is added to the scroll-back instead. Until then this documents the
+	 * status quo.
+	 */
+	@Test
+	public void testNewlineInTopAnchoredScrollRegionCurrentlyDiscardsTopLine() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(5, 4);
+		fill(term, "0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444");
+
+		vt100.setScrollRegion(0, 3); // rows 0..3, top margin is the top of the screen; row 4 is fixed
+		vt100.setCursorLine(3);
+		vt100.processNewline();
+
+		assertEquals(5, term.getHeight()); // currently no history is created
+		assertEquals("1111", new String(term.getChars(0))); // "0000" was discarded (lost)
+		assertEquals("2222", new String(term.getChars(1)));
+		assertEquals("3333", new String(term.getChars(2)));
+		assertNull(term.getChars(3));
+		assertEquals("4444", new String(term.getChars(4))); // footer below the region is untouched
+	}
+
+	@Test
+	public void testAppendStringWide() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 10);
+		vt100.setCursor(0, 0);
+		// a wide character takes two cells, the second holding a null filler
+		vt100.appendString("한글");
+		assertEqualsTerm("한 글       \n" + "          \n" + "          \n" + "          ", toMultiLineText(term));
+		assertEquals(4, vt100.getCursorColumn());
+		vt100.setCursor(1, 0);
+		vt100.appendString("a한b");
+		assertEqualsTerm("한 글       \n" + "a한 b      \n" + "          \n" + "          ", toMultiLineText(term));
+		assertEquals(4, vt100.getCursorColumn());
+		// a character beyond the BMP is two chars in two cells
+		vt100.setCursor(2, 0);
+		vt100.appendString("a😀b");
+		assertEquals(4, vt100.getCursorColumn());
+		assertEquals("a😀b", new String(term.getChars(2), 0, 4));
+		// a combining mark takes no cell
+		vt100.setCursor(3, 0);
+		vt100.appendString("e\u0301x");
+		assertEquals(2, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testAppendStringWideAtMargin() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 5);
+		vt100.setCursor(0, 0);
+		vt100.appendString("abc한");
+		assertEqualsTerm("abc한 \n" + "     \n" + "     \n" + "     ", toMultiLineText(term));
+		// a wide character is never split across the margin: it goes to the next line whole
+		vt100.setCursor(1, 0);
+		vt100.appendString("abcd한");
+		assertEqualsTerm("abc한 \n" + "abcd \n" + "한    \n" + "     ", toMultiLineText(term));
+		assertTrue(term.isWrappedLine(1));
+		assertEquals(2, vt100.getCursorLine());
+		assertEquals(2, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testOverwriteHalfOfWide() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 10);
+		// writing over the glyph leaves its filler blank, and over the filler leaves the glyph blank
+		vt100.setCursor(0, 0);
+		vt100.appendString("한글");
+		vt100.setCursor(0, 0);
+		vt100.appendString("x");
+		assertEquals("x 글\000", new String(term.getChars(0), 0, 4));
+		vt100.setCursor(1, 0);
+		vt100.appendString("한글");
+		vt100.setCursor(1, 1);
+		vt100.appendString("x");
+		assertEquals(" x글\000", new String(term.getChars(1), 0, 4));
+		vt100.setCursor(2, 0);
+		vt100.appendString("한글");
+		vt100.setCursor(2, 3);
+		vt100.appendString("나");
+		assertEquals("한\000 나\000", new String(term.getChars(2), 0, 5));
+		// narrow over narrow is untouched by any of this
+		vt100.setCursor(3, 0);
+		vt100.appendString("abcd");
+		vt100.setCursor(3, 1);
+		vt100.appendString("XY");
+		assertEquals("aXYd", new String(term.getChars(3), 0, 4));
+	}
+
+	@Test
+	public void testInsertModeWide() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(1);
+		vt100.setDimensions(1, 10);
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcdef");
+		vt100.setCursorColumn(1);
+		vt100.setInsertMode(true);
+		vt100.appendString("한");
+		// pushes the rest along by two cells, not one
+		assertEquals("a한\000bcdef", new String(term.getChars(0), 0, 8));
+	}
+
+	@Test
+	public void testAlternateScreenBuffer() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(100);
+		vt100.setDimensions(3, 10);
+		vt100.setCursor(0, 0);
+		vt100.appendString("one\r\n");
+		for (int i = 0; i < 5; i++) {
+			vt100.appendString("more");
+			vt100.processNewline();
+			vt100.setCursorColumn(0);
+		}
+		vt100.appendString("last");
+		int historyHeight = term.getHeight();
+		assertTrue(historyHeight > 3);
+
+		vt100.enableAlternateScreen(true);
+		// no history to scroll back through, and none accumulates: scrolling drops the top line
+		assertEquals(3, term.getHeight());
+		assertEquals(3, term.getMaxHeight());
+		vt100.appendString("alt");
+		vt100.setCursor(2, 0);
+		vt100.processNewline();
+		vt100.processNewline();
+		assertEquals(3, term.getHeight());
+		assertNull(term.getChars(0));
+
+		// resized while the program had the screen
+		vt100.setDimensions(5, 7);
+		vt100.enableAlternateScreen(false);
+		// the buffer put back is as wide as the screen is now and at least as tall
+		assertEquals(7, term.getWidth());
+		assertTrue(term.getHeight() >= 5);
+		assertEquals(100, term.getMaxHeight());
+		assertEquals("last", new String(term.getChars(term.getHeight() - 1), 0, 4));
+		vt100.appendString("x"); // a write past the old margin used to throw
+		assertEquals(5, vt100.getCursorColumn());
+		// the cursor is back on the line it left, now the bottom of a taller screen
+		assertEquals(4, vt100.getCursorLine());
+		assertEquals("lastx", new String(term.getChars(term.getHeight() - 1), 0, 5));
+	}
+
+	@Test
+	public void testAlternateScreenShrunkKeepsNoHistory() {
+		// also on the buffer the terminal actually uses, which rejects a cap below its height
+		for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
+			IVT100EmulatorBackend vt100 = makeBakend(term);
+			term.setMaxHeight(100);
+			vt100.setDimensions(5, 10);
+			vt100.enableAlternateScreen(true);
+			vt100.setCursor(4, 0);
+			vt100.appendString("bottom");
+			vt100.setDimensions(3, 10);
+			assertEquals(3, term.getHeight());
+			assertEquals(3, term.getMaxHeight());
+			// the lines above the cursor went, the cursor and its line stayed
+			assertEquals(2, vt100.getCursorLine());
+			assertEquals("bottom", new String(term.getChars(2), 0, 6));
+			for (int i = 0; i < 6; i++) {
+				vt100.processNewline();
+				vt100.appendString("x");
+			}
+			// scrolling drops the top line instead of growing back to the old height
+			assertEquals(3, term.getHeight());
+			vt100.setDimensions(6, 10);
+			assertEquals(6, term.getHeight());
+			assertEquals(6, term.getMaxHeight());
+			vt100.enableAlternateScreen(false);
+			assertEquals(100, term.getMaxHeight());
+		}
+	}
+
+	@Test
+	public void testEraseKeepsBackground() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 8);
+		vt100.setDefaultStyle(TerminalStyle.getStyle(WHITE, BLACK));
+		TerminalStyle onGreen = TerminalStyle.getStyle(WHITE, GREEN).setBold(true);
+		// a program paints a run wider than its text by setting a background and erasing
+		vt100.setStyle(onGreen);
+		vt100.setCursor(0, 0);
+		vt100.appendString("ab");
+		vt100.eraseLineToEnd();
+		assertEquals(GREEN, term.getStyle(0, 5).getBackgroundTerminalColor());
+		assertEquals(GREEN, term.getStyle(0, 7).getBackgroundTerminalColor());
+		assertFalse(term.getStyle(0, 5).isBold()); // only the background carries over
+		// the same for erase to cursor, whole line, ECH, and the cells ICH and DCH uncover
+		vt100.setCursor(1, 3);
+		vt100.eraseLineToCursor();
+		assertEquals(GREEN, term.getStyle(1, 0).getBackgroundTerminalColor());
+		vt100.setCursor(2, 0);
+		vt100.eraseLine();
+		assertEquals(GREEN, term.getStyle(2, 7).getBackgroundTerminalColor());
+		vt100.setStyle(TerminalStyle.getStyle(WHITE, BLACK));
+		vt100.setCursor(3, 0);
+		vt100.appendString("0123456"); // one short of the margin, so as not to wrap
+		vt100.setStyle(onGreen);
+		vt100.setCursor(3, 1);
+		vt100.eraseCharacters(2);
+		assertEquals(GREEN, term.getStyle(3, 2).getBackgroundTerminalColor());
+		assertEquals(BLACK, term.getStyle(3, 3).getBackgroundTerminalColor());
+		vt100.setCursor(3, 4);
+		vt100.insertCharacters(1);
+		assertEquals(GREEN, term.getStyle(3, 4).getBackgroundTerminalColor());
+		assertEquals('4', term.getChar(3, 5));
+		vt100.deleteCharacters(1);
+		assertEquals(GREEN, term.getStyle(3, 7).getBackgroundTerminalColor());
+		// erasing in the default background stays default
+		vt100.setStyle(TerminalStyle.getStyle(WHITE, BLACK));
+		vt100.setCursor(0, 0);
+		vt100.eraseToEndOfScreen();
+		assertEquals(BLACK, term.getStyle(2, 7).getBackgroundTerminalColor());
+	}
+
+	@Test
+	public void testPendingWrapForgottenByCursorMove() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(3);
+		vt100.setDimensions(3, 5);
+		vt100.setVT100LineWrapping(true); // xterm's deferred wrap, as the process connector sets it
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcde"); // fills the row: the wrap is pending, not done
+		// DEC STD 070: a line feed, a cursor move or an erase forgets the pending wrap
+		vt100.processNewline();
+		vt100.appendString("x");
+		assertEquals('x', term.getChar(1, 4));
+		assertFalse(term.isWrappedLine(0));
+		assertFalse(term.isWrappedLine(1));
+		vt100.setCursor(0, 4);
+		vt100.appendString("e");
+		vt100.setCursorLine(2);
+		vt100.appendString("y");
+		assertEquals('y', term.getChar(2, 4));
+		vt100.setCursor(0, 4);
+		vt100.appendString("e");
+		vt100.eraseCharacters(1);
+		vt100.appendString("z");
+		assertEquals('z', term.getChar(0, 4));
+		assertEquals(0, vt100.getCursorLine());
+		// only writing on is a wrap
+		vt100.setCursor(0, 4);
+		vt100.appendString("ef");
+		assertTrue(term.isWrappedLine(0));
+		assertEquals('f', term.getChar(1, 0));
+	}
+
+	@Test
+	public void testCombiningMarks() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 10);
+		vt100.setCursor(0, 0);
+		// a mark composes with the character before it where the two have one form
+		vt100.appendString("e\u0301x");
+		assertEquals("\u00e9x", new String(term.getChars(0), 0, 2));
+		assertEquals(2, vt100.getCursorColumn());
+		// Hangul conjoining jamo make a syllable, in one wide cell
+		vt100.setCursor(1, 0);
+		vt100.appendString("\u1112\u1161\u11ab|");
+		assertEquals("\ud55c\000|", new String(term.getChars(1), 0, 3));
+		// a mark with no composed form is kept with the character as a cluster
+		vt100.setCursor(2, 0);
+		vt100.appendString("1\ufe0f\u20e3|"); // keycap one
+		assertEquals("1\ufe0f\u20e3", term.getCluster(2, 0));
+		assertEquals('|', term.getChar(2, 2));
+	}
+
+	@Test
+	public void testGraphemeClusters() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 20);
+		String family = "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67"; // man ZWJ woman ZWJ girl
+		String heart = "\u2764\ufe0f"; // heavy black heart + emoji presentation
+		String thumbs = "\ud83d\udc4d\ud83c\udffd"; // thumbs up + medium skin tone
+		String flag = "\ud83c\uddf0\ud83c\uddf7"; // regional indicators K R
+		// a cluster takes two cells however many characters it runs to
+		vt100.setCursor(0, 0);
+		vt100.appendString(family + "|");
+		assertEquals(3, vt100.getCursorColumn());
+		assertEquals("\ud83d\udc68", new String(term.getChars(0), 0, 2)); // the cells hold the first of them
+		assertEquals(family, term.getCluster(0, 0)); // the whole is kept beside them
+		// a narrow character shown as an emoji takes a second cell
+		vt100.setCursor(1, 0);
+		vt100.appendString(heart + "|" + thumbs + "|" + flag + "|");
+		assertEquals(9, vt100.getCursorColumn());
+		assertEquals(heart, term.getCluster(1, 0));
+		assertEquals(thumbs, term.getCluster(1, 3));
+		assertEquals(flag, term.getCluster(1, 6));
+		// writing over a cell forgets the cluster that had it
+		vt100.setCursor(1, 1);
+		vt100.appendString("x");
+		assertNull(term.getCluster(1, 0));
+		// a cluster on the last two cells, with the wrap pending, is still joined
+		vt100.setVT100LineWrapping(true);
+		vt100.setCursor(2, 18);
+		vt100.appendString(family);
+		assertEquals(family, term.getCluster(2, 18));
+		vt100.appendString("y");
+		assertEquals('y', term.getChar(3, 0));
+	}
+
+	@Test
+	public void testWrappedLineMarkComesOff() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(3);
+		vt100.setDimensions(3, 5);
+		vt100.setCursor(0, 0);
+		// a line the terminal folded is marked as running on to the next
+		vt100.appendString("abcdefg");
+		assertTrue(term.isWrappedLine(0));
+		assertFalse(term.isWrappedLine(1));
+		// drawn over shorter, the line ends there and the mark comes off
+		vt100.setCursor(0, 0);
+		vt100.appendString("xyz");
+		assertFalse(term.isWrappedLine(0));
+		// erasing to the end of the line says the same
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcdefg");
+		assertTrue(term.isWrappedLine(0));
+		vt100.setCursor(0, 3);
+		vt100.eraseLineToEnd();
+		assertFalse(term.isWrappedLine(0));
+	}
+
+	@Test
+	public void testInsertModeBeyondBmp() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 10);
+		vt100.setCursor(0, 0);
+		vt100.appendString("abc");
+		vt100.setCursorColumn(0);
+		vt100.setInsertMode(true);
+		// U+1D400 is one column wide, but its two chars still take two cells: insert room for both
+		vt100.appendString("\uD835\uDC00");
+		vt100.setInsertMode(false);
+		assertEquals("\uD835\uDC00abc", new String(term.getChars(0), 0, 5));
+	}
+
+	@Test
+	public void testOverwriteHalfOfBeyondBmp() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 10);
+		// writing over either cell of a surrogate pair blanks the other one
+		vt100.setCursor(0, 0);
+		vt100.appendString("a😀b");
+		vt100.setCursor(0, 2);
+		vt100.appendString("x");
+		assertEquals("a xb", new String(term.getChars(0), 0, 4));
+		vt100.setCursor(1, 0);
+		vt100.appendString("a😀b");
+		vt100.setCursor(1, 1);
+		vt100.appendString("x");
+		assertEquals("ax b", new String(term.getChars(1), 0, 4));
+	}
+}

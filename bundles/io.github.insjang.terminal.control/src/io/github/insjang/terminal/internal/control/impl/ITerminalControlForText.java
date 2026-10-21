@@ -1,0 +1,100 @@
+/*******************************************************************************
+ * Copyright (c) 2006, 2018 Wind River Systems, Inc. and others.
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License 2.0
+ * which accompanies this distribution, and is available at
+ * https://www.eclipse.org/legal/epl-2.0/
+ *
+ * Contributors:
+ * Michael Scharf (Wind River) - initial API and implementation
+ * Martin Oberhuber (Wind River) - fixed copyright headers and beautified
+ * Anton Leherbauer (Wind River) - [458398] Add support for normal/application cursor keys mode
+ *******************************************************************************/
+package io.github.insjang.terminal.internal.control.impl;
+
+import java.io.OutputStream;
+
+import io.github.insjang.terminal.connector.ITerminalConnector;
+import io.github.insjang.terminal.connector.TerminalState;
+import io.github.insjang.terminal.control.TerminalTitleRequestor;
+
+/**
+ * need a better name!
+ * @author Michael Scharf
+ *
+ */
+public interface ITerminalControlForText {
+
+	TerminalState getState();
+
+	void setState(TerminalState state);
+
+	/**
+	 * Set the title of the terminal.
+	 *
+	 * @param title Termianl title.
+	 * @param requestor Item that requests terminal title update.
+	 */
+	void setTerminalTitle(String title, TerminalTitleRequestor requestor);
+
+	ITerminalConnector getTerminalConnector();
+
+	OutputStream getOutputStream();
+
+	/**
+	 * Enable/disable Application Cursor Keys mode (DECCKM)
+	 * @param enable
+	 */
+	void enableApplicationCursorKeys(boolean enable);
+
+	/**
+	 * A program that asks for bracketed paste (CSI ?2004) wants pasted text marked
+	 * as such, so that it can take it as text rather than as something typed.
+	 */
+	default void enableBracketedPaste(boolean enable) {
+	}
+
+	/**
+	 * Shows or hides the cursor at the program's request (DEC mode 25).
+	 *
+	 * @param show whether the cursor is to be drawn
+	 */
+	default void showCursor(boolean show) {
+	}
+
+	/**
+	 * Turns reporting of the terminal gaining and losing focus on or off (DEC mode 1004).
+	 *
+	 * @param enable whether the program wants to be told
+	 */
+	default void enableFocusReporting(boolean enable) {
+	}
+
+	/**
+	 * A program that asks for mouse events wants them instead of the terminal's own
+	 * handling of the mouse, scrolling included.
+	 *
+	 * @since 5.6
+	 */
+	default void enableMouseReporting(int mode) {
+	}
+
+	/**
+	 * Says a program is drawing a screen and has not finished (DEC mode 2026), so
+	 * that the view does not show it half drawn.
+	 *
+	 * @param redrawing whether a screen is being drawn
+	 */
+	default void enableSynchronizedOutput(boolean redrawing) {
+	}
+
+	/**
+	 * SGR encoding (CSI ?1006) reports coordinates as decimal numbers instead of
+	 * single bytes, which is what lets them go past column 223.
+	 *
+	 * @since 5.6
+	 */
+	default void enableSgrMouseEncoding(boolean enable) {
+	}
+
+}
