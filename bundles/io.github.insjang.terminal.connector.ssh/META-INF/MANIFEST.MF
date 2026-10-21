@@ -13,7 +13,8 @@ Bundle-ActivationPolicy: lazy
 Bundle-Localization: plugin
 Export-Package: io.github.insjang.terminal.connector.ssh.connector;x-internal:=true,
  io.github.insjang.terminal.connector.ssh.controls;x-internal:=true,
- io.github.insjang.terminal.connector.ssh.launcher;x-internal:=true
+ io.github.insjang.terminal.connector.ssh.launcher;x-internal:=true,
+ io.github.insjang.terminal.connector.ssh.sftp;x-internal:=true
 Automatic-Module-Name: io.github.insjang.terminal.connector.ssh
 Import-Package: org.apache.sshd.client;version="[2.19.0,3)",
  org.apache.sshd.client.auth.keyboard;version="[2.19.0,3)",
@@ -31,8 +32,11 @@ Import-Package: org.apache.sshd.client;version="[2.19.0,3)",
  org.apache.sshd.common.session.helpers;version="[2.19.0,3)",
  org.apache.sshd.common.util.net;version="[2.19.0,3)",
  org.apache.sshd.core;version="[2.19.0,3)",
+ org.apache.sshd.sftp.client;version="[2.19.0,3)",
+ org.apache.sshd.sftp.common;version="[2.19.0,3)",
  io.github.insjang.terminal.connector;version="[1.0.0,2.0.0)",
  io.github.insjang.terminal.connector.provider;version="[1.0.0,2.0.0)",
+ io.github.insjang.terminal.control;version="[1.0.0,2.0.0)",
  io.github.insjang.terminal.view.core;version="[1.0.0,2.0.0)",
  io.github.insjang.terminal.view.ui;version="[1.0.0,2.0.0)",
  io.github.insjang.terminal.view.ui.launcher;version="[1.0.0,2.0.0)"

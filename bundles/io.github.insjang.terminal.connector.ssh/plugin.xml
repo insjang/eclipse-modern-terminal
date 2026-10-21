@@ -39,4 +39,14 @@
             </enablement>
       </delegate>
    </extension>
+<!-- SFTP view on the session of the selected SSH terminal -->
+   <extension point="org.eclipse.ui.views">
+      <view
+            category="io.github.insjang.terminal.view.ui.views.category"
+            class="io.github.insjang.terminal.connector.ssh.sftp.FilesView"
+            icon="icons/eview16/files_view.svg"
+            id="io.github.insjang.terminal.connector.ssh.FilesView"
+            name="%FilesView.name">
+      </view>
+   </extension>
 </plugin>
