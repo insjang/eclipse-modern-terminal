@@ -16,6 +16,7 @@ import java.io.OutputStream;
 
 import io.github.insjang.terminal.connector.ITerminalConnector;
 import io.github.insjang.terminal.connector.TerminalState;
+import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.control.TerminalTitleRequestor;
 
 /**
@@ -36,6 +37,14 @@ public interface ITerminalControlForText {
 	 * @param requestor Item that requests terminal title update.
 	 */
 	void setTerminalTitle(String title, TerminalTitleRequestor requestor);
+
+	/**
+	 * The shell has reported its working directory (OSC 7).
+	 *
+	 * @param dir the directory, never null
+	 */
+	default void setWorkingDirectory(TerminalDirectory dir) {
+	}
 
 	ITerminalConnector getTerminalConnector();
 

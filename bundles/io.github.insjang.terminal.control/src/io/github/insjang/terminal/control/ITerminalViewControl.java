@@ -17,6 +17,7 @@
 package io.github.insjang.terminal.control;
 
 import java.nio.charset.Charset;
+import java.util.function.Consumer;
 
 import org.eclipse.swt.dnd.Clipboard;
 import org.eclipse.swt.graphics.Font;
@@ -171,4 +172,17 @@ public interface ITerminalViewControl {
 	 * @since 5.2
 	 */
 	String getHoverSelection();
+
+	/**
+	 * The working directory the shell last reported with OSC 7, or null if it never did.
+	 */
+	TerminalDirectory getWorkingDirectory();
+
+	/**
+	 * Tells the listener each time the shell reports its working directory (OSC 7), also when it is
+	 * the same as before (shells report it at every prompt). Called in the terminal's reader thread.
+	 */
+	void addWorkingDirectoryListener(Consumer<TerminalDirectory> listener);
+
+	void removeWorkingDirectoryListener(Consumer<TerminalDirectory> listener);
 }

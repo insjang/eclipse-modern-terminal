@@ -9,18 +9,24 @@
  *******************************************************************************/
 package io.github.insjang.terminal.connector.ssh.sftp;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.stream.Stream;
 
+import org.apache.sshd.client.channel.ChannelExec;
+import org.apache.sshd.client.channel.ClientChannelEvent;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.common.AttributeRepository.AttributeKey;
 import org.apache.sshd.sftp.client.SftpClient;
@@ -82,6 +88,24 @@ public final class RemoteFiles implements AutoCloseable {
 			client.close();
 		} catch (IOException e) {
 			// closing anyway
+		}
+	}
+
+	/**
+	 * The server's own name, as {@code hostname} prints it: what shells put in OSC 7 ($HOSTNAME). Null
+	 * if it cannot be run (no exec channel, no reply within 5 seconds).
+	 */
+	public String hostName() {
+		try (ChannelExec channel = session.createExecChannel("hostname")) { //$NON-NLS-1$
+			ByteArrayOutputStream out = new ByteArrayOutputStream();
+			channel.setOut(out);
+			channel.setErr(OutputStream.nullOutputStream());
+			channel.open().verify(5, TimeUnit.SECONDS);
+			channel.waitFor(EnumSet.of(ClientChannelEvent.CLOSED), TimeUnit.SECONDS.toMillis(5));
+			String name = out.toString(StandardCharsets.UTF_8).trim();
+			return name.isEmpty() || name.contains("\n") ? null : name; //$NON-NLS-1$
+		} catch (IOException e) {
+			return null;
 		}
 	}
 
@@ -260,6 +284,16 @@ public final class RemoteFiles implements AutoCloseable {
 	}
 
 	// ---- pure helpers ----
+
+	/**
+	 * Whether the host of an OSC 7 directory is the server: no host, "localhost", or one of the server's
+	 * names (the address connected to, its {@link #hostName()}), ignoring case. Any other host is
+	 * another machine, e.g. an ssh started in the terminal.
+	 */
+	public static boolean sameHost(String host, List<String> names) {
+		return host.isEmpty() || host.equalsIgnoreCase("localhost") //$NON-NLS-1$
+				|| names.stream().anyMatch(host::equalsIgnoreCase);
+	}
 
 	/** dir + "/" + name, without doubling the '/'. */
 	public static String join(String dir, String name) {

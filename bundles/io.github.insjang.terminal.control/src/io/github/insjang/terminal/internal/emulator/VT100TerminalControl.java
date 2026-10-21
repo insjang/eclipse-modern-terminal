@@ -51,7 +51,10 @@ import java.io.OutputStream;
 import java.net.SocketException;
 import java.nio.charset.Charset;
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Consumer;
 
 import org.eclipse.core.commands.ExecutionException;
 import org.eclipse.core.commands.ParameterizedCommand;
@@ -103,6 +106,7 @@ import io.github.insjang.terminal.control.ICommandInputField;
 import io.github.insjang.terminal.control.ITerminalListener;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
 import io.github.insjang.terminal.control.ITerminalViewControl;
+import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.control.TerminalTitleRequestor;
 import io.github.insjang.terminal.internal.control.impl.ITerminalControlForText;
 import io.github.insjang.terminal.internal.control.impl.TerminalMessages;
@@ -146,6 +150,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private Clipboard fClipboard;
 	private KeyListener fKeyHandler;
 	private final ITerminalListener fTerminalListener;
+	private volatile TerminalDirectory fWorkingDirectory;
+	private final List<Consumer<TerminalDirectory>> fWorkingDirectoryListeners = new CopyOnWriteArrayList<>();
 	private String fMsg = ""; //$NON-NLS-1$
 	private TerminalFocusListener fFocusListener;
 	private ITerminalConnector fConnector;
@@ -1374,6 +1380,33 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	@Override
 	public void setTerminalTitle(String title, TerminalTitleRequestor requestor) {
 		fTerminalListener.setTerminalTitle(title, requestor);
+	}
+
+	@Override
+	public void setWorkingDirectory(TerminalDirectory dir) {
+		fWorkingDirectory = dir;
+		for (Consumer<TerminalDirectory> l : fWorkingDirectoryListeners) {
+			try {
+				l.accept(dir);
+			} catch (RuntimeException e) {
+				Logger.logException(e); // a listener must not end the terminal's reader job
+			}
+		}
+	}
+
+	@Override
+	public TerminalDirectory getWorkingDirectory() {
+		return fWorkingDirectory;
+	}
+
+	@Override
+	public void addWorkingDirectoryListener(Consumer<TerminalDirectory> listener) {
+		fWorkingDirectoryListeners.add(listener);
+	}
+
+	@Override
+	public void removeWorkingDirectoryListener(Consumer<TerminalDirectory> listener) {
+		fWorkingDirectoryListeners.remove(listener);
 	}
 
 	@Override

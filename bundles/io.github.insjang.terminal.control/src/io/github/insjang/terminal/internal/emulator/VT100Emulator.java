@@ -48,6 +48,7 @@ import org.eclipse.swt.events.ControlListener;
 import org.eclipse.swt.graphics.RGB;
 import io.github.insjang.terminal.connector.ITerminalConnector;
 import io.github.insjang.terminal.connector.Logger;
+import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.control.TerminalTitleRequestor;
 import io.github.insjang.terminal.internal.control.impl.ITerminalControlForText;
 import io.github.insjang.terminal.model.ITerminalTextData;
@@ -143,6 +144,12 @@ public class VT100Emulator implements ControlListener {
 	 * the form "\e]...\u0007".
 	 */
 	private final StringBuffer ansiOsCommand = new StringBuffer(128);
+
+	/**
+	 * Longest OS command kept: a longer one is ignored, so a stray ESC ] cannot grow the buffer
+	 * without bound. Fits a percent-encoded path of PATH_MAX (4096) bytes.
+	 */
+	static final int MAX_OS_COMMAND = 16384;
 
 	/**
 	 * This field holds the index of the next unused element of the array stored
@@ -447,7 +454,7 @@ public class VT100Emulator implements ControlListener {
 					processAnsiOsCommand();
 				} else if (character == '\u001b') {
 					ansiState = ANSISTATE_EXPECTING_OS_COMMAND_END;
-				} else {
+				} else if (ansiOsCommand.length() <= MAX_OS_COMMAND) {
 					ansiOsCommand.append(character);
 				}
 				break;
@@ -503,15 +510,25 @@ public class VT100Emulator implements ControlListener {
 
 	/**
 	 * This method is called when we have parsed an OS Command escape sequence.
-	 * The only one we support is "\e]0;...\u0007", which sets the terminal
-	 * title.
+	 * We support "\e]0;...\u0007", which sets the terminal title, and
+	 * "\e]7;file://host/path\u0007", the shell's working directory.
 	 */
 	private void processAnsiOsCommand() {
-		if (ansiOsCommand.charAt(0) != '0' || ansiOsCommand.charAt(1) != ';') {
-			Logger.log("Ignoring unsupported ANSI OSC sequence: '" + ansiOsCommand + "'"); //$NON-NLS-1$ //$NON-NLS-2$
-			return;
+		String command = ansiOsCommand.toString();
+		if (command.length() > MAX_OS_COMMAND) {
+			Logger.log("Ignoring too long ANSI OSC sequence"); //$NON-NLS-1$
+		} else if (command.startsWith("0;")) { //$NON-NLS-1$
+			terminal.setTerminalTitle(command.substring(2), TerminalTitleRequestor.ANSI);
+		} else if (command.startsWith("7;")) { //$NON-NLS-1$
+			TerminalDirectory dir = TerminalDirectory.parse(command.substring(2));
+			if (dir != null) {
+				terminal.setWorkingDirectory(dir);
+			} else {
+				Logger.log("Ignoring malformed OSC 7: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+		} else {
+			Logger.log("Ignoring unsupported ANSI OSC sequence: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
-		terminal.setTerminalTitle(ansiOsCommand.substring(2), TerminalTitleRequestor.ANSI);
 	}
 
 	/**

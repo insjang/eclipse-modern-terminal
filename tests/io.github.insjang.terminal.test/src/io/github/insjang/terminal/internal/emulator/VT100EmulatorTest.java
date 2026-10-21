@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.StringJoiner;
 
 import io.github.insjang.terminal.connector.Logger;
+import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.model.ITerminalTextData;
 import io.github.insjang.terminal.model.TerminalTextDataFactory;
 import org.junit.jupiter.api.AfterAll;
@@ -393,6 +394,46 @@ public class VT100EmulatorTest {
 		);
 		assertAll(() -> assertTextEquals("HELLO"),
 				() -> assertEquals(List.of("TITLE1", "TITLE2"), control.getAllTitles()));
+	}
+
+	private static TerminalDirectory dir(String host, String path) {
+		return new TerminalDirectory(host, path);
+	}
+
+	@Test
+	public void testWorkingDirectory() {
+		run("\033]7;file://host/home/me\007", "A", //
+				"\033]7;file:///tmp/a%20b\033\\", "B", // empty host, ST
+				"\033]7;file://localhost/tmp/%ED%95%9C%EA%B8%80%20dir\007", // UTF-8 bytes
+				"\033]7;file://h/tmp/\ud55c\uae00 dir+x%25\007", // as sent unencoded, '+' and "%25"
+				"\033]7;FILE://h/\007");
+		assertAll(() -> assertTextEquals("AB"),
+				() -> assertEquals(List.of(dir("host", "/home/me"), dir("", "/tmp/a b"), dir("localhost", "/tmp/\ud55c\uae00 dir"),
+						dir("h", "/tmp/\ud55c\uae00 dir+x%"), dir("h", "/")), control.getDirectories()),
+				() -> assertEquals(List.of(), control.getAllTitles()));
+	}
+
+	@Test
+	public void testWorkingDirectoryMalformed() {
+		run("\033]7;/tmp\007", // not a URI
+				"\033]7;http://h/tmp\007", // not file:
+				"\033]7;file://host\007", // no path
+				"\033]7;file:///tmp/%zz\007", // bad escape
+				"\033]7;file:///tmp/%4\007", // cut escape
+				"\033]7;file:///tmp/%FF\007", // not UTF-8
+				"\033]7;file:///tmp/%0Aetc\007", // control character
+				"\033]7;\007", "\033]\007", "\033]7\007", // empty
+				"\033]7;file:///" + "a".repeat(VT100Emulator.MAX_OS_COMMAND) + "\007", // too long
+				"OK", "\033]7;file:///ok\007");
+		assertAll(() -> assertTextEquals("OK"), () -> assertEquals(List.of(dir("", "/ok")), control.getDirectories()));
+	}
+
+	@Test
+	public void testWorkingDirectorySplitAcrossReads() {
+		run("X\033]7;file://h/tmp/%E");
+		run("D%95%9C/y\033");
+		run("\\Y");
+		assertAll(() -> assertTextEquals("XY"), () -> assertEquals(List.of(dir("h", "/tmp/\ud55c/y")), control.getDirectories()));
 	}
 
 	@Test

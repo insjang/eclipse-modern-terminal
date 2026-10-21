@@ -13,6 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+
 import org.junit.jupiter.api.Test;
 
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteEditor;
@@ -84,5 +86,17 @@ public class RemoteFilesTest {
 		assertEquals(text, RemoteEditor.editorFor("org.eclipse.ui.systemInPlaceEditor", false, true));
 		assertEquals(text, RemoteEditor.editorFor("some.external.Program", false, false)); // user association
 		assertEquals(text, RemoteEditor.editorFor("org.eclipse.ui.systemExternalEditor", true, false));
+	}
+
+	@Test
+	public void terminalFolderOnThisServerOnly() {
+		List<String> names = List.of("server.example.com", "web1");
+		assertTrue(RemoteFiles.sameHost("", names)); // file:///path
+		assertTrue(RemoteFiles.sameHost("LocalHost", names));
+		assertTrue(RemoteFiles.sameHost("WEB1", names)); // $HOSTNAME, any case
+		assertTrue(RemoteFiles.sameHost("server.example.com", names));
+		assertFalse(RemoteFiles.sameHost("web2", names)); // ssh from the terminal to another machine
+		assertFalse(RemoteFiles.sameHost("server", names)); // no guessing on short names
+		assertFalse(RemoteFiles.sameHost("web1", List.of()));
 	}
 }

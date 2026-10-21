@@ -16,6 +16,7 @@ import java.util.List;
 
 import io.github.insjang.terminal.connector.ITerminalConnector;
 import io.github.insjang.terminal.connector.TerminalState;
+import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.control.TerminalTitleRequestor;
 import io.github.insjang.terminal.internal.control.impl.ITerminalControlForText;
 
@@ -41,6 +42,17 @@ public class MockTerminalControlForText implements ITerminalControlForText {
 
 	public List<String> getAllTitles() {
 		return Collections.unmodifiableList(allTitles);
+	}
+
+	private List<TerminalDirectory> directories = new ArrayList<>();
+
+	@Override
+	public void setWorkingDirectory(TerminalDirectory dir) {
+		directories.add(dir);
+	}
+
+	public List<TerminalDirectory> getDirectories() {
+		return Collections.unmodifiableList(directories);
 	}
 
 	@Override

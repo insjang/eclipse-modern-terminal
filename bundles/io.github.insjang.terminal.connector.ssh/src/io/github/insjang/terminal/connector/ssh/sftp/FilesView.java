@@ -19,6 +19,8 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 import org.apache.sshd.client.session.ClientSession;
@@ -77,6 +79,7 @@ import io.github.insjang.terminal.connector.TerminalState;
 import io.github.insjang.terminal.connector.ssh.connector.SshConnector;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
 import io.github.insjang.terminal.control.ITerminalViewControl;
+import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.view.ui.ITerminalsView;
 
 /**
@@ -95,7 +98,7 @@ public class FilesView extends ViewPart {
 	private Text pathText;
 	private TableViewer viewer;
 	private final List<Action> selectionActions = new ArrayList<>();
-	private Action openAction, upAction, homeAction, refreshAction, uploadAction, newFolderAction;
+	private Action openAction, upAction, homeAction, refreshAction, uploadAction, newFolderAction, followAction;
 
 	// the terminal followed, and its SFTP client once open (UI thread only)
 	private ITerminalViewControl terminal;
@@ -104,6 +107,11 @@ public class FilesView extends ViewPart {
 	private String home = "/"; //$NON-NLS-1$
 	private String cwd;
 	private final Set<RemoteFiles> opened = new HashSet<>();
+	// following the shell's folder (OSC 7): the server's names, the last folder followed
+	private Consumer<TerminalDirectory> directoryListener;
+	private final List<String> hostNames = new ArrayList<>();
+	private String followed;
+	private final AtomicInteger running = new AtomicInteger(); // user jobs: transfers, deletes
 
 	private final ISelectionListener selectionListener = (part, selection) -> {
 		if (part instanceof ITerminalsView) {
@@ -206,6 +214,18 @@ public class FilesView extends ViewPart {
 				() -> navigate(RemoteFiles.parent(cwd)));
 		homeAction = action(FilesMessages.home, images.getImageDescriptor(ISharedImages.IMG_ETOOL_HOME_NAV),
 				() -> navigate(home));
+		followAction = new Action(FilesMessages.followTerminal, IAction.AS_CHECK_BOX) {
+			@Override
+			public void run() {
+				followed = null;
+				if (isChecked() && terminal != null) {
+					followTerminal(terminal.getWorkingDirectory());
+				}
+			}
+		};
+		followAction.setImageDescriptor(images.getImageDescriptor(ISharedImages.IMG_ELCL_SYNCED));
+		followAction.setToolTipText(FilesMessages.followTerminal);
+		followAction.setChecked(true);
 		refreshAction = action(FilesMessages.refresh, ResourceLocator
 				.imageDescriptorFromBundle("org.eclipse.ui", "icons/full/elcl16/refresh_nav.png").orElse(null), //$NON-NLS-1$ //$NON-NLS-2$
 				this::refresh);
@@ -223,6 +243,7 @@ public class FilesView extends ViewPart {
 		toolbar.add(upAction);
 		toolbar.add(homeAction);
 		toolbar.add(refreshAction);
+		toolbar.add(followAction);
 
 		MenuManager menu = new MenuManager();
 		menu.add(openAction);
@@ -300,6 +321,9 @@ public class FilesView extends ViewPart {
 	@Override
 	public void dispose() {
 		getSite().getPage().removeSelectionListener(selectionListener);
+		if (terminal != null) {
+			terminal.removeWorkingDirectoryListener(directoryListener);
+		}
 		opened.forEach(RemoteFiles::close);
 		super.dispose();
 	}
@@ -322,10 +346,25 @@ public class FilesView extends ViewPart {
 		if (t == terminal && (connecting || files != null && files.isOpen())) {
 			return;
 		}
+		if (t != terminal) {
+			if (terminal != null) {
+				terminal.removeWorkingDirectoryListener(directoryListener);
+			}
+			if (t != null) {
+				directoryListener = dir -> ui(() -> {
+					if (t == terminal) {
+						followTerminal(dir);
+					}
+				});
+				t.addWorkingDirectoryListener(directoryListener);
+			}
+		}
 		terminal = t;
 		connecting = false;
 		files = null;
 		cwd = null;
+		followed = null;
+		hostNames.clear();
 		viewer.setInput(null);
 		updateActions();
 		connect();
@@ -363,13 +402,16 @@ public class FilesView extends ViewPart {
 			return;
 		}
 		ITerminalViewControl t = terminal;
+		String host = connector.getSshSettings().getHost();
 		connecting = true;
 		background(FilesMessages.openSftp, false, monitor -> {
 			RemoteFiles f;
 			String h;
+			String name;
 			try {
 				f = RemoteFiles.of(session);
 				h = f.home();
+				name = f.hostName();
 			} catch (IOException e) {
 				// e.g. no SFTP subsystem on the server
 				ui(() -> {
@@ -388,6 +430,10 @@ public class FilesView extends ViewPart {
 				opened.add(f);
 				files = f;
 				home = h;
+				hostNames.add(host);
+				if (name != null) {
+					hostNames.add(name);
+				}
 				session.addCloseFutureListener(future -> ui(() -> {
 					if (files == f) {
 						files = null;
@@ -397,9 +443,33 @@ public class FilesView extends ViewPart {
 						show(FilesMessages.sessionClosed);
 					}
 				}));
-				navigate(home);
+				// the shell's folder if it has told it, else the home
+				if (!followTerminal(t.getWorkingDirectory())) {
+					navigate(home);
+				}
 			});
 		});
+	}
+
+	/**
+	 * Shows the folder the shell reported (OSC 7) if following is on, it is on this server, and no
+	 * transfer or delete is running; the same folder twice only once, so that browsing elsewhere in the
+	 * view is not undone at every prompt. A folder that cannot be listed leaves a note in the status line.
+	 *
+	 * @return whether it navigates
+	 */
+	private boolean followTerminal(TerminalDirectory dir) {
+		if (dir == null || !followAction.isChecked() || files == null || running.get() > 0
+				|| !RemoteFiles.sameHost(dir.host(), hostNames)) {
+			return false;
+		}
+		String path = RemoteFiles.normalize(dir.path());
+		if (path.equals(followed)) {
+			return false;
+		}
+		followed = path;
+		navigate(path);
+		return true;
 	}
 
 	private void show(String text) {
@@ -427,6 +497,9 @@ public class FilesView extends ViewPart {
 				ui(() -> {
 					statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, dir, e.getMessage()));
 					pathText.setText(cwd != null ? cwd : dir);
+					if (cwd == null && files == f && !dir.equals(home)) {
+						navigate(home); // nothing shown yet, e.g. the shell's folder is not readable over SFTP
+					}
 				});
 				return;
 			}
@@ -507,6 +580,7 @@ public class FilesView extends ViewPart {
 	}
 
 	private void uploadFromDialog() {
+		String dir = cwd;
 		FileDialog dialog = new FileDialog(getSite().getShell(), SWT.OPEN | SWT.MULTI);
 		dialog.setText(FilesMessages.upload.replace("...", "")); //$NON-NLS-1$ //$NON-NLS-2$
 		if (dialog.open() == null) {
@@ -517,7 +591,7 @@ public class FilesView extends ViewPart {
 		for (int i = 0; i < names.length; i++) {
 			paths[i] = Path.of(dialog.getFilterPath(), names[i]).toString();
 		}
-		upload(paths, cwd);
+		upload(paths, dir);
 	}
 
 	private void upload(String[] paths, String dir) {
@@ -541,10 +615,11 @@ public class FilesView extends ViewPart {
 	}
 
 	private void newFolder() {
+		String dir = cwd;
 		String name = askName(FilesMessages.newFolder.replace("...", ""), FilesMessages.newFolderMessage, ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		if (name != null) {
 			RemoteFiles f = files;
-			String path = RemoteFiles.join(cwd, name);
+			String path = RemoteFiles.join(dir, name);
 			background(FilesMessages.newFolder, false, monitor -> {
 				f.mkdir(path);
 				ui(this::refresh);
@@ -636,6 +711,9 @@ public class FilesView extends ViewPart {
 
 	/** Runs SFTP work in a job; an I/O error is shown in a dialog, a cancel quietly. */
 	private void background(String name, boolean user, IoWork work) {
+		if (user) {
+			running.incrementAndGet();
+		}
 		Job job = Job.create(name, monitor -> {
 			try {
 				work.run(monitor);
@@ -646,6 +724,9 @@ public class FilesView extends ViewPart {
 						name + ": " + e.getMessage())); //$NON-NLS-1$
 			} finally {
 				monitor.done();
+				if (user) {
+					running.decrementAndGet();
+				}
 			}
 			return Status.OK_STATUS;
 		});
