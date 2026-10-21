@@ -121,23 +121,23 @@ public enum TerminalColorPresets {
 	}
 
 	TerminalColorPresets() {
-		// readable on their background, every one of the 16 colors included (VS Code's terminal colors)
-		presets.add(new Preset(TerminalMessages.TerminalColorPresets_ModernDark) //
-				.set(FOREGROUND, 204, 204, 204).set(BACKGROUND, 30, 30, 30) //
-				.set(SELECTION_FOREGROUND, 255, 255, 255).set(SELECTION_BACKGROUND, 38, 79, 120) //
-				.set(BLACK, 0, 0, 0).set(RED, 205, 49, 49).set(GREEN, 13, 188, 121).set(YELLOW, 229, 229, 16) //
-				.set(BLUE, 36, 114, 200).set(MAGENTA, 188, 63, 188).set(CYAN, 17, 168, 205).set(WHITE, 229, 229, 229) //
-				.set(BRIGHT_BLACK, 102, 102, 102).set(BRIGHT_RED, 241, 76, 76).set(BRIGHT_GREEN, 35, 209, 139) //
-				.set(BRIGHT_YELLOW, 245, 245, 67).set(BRIGHT_BLUE, 59, 142, 234).set(BRIGHT_MAGENTA, 214, 112, 214) //
-				.set(BRIGHT_CYAN, 41, 184, 219).set(BRIGHT_WHITE, 229, 229, 229));
-		presets.add(new Preset(TerminalMessages.TerminalColorPresets_ModernLight) //
-				.set(FOREGROUND, 51, 51, 51).set(BACKGROUND, 255, 255, 255) //
-				.set(SELECTION_FOREGROUND, 0, 0, 0).set(SELECTION_BACKGROUND, 173, 214, 255) //
-				.set(BLACK, 0, 0, 0).set(RED, 205, 49, 49).set(GREEN, 0, 188, 0).set(YELLOW, 148, 152, 0) //
-				.set(BLUE, 4, 81, 165).set(MAGENTA, 188, 5, 188).set(CYAN, 5, 152, 188).set(WHITE, 85, 85, 85) //
-				.set(BRIGHT_BLACK, 102, 102, 102).set(BRIGHT_RED, 205, 49, 49).set(BRIGHT_GREEN, 20, 206, 20) //
-				.set(BRIGHT_YELLOW, 181, 186, 0).set(BRIGHT_BLUE, 4, 81, 165).set(BRIGHT_MAGENTA, 188, 5, 188) //
-				.set(BRIGHT_CYAN, 5, 152, 188).set(BRIGHT_WHITE, 165, 165, 165));
+		// the Tango palette, as in Windows Terminal's Tango Dark and Tango Light
+		presets.add(new Preset(TerminalMessages.TerminalColorPresets_TangoDark) //
+				.set(FOREGROUND, 211, 215, 207).set(BACKGROUND, 0, 0, 0) //
+				.set(SELECTION_FOREGROUND, 255, 255, 255).set(SELECTION_BACKGROUND, 52, 101, 164) //
+				.set(BLACK, 0, 0, 0).set(RED, 204, 0, 0).set(GREEN, 78, 154, 6).set(YELLOW, 196, 160, 0) //
+				.set(BLUE, 52, 101, 164).set(MAGENTA, 117, 80, 123).set(CYAN, 6, 152, 154).set(WHITE, 211, 215, 207) //
+				.set(BRIGHT_BLACK, 85, 87, 83).set(BRIGHT_RED, 239, 41, 41).set(BRIGHT_GREEN, 138, 226, 52) //
+				.set(BRIGHT_YELLOW, 252, 233, 79).set(BRIGHT_BLUE, 114, 159, 207).set(BRIGHT_MAGENTA, 173, 127, 168) //
+				.set(BRIGHT_CYAN, 52, 226, 226).set(BRIGHT_WHITE, 238, 238, 236));
+		presets.add(new Preset(TerminalMessages.TerminalColorPresets_TangoLight) //
+				.set(FOREGROUND, 85, 87, 83).set(BACKGROUND, 255, 255, 255) //
+				.set(SELECTION_FOREGROUND, 0, 0, 0).set(SELECTION_BACKGROUND, 187, 214, 244) //
+				.set(BLACK, 0, 0, 0).set(RED, 204, 0, 0).set(GREEN, 78, 154, 6).set(YELLOW, 196, 160, 0) //
+				.set(BLUE, 52, 101, 164).set(MAGENTA, 117, 80, 123).set(CYAN, 6, 152, 154).set(WHITE, 211, 215, 207) //
+				.set(BRIGHT_BLACK, 85, 87, 83).set(BRIGHT_RED, 239, 41, 41).set(BRIGHT_GREEN, 138, 226, 52) //
+				.set(BRIGHT_YELLOW, 252, 233, 79).set(BRIGHT_BLUE, 114, 159, 207).set(BRIGHT_MAGENTA, 173, 127, 168) //
+				.set(BRIGHT_CYAN, 52, 226, 226).set(BRIGHT_WHITE, 238, 238, 236));
 		presets.add(new Preset(TerminalMessages.TerminalColorPresets_TerminalDefaults));
 		presets.add(new Preset(TerminalMessages.TerminalColorPresets_EclipseLight) //
 				.set(FOREGROUND, 0, 0, 0) //
@@ -147,7 +147,7 @@ public enum TerminalColorPresets {
 				.set(BACKGROUND, 0, 0, 0));
 	}
 
-	/** Modern Dark under a dark Eclipse theme, Modern Light otherwise. */
+	/** Tango Dark under a dark Eclipse theme, Tango Light otherwise. */
 	public Preset getDefaultPreset() {
 		return presets.get(isDarkTheme() ? 0 : 1);
 	}
