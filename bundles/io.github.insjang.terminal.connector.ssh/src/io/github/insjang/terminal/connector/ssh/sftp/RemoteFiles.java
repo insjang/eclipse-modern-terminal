@@ -13,6 +13,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.channels.Channels;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
@@ -20,12 +21,16 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -234,15 +239,21 @@ public final class RemoteFiles implements AutoCloseable {
 			monitor.subTask(e.path());
 			// into a new file next to it, moved over the target when complete: a cancel or failure never
 			// truncates a file that was there, and only the file made here is deleted
-			// made with CREATE_NEW, so it gets the default mode (umask) like any new file
-			Path temp = local.toAbsolutePath().getParent()
-					.resolve(".mt-download-" + Long.toHexString(ThreadLocalRandom.current().nextLong() >>> 1) + ".tmp"); //$NON-NLS-1$ //$NON-NLS-2$
-			OutputStream out = Files.newOutputStream(temp, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+			// owner-only while it is written (POSIX): the content may be a private file's; the final mode is
+			// set just before the move. CREATE_NEW, so only a file made here is ever deleted
+			Path dir = local.toAbsolutePath().getParent();
+			boolean posix = Files.getFileStore(dir).supportsFileAttributeView(PosixFileAttributeView.class);
+			Path temp = dir.resolve(".mt-download-" + Long.toHexString(ThreadLocalRandom.current().nextLong() >>> 1) + ".tmp"); //$NON-NLS-1$ //$NON-NLS-2$
+			Set<StandardOpenOption> create = EnumSet.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE);
+			OutputStream out = Channels.newOutputStream(posix ? Files.newByteChannel(temp, create, OWNER_ONLY)
+					: Files.newByteChannel(temp, create));
 			try {
 				try (InputStream in = client.read(e.path()); OutputStream o = out) {
 					copy(in, o, monitor);
 				}
-				keepMode(local, temp);
+				if (posix) {
+					finalMode(local, temp);
+				}
 				try {
 					Files.move(temp, local, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
 				} catch (AtomicMoveNotSupportedException x) {
@@ -255,16 +266,29 @@ public final class RemoteFiles implements AutoCloseable {
 		}
 	}
 
-	// a file replaced keeps its POSIX permissions (e.g. the x bit of a script); nothing on Windows
-	private static void keepMode(Path old, Path temp) {
+	private static final FileAttribute<Set<PosixFilePermission>> OWNER_ONLY = PosixFilePermissions
+			.asFileAttribute(EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE));
+
+	// a file replaced keeps its permissions (e.g. the x bit of a script); a new file gets what any new file
+	// gets in that folder (umask, default ACL): Java cannot read the umask, so an empty probe file made with
+	// CREATE_NEW next to it tells; on failure the file stays owner-only
+	private static void finalMode(Path old, Path temp) {
 		try {
-			PosixFileAttributeView view = Files.getFileAttributeView(old, PosixFileAttributeView.class,
-					LinkOption.NOFOLLOW_LINKS);
-			if (view != null && Files.isRegularFile(old, LinkOption.NOFOLLOW_LINKS)) {
-				Files.setPosixFilePermissions(temp, view.readAttributes().permissions());
+			Set<PosixFilePermission> mode;
+			if (Files.isRegularFile(old, LinkOption.NOFOLLOW_LINKS)) {
+				mode = Files.getPosixFilePermissions(old, LinkOption.NOFOLLOW_LINKS);
+			} else {
+				Path probe = temp.resolveSibling(temp.getFileName() + ".mode"); //$NON-NLS-1$
+				Files.newByteChannel(probe, EnumSet.of(StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE)).close();
+				try {
+					mode = Files.getPosixFilePermissions(probe, LinkOption.NOFOLLOW_LINKS);
+				} finally {
+					Files.deleteIfExists(probe);
+				}
 			}
+			Files.setPosixFilePermissions(temp, mode);
 		} catch (IOException | UnsupportedOperationException e) {
-			// the default mode then
+			// owner-only then
 		}
 	}
 

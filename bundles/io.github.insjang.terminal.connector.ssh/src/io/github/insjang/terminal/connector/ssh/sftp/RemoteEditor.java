@@ -15,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFileAttributeView;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Comparator;
@@ -81,6 +83,15 @@ public final class RemoteEditor {
 		return UIPlugin.getDefault().getStateLocation().toFile().toPath().resolve("edit"); //$NON-NLS-1$
 	}
 
+	// copies of files of a remote account: only the user may enter the folder (POSIX), so they stay private
+	// whatever mode a download gives them
+	private static void createArea() throws IOException {
+		Path area = Files.createDirectories(area());
+		if (Files.getFileStore(area).supportsFileAttributeView(PosixFileAttributeView.class)) {
+			Files.setPosixFilePermissions(area, PosixFilePermissions.fromString("rwx------")); //$NON-NLS-1$
+		}
+	}
+
 	/** Deletes the local copies of an earlier run. */
 	public static void cleanArea() {
 		deleteTree(area());
@@ -110,6 +121,7 @@ public final class RemoteEditor {
 		Display display = page.getWorkbenchWindow().getShell().getDisplay();
 		Job job = Job.create(NLS.bind(FilesMessages.downloadingFile, entry.path()), monitor -> {
 			try {
+				createArea();
 				Files.createDirectories(local.getParent());
 				monitor.beginTask(entry.path(), (int) Math.min(entry.size(), Integer.MAX_VALUE));
 				edit.remoteRead = files.get(entry.path(), local, monitor);
