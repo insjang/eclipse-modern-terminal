@@ -65,6 +65,12 @@ public class DroppedFilesTest {
 	}
 
 	@Test
+	public void powerShellDoublesCurlyQuotesAndIsFoundWithoutExe() {
+		assertEquals("'C:\\a\u2019\u2019$(calc).txt'",
+				DroppedFiles.format(new String[] { "C:\\a\u2019$(calc).txt" }, "pwsh", true));
+	}
+
+	@Test
 	public void controlCharactersAreDropped() {
 		assertEquals("'/tmp/arm'", DroppedFiles.format(new String[] { "/tmp/a\nr\rm" }, null, false));
 	}

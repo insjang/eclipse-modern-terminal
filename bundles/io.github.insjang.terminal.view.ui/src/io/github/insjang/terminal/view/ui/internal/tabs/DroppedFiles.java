@@ -41,9 +41,10 @@ public final class DroppedFiles {
 			argument = p -> posixQuote(toWsl(p));
 		} else if (shell.endsWith("/sh.exe") || shell.endsWith("/bash.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
 			argument = p -> posixQuote(toMsys(p));
-		} else if (shell.endsWith("/powershell.exe") || shell.endsWith("/pwsh.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
-			// single quotes: in double quotes PowerShell would run a $(...) in the name
-			argument = p -> "'" + p.replace("'", "''") + "'"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+		} else if (shell.matches("(.*/)?(powershell|pwsh)(\\.exe)?")) { //$NON-NLS-1$
+			// single quotes: in double quotes PowerShell would run a $(...) in the name; it takes the curly quotes
+			// as single quotes too, so every one of them is doubled
+			argument = p -> "'" + p.replaceAll("(['\u2018\u2019\u201a\u201b])", "$1$1") + "'"; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 		} else {
 			// cmd.exe, or unknown: a name never holds a double quote, and inside them & | < > ^ are plain text
 			argument = p -> '"' + p + '"';
