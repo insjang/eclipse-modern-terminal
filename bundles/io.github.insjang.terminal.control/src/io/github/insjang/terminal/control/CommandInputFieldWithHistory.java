@@ -124,6 +124,12 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 	 * The input text field.
 	 */
 	private Text fInputField;
+	/** Stands for a new line inside a history entry, the entries themselves being separated by new lines. */
+	private static final char LINE_BREAK = '\u2028';
+	/** Most lines the field grows to as more are typed. */
+	private static final int MAX_GROWN_LINES = 8;
+	/** The height set with the sash, which the field never shrinks below. */
+	private int fSashHeight;
 	private Sash fSash;
 	private Composite fPanel;
 
@@ -167,7 +173,7 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 		//<J2ME CDC-1.1 Foundation-1.1 variant>
 		StringTokenizer tok = new StringTokenizer(history, "\n"); //$NON-NLS-1$
 		while (tok.hasMoreElements()) {
-			fHistory.add((String) tok.nextElement());
+			fHistory.add(((String) tok.nextElement()).replace(LINE_BREAK, '\n'));
 		//</J2ME CDC-1.1 Foundation-1.1 variant>
 		}
 	}
@@ -186,7 +192,7 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 				} else {
 					sep = true;
 				}
-				buff.append(line);
+				buff.append(line.replace('\n', LINE_BREAK)); // an entry of several lines stays one entry
 			}
 		}
 		return buff.toString();
@@ -264,6 +270,7 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 			// do not show less then one line
 			e.y = Math.min(e.y, containerRect.height - h);
 			fInputField.setLayoutData(gdata);
+			fSashHeight = gdata.heightHint;
 			parent.layout();
 			// else the content assist icon will be replicated
 			parent.redraw();
@@ -287,6 +294,15 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 		}
 		fInputField.setLayoutData(data);
 		fInputField.setFont(terminal.getFont());
+		// grow with the lines typed, up to a few, then scroll
+		fInputField.addModifyListener(e -> {
+			GridData d = (GridData) fInputField.getLayoutData();
+			int h = Math.max(fSashHeight, Math.min(fInputField.getLineCount(), MAX_GROWN_LINES) * fInputField.getLineHeight());
+			if (d.heightHint != h) {
+				d.heightHint = h;
+				parent.layout();
+			}
+		});
 		// Register field assist *before* the key listener.
 		// Else the ENTER key is sent *first* to the input field
 		// and then to the field assist popup.
@@ -301,16 +317,23 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 				if (!e.doit) {
 					return;
 				}
+				boolean oneLine = fInputField.getText().indexOf('\n') < 0;
+				if ((e.character == SWT.CR || e.character == SWT.LF) && (e.stateMask & SWT.SHIFT) != 0) {
+					return; // Shift+Enter: a new line in the field, as on the web
+				}
 				if (e.character == SWT.CR || e.character == SWT.LF) {
 					e.doit = false;
-					String line = fInputField.getText();
+					// sent the way a terminal pastes: lines end with CR
+					String line = fInputField.getText().replace("\r\n", "\n"); //$NON-NLS-1$ //$NON-NLS-2$
 					// the line is pasted, but the return is typed: in a bracketed paste it would be text, not Enter
-					if (!terminal.isConnected() || !line.isEmpty() && !terminal.pasteString(line)) {
+					if (!terminal.isConnected() || !line.isEmpty() && !terminal.pasteString(line.replace('\n', '\r'))) {
 						return;
 					}
 					terminal.sendKey('\r');
 					pushLine(line);
 					setCommand("");//$NON-NLS-1$
+				} else if (!oneLine && (e.keyCode == SWT.ARROW_UP || e.keyCode == SWT.ARROW_DOWN)) {
+					// several lines: the arrows move between them, the history is on Page Up and Page Down
 				} else if (e.keyCode == SWT.ARROW_UP || e.keyCode == SWT.PAGE_UP) {
 					e.doit = false;
 					setCommand(move(fInputField.getText(), 1));
@@ -327,7 +350,7 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 				if (line == null) {
 					return;
 				}
-				fInputField.setText(line);
+				fInputField.setText(line.replace("\n", Text.DELIMITER)); //$NON-NLS-1$
 				fInputField.setSelection(fInputField.getCharCount());
 			}
 

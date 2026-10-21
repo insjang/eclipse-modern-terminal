@@ -1290,6 +1290,11 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 				character = 0x7f;
 			}
 
+			// Shift+Enter sends ESC CR, as Alt+Enter does: a new line in Claude Code, Codex and the like, as on the web
+			if (character == '\r' && (event.stateMask & SWT.MODIFIER_MASK) == SWT.SHIFT) {
+				altKeyPressed = true;
+			}
+
 			//TODO: At this point, Ctrl+M sends the same as Ctrl+Shift+M .
 			//This is undesired. Fixing this here might make the special Ctrl+Shift+C
 			//handling unnecessary further up.
