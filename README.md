@@ -5,7 +5,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 
 [한국어 README](README.ko.md)
 
-![Modern Terminal split three ways beside the Markdown Viewer: Claude Code, htop and a shell](docs/images/overview.png)
+![Modern Terminal split three ways beside the Markdown Viewer: Claude Code, htop and a shell](docs/images/overview-en.png)
 
 | Claude Code with Korean text | Claude Code above, htop below |
 |---|---|
