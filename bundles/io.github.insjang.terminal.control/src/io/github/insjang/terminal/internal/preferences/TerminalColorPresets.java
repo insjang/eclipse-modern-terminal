@@ -121,14 +121,15 @@ public enum TerminalColorPresets {
 	}
 
 	TerminalColorPresets() {
-		// the Tango palette, as in Windows Terminal's Tango Dark and Tango Light
+		// the Tango palette, as in Windows Terminal's Tango Dark and Tango Light; on black, blue is lighter
+		// and green darker, so that blue text on a green background (ls: other-writable folders) reads
 		presets.add(new Preset(TerminalMessages.TerminalColorPresets_TangoDark) //
 				.set(FOREGROUND, 211, 215, 207).set(BACKGROUND, 0, 0, 0) //
 				.set(SELECTION_FOREGROUND, 255, 255, 255).set(SELECTION_BACKGROUND, 52, 101, 164) //
-				.set(BLACK, 0, 0, 0).set(RED, 204, 0, 0).set(GREEN, 78, 154, 6).set(YELLOW, 196, 160, 0) //
-				.set(BLUE, 52, 101, 164).set(MAGENTA, 117, 80, 123).set(CYAN, 6, 152, 154).set(WHITE, 211, 215, 207) //
+				.set(BLACK, 0, 0, 0).set(RED, 204, 0, 0).set(GREEN, 0, 79, 39).set(YELLOW, 196, 160, 0) //
+				.set(BLUE, 0, 158, 234).set(MAGENTA, 117, 80, 123).set(CYAN, 6, 152, 154).set(WHITE, 211, 215, 207) //
 				.set(BRIGHT_BLACK, 85, 87, 83).set(BRIGHT_RED, 239, 41, 41).set(BRIGHT_GREEN, 138, 226, 52) //
-				.set(BRIGHT_YELLOW, 252, 233, 79).set(BRIGHT_BLUE, 114, 159, 207).set(BRIGHT_MAGENTA, 173, 127, 168) //
+				.set(BRIGHT_YELLOW, 252, 233, 79).set(BRIGHT_BLUE, 147, 220, 255).set(BRIGHT_MAGENTA, 173, 127, 168) //
 				.set(BRIGHT_CYAN, 52, 226, 226).set(BRIGHT_WHITE, 238, 238, 236));
 		presets.add(new Preset(TerminalMessages.TerminalColorPresets_TangoLight) //
 				.set(FOREGROUND, 85, 87, 83).set(BACKGROUND, 255, 255, 255) //
