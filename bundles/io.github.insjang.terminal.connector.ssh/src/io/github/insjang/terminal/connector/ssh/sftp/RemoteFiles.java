@@ -15,14 +15,17 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 import org.apache.sshd.client.channel.ChannelExec;
@@ -33,6 +36,7 @@ import org.apache.sshd.sftp.client.SftpClient;
 import org.apache.sshd.sftp.client.SftpClient.Attributes;
 import org.apache.sshd.sftp.client.SftpClient.DirEntry;
 import org.apache.sshd.sftp.client.SftpClientFactory;
+import org.apache.sshd.sftp.client.extensions.openssh.OpenSSHPosixRenameExtension;
 import org.apache.sshd.sftp.common.SftpConstants;
 import org.apache.sshd.sftp.common.SftpException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -45,6 +49,8 @@ import org.eclipse.core.runtime.OperationCanceledException;
 public final class RemoteFiles implements AutoCloseable {
 	private static final AttributeKey<RemoteFiles> KEY = new AttributeKey<>();
 	private static final int BUFFER = 32 * 1024;
+	// Windows device names, also with an extension
+	private static final Pattern DEVICE = Pattern.compile("(?i)(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\..*)?"); //$NON-NLS-1$
 
 	/** A directory entry; {@code dir} follows symbolic links. Times are epoch milliseconds. */
 	public record Entry(String name, String path, boolean dir, boolean link, long size, long modified, int permissions) {
@@ -178,30 +184,44 @@ public final class RemoteFiles implements AutoCloseable {
 
 	/**
 	 * Copies a remote file or folder into a local folder. {@code overwrite} is asked for each file
-	 * that exists already: false skips it, {@link OperationCanceledException} stops.
+	 * that exists already: false skips it, {@link OperationCanceledException} stops. Links to folders
+	 * inside a folder are not followed (no loops, no copy of what they point to).
+	 *
+	 * @return the remote paths of the folder links skipped
 	 */
-	public void download(String remote, Path localDir, Predicate<Path> overwrite, IProgressMonitor monitor)
+	public List<String> download(String remote, Path localDir, Predicate<Path> overwrite, IProgressMonitor monitor)
 			throws IOException {
 		Entry e = stat(remote);
 		if (e == null) {
 			throw new IOException("No such file: " + remote); //$NON-NLS-1$
 		}
-		download(e, localDir.resolve(localName(e.name())), overwrite, monitor);
+		List<String> skipped = new ArrayList<>();
+		download(e, localDir.resolve(localName(e.name())), overwrite, monitor, skipped);
+		return skipped;
 	}
 
-	private void download(Entry e, Path local, Predicate<Path> overwrite, IProgressMonitor monitor) throws IOException {
+	private void download(Entry e, Path local, Predicate<Path> overwrite, IProgressMonitor monitor, List<String> skipped)
+			throws IOException {
 		checkCanceled(monitor);
 		if (e.dir()) {
 			Files.createDirectories(local);
 			for (Entry child : list(e.path())) {
-				download(child, local.resolve(localName(child.name())), overwrite, monitor);
+				if (child.dir() && child.link()) {
+					skipped.add(child.path());
+				} else {
+					download(child, local.resolve(localName(child.name())), overwrite, monitor, skipped);
+				}
 			}
-		} else if (!Files.exists(local) || overwrite.test(local)) {
+		} else if (!Files.exists(local, LinkOption.NOFOLLOW_LINKS) || overwrite.test(local)) {
 			monitor.subTask(e.path());
+			boolean created = !Files.exists(local, LinkOption.NOFOLLOW_LINKS);
 			try (InputStream in = client.read(e.path()); OutputStream out = Files.newOutputStream(local)) {
 				copy(in, out, monitor);
 			} catch (IOException | OperationCanceledException x) {
-				Files.deleteIfExists(local); // no partial file
+				// no partial file, but only the one made here: never a file that was there, never a folder
+				if (created && Files.isRegularFile(local, LinkOption.NOFOLLOW_LINKS)) {
+					Files.deleteIfExists(local);
+				}
 				throw x;
 			}
 		}
@@ -213,7 +233,7 @@ public final class RemoteFiles implements AutoCloseable {
 		if (e == null) {
 			throw new IOException("No such file: " + remote); //$NON-NLS-1$
 		}
-		download(e, local, p -> true, monitor);
+		download(e, local, p -> true, monitor, new ArrayList<>());
 		return e;
 	}
 
@@ -244,20 +264,80 @@ public final class RemoteFiles implements AutoCloseable {
 		}
 	}
 
-	/** Uploads one file to a remote path (replaced), returning the remote entry as written. */
+	/**
+	 * Uploads one file to a remote path (replaced), returning the remote entry as written.
+	 * <p>
+	 * When the server has posix-rename@openssh.com, the file is written to a temporary name in the same
+	 * folder and then renamed over the target, keeping its permissions: a cancel, an error or a lost
+	 * connection leaves the old file as it was. Written in place (a cancel then leaves the file cut)
+	 * without the extension, when the folder is not writable, for a link or other non-regular file, and
+	 * for a file of another owner (a rename would make it ours).
+	 */
 	public Entry put(Path local, String remote, IProgressMonitor monitor) throws IOException {
 		monitor.subTask(remote);
+		Attributes old = lstat(remote);
+		OpenSSHPosixRenameExtension rename = client.getExtension(OpenSSHPosixRenameExtension.class);
+		if ((old == null || old.isRegularFile()) && rename.isSupported()) {
+			String temp = tempName(remote);
+			OutputStream out = null;
+			try {
+				out = client.write(temp);
+			} catch (SftpException e) {
+				// e.g. a folder we may not write: in place below
+			}
+			if (out != null) {
+				try {
+					try (InputStream in = Files.newInputStream(local); OutputStream o = out) {
+						copy(in, o, monitor);
+					}
+					if (old == null || old.getUserId() == client.lstat(temp).getUserId()) {
+						if (old != null) {
+							client.setStat(temp, new Attributes().perms(old.getPermissions() & 07777));
+						}
+						rename.posixRename(temp, remote);
+						return stat(remote);
+					}
+				} catch (IOException | RuntimeException x) {
+					removeQuietly(temp);
+					throw x;
+				}
+				removeQuietly(temp); // someone else's file
+			}
+		}
 		try (InputStream in = Files.newInputStream(local); OutputStream out = client.write(remote)) {
 			copy(in, out, monitor);
-		} catch (OperationCanceledException x) {
-			try {
-				client.remove(remote); // no partial file
-			} catch (IOException ignored) {
-				// leave it
+		} catch (IOException | RuntimeException x) {
+			if (old == null) {
+				removeQuietly(remote); // only a partial file made here
 			}
 			throw x;
 		}
 		return stat(remote);
+	}
+
+	private Attributes lstat(String path) throws IOException {
+		try {
+			return client.lstat(path);
+		} catch (SftpException e) {
+			if (e.getStatus() == SftpConstants.SSH_FX_NO_SUCH_FILE) {
+				return null;
+			}
+			throw e;
+		}
+	}
+
+	private void removeQuietly(String path) {
+		try {
+			client.remove(path);
+		} catch (IOException ignored) {
+			// leave it
+		}
+	}
+
+	/** ".name.mt-upload-<random>" next to the file. */
+	static String tempName(String remote) {
+		return join(parent(remote), '.' + name(remote) + ".mt-upload-" //$NON-NLS-1$
+				+ Long.toHexString(ThreadLocalRandom.current().nextLong() >>> 1));
 	}
 
 	private static void copy(InputStream in, OutputStream out, IProgressMonitor monitor) throws IOException {
@@ -345,9 +425,19 @@ public final class RemoteFiles implements AutoCloseable {
 		return '/' + String.join("/", out); //$NON-NLS-1$
 	}
 
-	/** A remote name as a local file name (characters Windows refuses become '_'). */
+	/**
+	 * A remote name as a local file name Windows accepts, the same on every system: control characters
+	 * and \/:*?"<>| become '_', and so do trailing dots and spaces (Windows drops them, so "..." would
+	 * be the folder itself); an empty name is "_"; a device name (CON, PRN, AUX, NUL, COM1-9, LPT1-9,
+	 * also with an extension, any case) gets a '_' in front.
+	 */
 	public static String localName(String name) {
-		return name.replaceAll("[\\\\/:*?\"<>|]", "_"); //$NON-NLS-1$ //$NON-NLS-2$
+		String n = name.replaceAll("[\\x00-\\x1f\\\\/:*?\"<>|]", "_") //$NON-NLS-1$ //$NON-NLS-2$
+				.replaceAll("[. ](?=[. ]*$)", "_"); //$NON-NLS-1$ //$NON-NLS-2$
+		if (n.isEmpty()) {
+			return "_"; //$NON-NLS-1$
+		}
+		return DEVICE.matcher(n).matches() ? '_' + n : n;
 	}
 
 	/** "drwxr-xr-x" for the file type and mode bits of SFTP permissions. */

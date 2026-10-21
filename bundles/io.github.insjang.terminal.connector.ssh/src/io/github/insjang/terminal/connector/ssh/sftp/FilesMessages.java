@@ -64,4 +64,6 @@ public class FilesMessages extends NLS {
 	public static String remoteDeleted;
 	public static String keptCopy;
 	public static String followTerminal;
+	public static String linksSkipped;
+	public static String binaryFile;
 }

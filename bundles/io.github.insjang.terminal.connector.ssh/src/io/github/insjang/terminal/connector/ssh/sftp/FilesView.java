@@ -10,6 +10,7 @@
 package io.github.insjang.terminal.connector.ssh.sftp;
 
 import java.io.IOException;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
@@ -572,10 +573,13 @@ public class FilesView extends ViewPart {
 		background(FilesMessages.downloading, true, monitor -> {
 			// folder sizes are not known before walking them
 			monitor.beginTask(FilesMessages.downloading, folders ? IProgressMonitor.UNKNOWN : (int) Math.min(total, Integer.MAX_VALUE));
+			List<String> skipped = new ArrayList<>();
 			for (Entry e : entries) {
-				f.download(e.path(), dir, overwrite, bytes(monitor, folders));
+				skipped.addAll(f.download(e.path(), dir, overwrite, bytes(monitor, folders)));
 			}
-			ui(() -> statusLine().setMessage(NLS.bind(FilesMessages.downloaded, dir)));
+			String done = NLS.bind(FilesMessages.downloaded, dir);
+			ui(() -> statusLine().setMessage(skipped.isEmpty() ? done
+					: done + ' ' + NLS.bind(FilesMessages.linksSkipped, skipped.size(), skipped.get(0))));
 		});
 	}
 
@@ -719,7 +723,8 @@ public class FilesView extends ViewPart {
 				work.run(monitor);
 			} catch (OperationCanceledException e) {
 				return Status.CANCEL_STATUS;
-			} catch (IOException e) {
+			} catch (IOException | InvalidPathException e) {
+				// InvalidPathException: a remote name this system cannot have
 				ui(() -> MessageDialog.openError(getSite().getShell(), FilesMessages.errorTitle,
 						name + ": " + e.getMessage())); //$NON-NLS-1$
 			} finally {

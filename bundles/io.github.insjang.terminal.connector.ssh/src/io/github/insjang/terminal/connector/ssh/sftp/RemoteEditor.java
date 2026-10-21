@@ -10,8 +10,10 @@
 package io.github.insjang.terminal.connector.ssh.sftp;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -86,7 +88,15 @@ public final class RemoteEditor {
 
 	/** Downloads a remote file and opens it in an editor; an editor already open for it is activated. */
 	public static void open(IWorkbenchPage page, RemoteFiles files, Entry entry) {
-		Path local = area().resolve(key(files.getSession(), entry.path())).resolve(RemoteFiles.localName(entry.name()));
+		Path local;
+		try {
+			local = area().resolve(key(files.getSession(), entry.path())).resolve(RemoteFiles.localName(entry.name()));
+		} catch (InvalidPathException e) {
+			// localName makes names Windows accepts: this is not expected, but must not end in the event loop
+			MessageDialog.openError(page.getWorkbenchWindow().getShell(), FilesMessages.errorTitle,
+					entry.path() + ": " + e.getMessage()); //$NON-NLS-1$
+			return;
+		}
 		RemoteEditor open = EDITS.get(local);
 		if (open != null && open.editor != null) {
 			page.activate(open.editor);
@@ -119,6 +129,17 @@ public final class RemoteEditor {
 	}
 
 	private void openEditor(IWorkbenchPage page) {
+		try {
+			// a text editor would change the bytes on save
+			if (binary(local) && new MessageDialog(page.getWorkbenchWindow().getShell(), FilesMessages.errorTitle, null,
+					NLS.bind(FilesMessages.binaryFile, remote), MessageDialog.QUESTION, 1, IDialogConstants.YES_LABEL,
+					IDialogConstants.NO_LABEL).open() != 0) {
+				deleteTree(local.getParent());
+				return;
+			}
+		} catch (IOException e) {
+			// the editor shows the error
+		}
 		try {
 			// never the system editor: on Windows that runs a remote .bat, .exe, .lnk, .js ... locally
 			IEditorDescriptor d = PlatformUI.getWorkbench().getEditorRegistry()
@@ -235,6 +256,18 @@ public final class RemoteEditor {
 		} else {
 			deleteTree(local.getParent());
 		}
+	}
+
+	/** Whether the first 8 KB hold a NUL byte, as git and grep tell binary files. */
+	public static boolean binary(Path file) throws IOException {
+		try (InputStream in = Files.newInputStream(file)) {
+			for (byte b : in.readNBytes(8192)) {
+				if (b == 0) {
+					return true;
+				}
+			}
+		}
+		return false;
 	}
 
 	/** The editor registered for the name if it runs inside Eclipse, else the text editor (never external or OLE). */

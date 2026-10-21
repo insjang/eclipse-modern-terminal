@@ -60,7 +60,12 @@ public class UIPlugin extends AbstractUIPlugin {
 	public void start(BundleContext context) throws Exception {
 		super.start(context);
 		plugin = this;
-		RemoteEditor.cleanArea();
+		try {
+			RemoteEditor.cleanArea();
+		} catch (RuntimeException e) {
+			// e.g. no instance location (-data @none): never keep the SSH connector from starting
+			getLog().warn("Cannot clean the remote edit area: " + e); //$NON-NLS-1$
+		}
 	}
 
 	@Override
