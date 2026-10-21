@@ -41,6 +41,9 @@ public class SshSessionTest {
 	public void brokenLinesAreSkipped() {
 		String good = SshSession.encode(List.of(new SshSession("n", "h", 22, "u", null, 0, 300, null, false)));
 		assertEquals(1, SshSession.decode("junk\n" + good + "\na b c d e x 0 0 false\n").size());
+		// a bad '%' escape drops only its line
+		assertEquals(List.of("ok"), SshSession.decode("n%zz h 22 u  0 300  true\nok h 22 u  0 300  true").stream()
+				.map(SshSession::name).toList());
 		assertTrue(SshSession.decode("").isEmpty());
 		assertTrue(SshSession.decode(null).isEmpty());
 	}

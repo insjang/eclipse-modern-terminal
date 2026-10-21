@@ -31,12 +31,14 @@ import java.io.InterruptedIOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.security.PublicKey;
 import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 
 import org.apache.sshd.client.SshClient;
@@ -119,20 +121,28 @@ public class SshConnection extends Thread {
 		// looked up on every login, so a key created later is found without a restart
 		client.setKeyIdentityProvider(session -> {
 			SshConnection connection = of(session);
-			FileKeyPairProvider keys = new FileKeyPairProvider(
-					identities(connection != null ? connection.fConn.getSshSettings().getKeyFile() : null));
+			FileKeyPairProvider keys = new FileKeyPairProvider(identities(
+					connection != null ? connection.fConn.getSshSettings().getKeyFile() : null,
+					message -> connection.fControl.displayTextInTerminal(message)));
 			keys.setPasswordFinder(passphrases);
 			return keys.loadKeys(session);
 		});
 		return client;
 	}
 
-	/** The key file of the settings (if any, ~ for the home), then the default ~/.ssh identities that exist. */
-	/* default */ static List<Path> identities(String keyFile) {
+	/**
+	 * The key file of the settings (if any, ~ for the home), then the default ~/.ssh identities that exist.
+	 * A key file that is not a valid path is skipped and reported.
+	 */
+	/* default */ static List<Path> identities(String keyFile, Consumer<String> skipped) {
 		Stream<Path> explicit = Stream.empty();
 		if (keyFile != null) {
-			explicit = Stream.of(keyFile.startsWith("~/") || keyFile.startsWith("~\\") //$NON-NLS-1$ //$NON-NLS-2$
-					? Path.of(System.getProperty("user.home"), keyFile.substring(2)) : Path.of(keyFile)); //$NON-NLS-1$
+			try {
+				explicit = Stream.of(keyFile.startsWith("~/") || keyFile.startsWith("~\\") //$NON-NLS-1$ //$NON-NLS-2$
+						? Path.of(System.getProperty("user.home"), keyFile.substring(2)) : Path.of(keyFile)); //$NON-NLS-1$
+			} catch (InvalidPathException e) {
+				skipped.accept(NLS.bind(SshMessages.SSH_KEY_FILE_INVALID, keyFile, e.getReason()));
+			}
 		}
 		return Stream.concat(explicit, DEFAULT_IDENTITIES.stream().map(SSH_DIR::resolve)).filter(Files::isRegularFile)
 				.distinct().toList();

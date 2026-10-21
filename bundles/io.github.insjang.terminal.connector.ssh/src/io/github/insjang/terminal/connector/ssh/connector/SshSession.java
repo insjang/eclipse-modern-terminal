@@ -57,14 +57,14 @@ public record SshSession(String name, String host, int port, String user, String
 			if (f.length < 9) {
 				continue;
 			}
-			for (int i = 0; i < f.length; i++) {
-				f[i] = URLDecoder.decode(f[i], StandardCharsets.UTF_8);
-			}
 			try {
+				for (int i = 0; i < f.length; i++) {
+					f[i] = URLDecoder.decode(f[i], StandardCharsets.UTF_8);
+				}
 				sessions.add(new SshSession(f[0], f[1], Integer.parseInt(f[2]), f[3], nullIfEmpty(f[4]),
 						Integer.parseInt(f[5]), Integer.parseInt(f[6]), nullIfEmpty(f[7]), Boolean.parseBoolean(f[8])));
-			} catch (NumberFormatException e) {
-				// skip it
+			} catch (IllegalArgumentException e) {
+				// a bad escape or number: skip that line
 			}
 		}
 		return sessions;

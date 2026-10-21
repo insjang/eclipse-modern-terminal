@@ -306,6 +306,11 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sessions = new ArrayList<>(SshSession.load()); // sorted
 		fillSessionCombo();
 		select(find(session.name()));
+		// a password not saved with the session is still used for this launch
+		if (password != null && !password.isEmpty()) {
+			sshSettings.setPassword(password);
+			sshSettingsPage.loadSettings();
+		}
 	}
 
 	private void deleteSession() {
