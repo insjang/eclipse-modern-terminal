@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Modern Terminal bundles into build/*.jar against an Eclipse installation, runs the unit tests,
 # and with `install` copies the jars into $ECLIPSE/dropins (close Eclipse first).
-# usage: ECLIPSE=/path/to/eclipse ./build.sh [install|--skip-tests]
+# and with `site` builds a p2 update site in build/site (feature/ holds feature.xml and category.xml).
+# usage: ECLIPSE=/path/to/eclipse ./build.sh [install|site|--skip-tests]
 set -euo pipefail
 ECLIPSE=${ECLIPSE:?set ECLIPSE to an Eclipse 2026-09 or later installation}
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -36,6 +37,21 @@ if [ "${1:-}" != "--skip-tests" ]; then
 	java -cp "$OUT/tests:$CP" RunTests $P.emulator.VT100EmulatorBackendTest $P.emulator.VT100EmulatorTest $P.emulator.MouseReportTest \
 		$P.model.CharWidthTest $P.model.TerminalTextDataStoreTest $P.model.TerminalTextDataTest $P.model.TerminalTextDataWindowTest \
 		$P.model.TerminalTextDataFastScrollTest $P.model.SynchronizedTerminalTextDataTest $P.model.TerminalTextDataSnapshotTest
+fi
+
+if [ "${1:-}" = site ]; then
+	# feature.xml and category.xml carry <x.y.z>.qualifier / 0.0.0: give them the bundles' version
+	VER=$(sed -n 's/^Bundle-Version: //p' "$OUT/io.github.insjang.terminal.control.mf")
+	S=$OUT/site-src; rm -rf "$S" "$OUT/site" "$OUT/p2cfg" "$OUT/p2.log" && mkdir -p "$S/plugins" "$S/features/f"
+	cp "$OUT"/io.github.insjang.terminal.*.jar "$S/plugins/"
+	sed -E "s/[0-9.]+\.qualifier/$VER/; s/version=\"0\.0\.0\"/version=\"$VER\"/" "$HERE/feature/feature.xml" > "$S/features/f/feature.xml"
+	(cd "$S/features/f" && jar cf "../io.github.insjang.terminal_$VER.jar" feature.xml) && rm -r "$S/features/f"
+	# run the p2 publisher from $ECLIPSE with a throwaway configuration area, so the install itself is not touched
+	mkdir -p "$OUT/p2cfg" && cp -r "$ECLIPSE/configuration/config.ini" "$ECLIPSE/configuration/org.eclipse.equinox.simpleconfigurator" "$OUT/p2cfg/"
+	p2() { java -jar "$(ls "$ECLIPSE"/plugins/org.eclipse.equinox.launcher_*.jar | tail -1)" -configuration "$OUT/p2cfg" -nosplash -consoleLog -application "$@" >> "$OUT/p2.log" 2>&1 || { tail -30 "$OUT/p2.log" >&2; exit 1; }; }
+	p2 org.eclipse.equinox.p2.publisher.FeaturesAndBundlesPublisher -source "$S" -metadataRepository "file:$OUT/site" -artifactRepository "file:$OUT/site" -publishArtifacts -compress -repositoryName "Modern Terminal"
+	p2 org.eclipse.equinox.p2.publisher.CategoryPublisher -metadataRepository "file:$OUT/site" -categoryDefinition "file:$HERE/feature/category.xml" -categoryQualifier modernterminal -compress
+	rm -rf "$S" "$OUT/p2cfg"; echo "update site in $OUT/site"
 fi
 
 if [ "${1:-}" = install ]; then
