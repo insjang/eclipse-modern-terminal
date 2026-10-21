@@ -14,9 +14,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
@@ -215,14 +217,20 @@ public final class RemoteFiles implements AutoCloseable {
 			}
 		} else if (!Files.exists(local, LinkOption.NOFOLLOW_LINKS) || overwrite.test(local)) {
 			monitor.subTask(e.path());
-			boolean created = !Files.exists(local, LinkOption.NOFOLLOW_LINKS);
-			try (InputStream in = client.read(e.path()); OutputStream out = Files.newOutputStream(local)) {
-				copy(in, out, monitor);
-			} catch (IOException | OperationCanceledException x) {
-				// no partial file, but only the one made here: never a file that was there, never a folder
-				if (created && Files.isRegularFile(local, LinkOption.NOFOLLOW_LINKS)) {
-					Files.deleteIfExists(local);
+			// into a new file next to it, moved over the target when complete: a cancel or failure never
+			// truncates a file that was there, and only the file made here is deleted
+			Path temp = Files.createTempFile(local.toAbsolutePath().getParent(), ".mt-download-", ".tmp"); //$NON-NLS-1$ //$NON-NLS-2$
+			try {
+				try (InputStream in = client.read(e.path()); OutputStream out = Files.newOutputStream(temp)) {
+					copy(in, out, monitor);
 				}
+				try {
+					Files.move(temp, local, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+				} catch (AtomicMoveNotSupportedException x) {
+					Files.move(temp, local, StandardCopyOption.REPLACE_EXISTING);
+				}
+			} catch (IOException | OperationCanceledException x) {
+				Files.deleteIfExists(temp);
 				throw x;
 			}
 		}
