@@ -28,19 +28,28 @@ package io.github.insjang.terminal.connector.ssh.connector;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
+import java.net.InetSocketAddress;
 import java.net.SocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.PublicKey;
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.auth.keyboard.UserInteraction;
 import org.apache.sshd.client.channel.ChannelShell;
 import org.apache.sshd.client.future.ConnectFuture;
-import org.apache.sshd.client.keyverifier.KnownHostsServerKeyVerifier;
+import org.apache.sshd.client.ClientFactoryManager;
 import org.apache.sshd.client.session.ClientSession;
+import org.apache.sshd.client.session.ClientSessionImpl;
+import org.apache.sshd.client.session.SessionFactory;
+import org.apache.sshd.common.FactoryManager;
+import org.apache.sshd.common.SshConstants;
+import org.apache.sshd.common.io.IoSession;
+import org.apache.sshd.common.util.net.SshdSocketAddress;
 import org.apache.sshd.common.AttributeRepository;
 import org.apache.sshd.common.AttributeRepository.AttributeKey;
 import org.apache.sshd.common.NamedResource;
@@ -49,6 +58,8 @@ import org.apache.sshd.common.config.keys.KeyUtils;
 import org.apache.sshd.common.keyprovider.FileKeyPairProvider;
 import org.apache.sshd.common.session.SessionContext;
 import org.apache.sshd.core.CoreModuleProperties;
+import org.eclipse.jface.dialogs.IDialogConstants;
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.window.Window;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
@@ -91,21 +102,16 @@ public class SshConnection extends Thread {
 		// a terminal may sit idle for hours; keepalives are set per session
 		CoreModuleProperties.IDLE_TIMEOUT.set(client, Duration.ZERO);
 		CoreModuleProperties.NIO2_READ_TIMEOUT.set(client, Duration.ZERO);
-		KnownHostsServerKeyVerifier verifier = new KnownHostsServerKeyVerifier(
-				(session, address, key) -> of(session) != null && of(session).acceptUnknownKey(key), KNOWN_HOSTS);
-		verifier.setModifiedServerKeyAcceptor((session, address, entry, expected, actual) -> {
-			SshConnection connection = of(session);
-			if (connection == null) {
-				return false;
+		client.setSessionFactory(new SessionFactory(client) {
+			@Override
+			protected ClientSessionImpl doCreateSession(IoSession ioSession) throws Exception {
+				return new KnownTypesFirstSession(client, ioSession);
 			}
-			// unlike OpenSSH, MINA does not prefer the key type already known: ask, accepting replaces the entry
-			if (!KeyUtils.getKeyType(expected).equals(KeyUtils.getKeyType(actual))) {
-				return connection.acceptOtherKeyType(expected, actual);
-			}
-			connection.warnModifiedKey(expected, actual);
-			return false;
 		});
-		client.setServerKeyVerifier(verifier);
+		client.setServerKeyVerifier((session, address, key) -> {
+			SshConnection connection = of(session);
+			return connection != null && connection.verifyHostKey(session, key);
+		});
 		FilePasswordProvider passphrases = new PassphrasePrompt();
 		client.setFilePasswordProvider(passphrases);
 		// looked up on every login, so a key created later is found without a restart
@@ -116,6 +122,36 @@ public class SshConnection extends Thread {
 			return keys.loadKeys(session);
 		});
 		return client;
+	}
+
+	// offers the host key types known for the host first, as OpenSSH and JGit do
+	private static class KnownTypesFirstSession extends ClientSessionImpl {
+		KnownTypesFirstSession(ClientFactoryManager client, IoSession ioSession) throws Exception {
+			super(client, ioSession);
+		}
+
+		@Override
+		protected String resolveAvailableSignaturesProposal(FactoryManager manager) {
+			String proposal = super.resolveAvailableSignaturesProposal(manager);
+			SshdSocketAddress target = target(getConnectAddress());
+			if (target == null) {
+				return proposal;
+			}
+			try {
+				return HostKeys.orderAlgorithms(proposal,
+						HostKeys.types(HostKeys.load(KNOWN_HOSTS, target.getHostName(), target.getPort())));
+			} catch (IOException e) {
+				return proposal;
+			}
+		}
+	}
+
+	// the host as connected to (HostName of ~/.ssh/config, as OpenSSH) and its port
+	private static SshdSocketAddress target(SocketAddress address) {
+		if (address instanceof SshdSocketAddress target) {
+			return target;
+		}
+		return address instanceof InetSocketAddress inet ? new SshdSocketAddress(inet.getHostString(), inet.getPort()) : null;
 	}
 
 	/* default */ static SshConnection of(SessionContext session) {
@@ -238,7 +274,14 @@ public class SshConnection extends Thread {
 			fSession = null;
 		}
 		if (session != null) {
-			session.close(true); // closes the shell channel too
+			try {
+				// SSH_MSG_DISCONNECT, then the session closes once it is written
+				session.disconnect(SshConstants.SSH2_DISCONNECT_BY_APPLICATION, "terminal closed"); //$NON-NLS-1$
+			} catch (IOException e) {
+				// closed already or cannot write: close below
+			}
+			// a peer that does not let us write must not keep the session (no-op once closed)
+			CompletableFuture.delayedExecutor(2, TimeUnit.SECONDS).execute(() -> session.close(true));
 		}
 	}
 
@@ -274,6 +317,58 @@ public class SshConnection extends Thread {
 		return hostPort;
 	}
 
+	/** Asks a yes/no question on the UI thread, No being the default; false if the terminal is gone. */
+	private boolean askYesNo(String message) {
+		boolean[] result = { false };
+		getStandardDisplay().syncExec(() -> {
+			if (!isDisconnected()) {
+				MessageDialog dialog = new MessageDialog(fControl.getShell(), SshMessages.WARNING, null, message,
+						MessageDialog.WARNING, 1, IDialogConstants.YES_LABEL, IDialogConstants.NO_LABEL);
+				result[0] = dialog.open() == 0;
+			}
+		});
+		return result[0];
+	}
+
+	/**
+	 * Checks the server key against ~/.ssh/known_hosts (see {@link HostKeys#decide}); asks about a key
+	 * type not known for the host and adds the key if the user agrees.
+	 */
+	/* default */ boolean verifyHostKey(ClientSession session, PublicKey key) {
+		String host = fConn.getSshSettings().getHost();
+		int port = fConn.getSshSettings().getPort();
+		SshdSocketAddress target = target(session.getConnectAddress());
+		if (target != null) {
+			host = target.getHostName();
+			port = target.getPort();
+		}
+		HostKeys.Known known;
+		try {
+			known = HostKeys.load(KNOWN_HOSTS, host, port);
+		} catch (IOException e) {
+			fControl.displayTextInTerminal(NLS.bind(SshMessages.SSH_KNOWN_HOSTS_READ_FAILED, KNOWN_HOSTS, e.getMessage()));
+			return false;
+		}
+		switch (HostKeys.decide(known, key)) {
+		case ACCEPT:
+			return true;
+		case REFUSE:
+			warnRefusedKey(known, key);
+			return false;
+		default:
+			if (!(known.keys().isEmpty() ? acceptUnknownKey(key) : acceptOtherKeyType(known, key))) {
+				return false;
+			}
+			try {
+				HostKeys.add(KNOWN_HOSTS, host, port, key);
+			} catch (IOException e) {
+				// connect anyway, the user said yes; the key is asked for again next time
+				fControl.displayTextInTerminal(NLS.bind(SshMessages.SSH_KNOWN_HOSTS_WRITE_FAILED, KNOWN_HOSTS, e.getMessage()));
+			}
+			return true;
+		}
+	}
+
 	/** Opens a message box on the UI thread; SWT.NO if the terminal is gone. */
 	private int showMessage(int style, String title, String message) {
 		int[] result = { SWT.NO };
@@ -288,21 +383,23 @@ public class SshConnection extends Thread {
 		return result[0];
 	}
 
-	/* default */ boolean acceptUnknownKey(PublicKey key) {
-		String msg = NLS.bind(SshMessages.SSH_UNKNOWN_HOST,
-				new Object[] { hostPort(), KeyUtils.getKeyType(key), KeyUtils.getFingerPrint(key), KNOWN_HOSTS });
-		return showMessage(SWT.ICON_QUESTION | SWT.YES | SWT.NO, SshMessages.WARNING, msg) == SWT.YES;
+	private boolean acceptUnknownKey(PublicKey key) {
+		return askYesNo(NLS.bind(SshMessages.SSH_UNKNOWN_HOST,
+				new Object[] { hostPort(), KeyUtils.getKeyType(key), KeyUtils.getFingerPrint(key), KNOWN_HOSTS }));
 	}
 
-	/* default */ boolean acceptOtherKeyType(PublicKey known, PublicKey key) {
-		String msg = NLS.bind(SshMessages.SSH_OTHER_KEY_TYPE, new Object[] { hostPort(), KeyUtils.getKeyType(known),
-				KeyUtils.getKeyType(key), KeyUtils.getFingerPrint(key), KNOWN_HOSTS });
-		return showMessage(SWT.ICON_WARNING | SWT.YES | SWT.NO, SshMessages.WARNING, msg) == SWT.YES;
+	private boolean acceptOtherKeyType(HostKeys.Known known, PublicKey key) {
+		return askYesNo(NLS.bind(SshMessages.SSH_OTHER_KEY_TYPE, new Object[] { hostPort(),
+				String.join(", ", HostKeys.types(known)), KeyUtils.getKeyType(key), KeyUtils.getFingerPrint(key), KNOWN_HOSTS })); //$NON-NLS-1$
 	}
 
-	/* default */ void warnModifiedKey(PublicKey expected, PublicKey actual) {
-		String msg = NLS.bind(SshMessages.SSH_CHANGED_HOST, new Object[] { hostPort(), KeyUtils.getKeyType(expected),
-				KeyUtils.getFingerPrint(expected), KeyUtils.getKeyType(actual), KeyUtils.getFingerPrint(actual), KNOWN_HOSTS });
+	private void warnRefusedKey(HostKeys.Known known, PublicKey key) {
+		String type = KeyUtils.getKeyType(key);
+		PublicKey expected = known.keys().stream().filter(k -> type.equals(KeyUtils.getKeyType(k))).findFirst().orElse(null);
+		String msg = expected == null // no known key of the type: the server key is @revoked
+				? NLS.bind(SshMessages.SSH_REVOKED_HOST, new Object[] { hostPort(), type, KeyUtils.getFingerPrint(key), KNOWN_HOSTS })
+				: NLS.bind(SshMessages.SSH_CHANGED_HOST, new Object[] { hostPort(), type, KeyUtils.getFingerPrint(expected),
+						type, KeyUtils.getFingerPrint(key), KNOWN_HOSTS });
 		showMessage(SWT.ICON_WARNING | SWT.OK, SshMessages.WARNING, msg);
 	}
 

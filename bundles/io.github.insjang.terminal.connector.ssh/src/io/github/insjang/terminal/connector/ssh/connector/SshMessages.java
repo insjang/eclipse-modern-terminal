@@ -55,6 +55,9 @@ public class SshMessages extends NLS {
 	public static String SSH_UNKNOWN_HOST;
 	public static String SSH_CHANGED_HOST;
 	public static String SSH_OTHER_KEY_TYPE;
+	public static String SSH_REVOKED_HOST;
+	public static String SSH_KNOWN_HOSTS_READ_FAILED;
+	public static String SSH_KNOWN_HOSTS_WRITE_FAILED;
 	public static String org_apache_sshd_common_SshException;
 	public static String java_io_IOException;
 	public static String java_io_EOFException;

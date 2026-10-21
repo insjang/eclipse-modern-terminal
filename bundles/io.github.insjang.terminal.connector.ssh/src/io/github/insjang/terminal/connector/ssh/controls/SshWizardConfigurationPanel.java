@@ -16,9 +16,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.eclipse.core.runtime.Assert;
-import org.eclipse.equinox.security.storage.ISecurePreferences;
-import org.eclipse.equinox.security.storage.SecurePreferencesFactory;
-import org.eclipse.equinox.security.storage.StorageException;
 import org.eclipse.jface.dialogs.IDialogSettings;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
@@ -32,6 +29,7 @@ import org.eclipse.swt.widgets.Label;
 import io.github.insjang.terminal.connector.AbstractSettingsPage;
 import io.github.insjang.terminal.connector.ISettingsPage;
 import io.github.insjang.terminal.connector.ssh.connector.SshConnector;
+import io.github.insjang.terminal.connector.ssh.connector.SshPasswords;
 import io.github.insjang.terminal.connector.ssh.connector.SshSettings;
 import io.github.insjang.terminal.connector.ssh.connector.SshSettingsPage;
 import io.github.insjang.terminal.connector.ssh.nls.Messages;
@@ -222,7 +220,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 				if (!savePassword) {
 					sshSettings.setPassword(""); //$NON-NLS-1$
 				} else {
-					String password = accessSecurePassword(sshSettings.getHost());
+					String password = SshPasswords.get(sshSettings.getUser(), sshSettings.getHost(), sshSettings.getPort());
 					if (password != null) {
 						sshSettings.setPassword(password);
 					}
@@ -289,7 +287,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 				hostSettings.put(SAVE_PASSWORD, Boolean.toString(savePassword));
 
 				if (savePassword && sshSettings.getPassword() != null && sshSettings.getPassword().length() != 0) {
-					saveSecurePassword(host, sshSettings.getPassword());
+					SshPasswords.put(sshSettings.getUser(), host, sshSettings.getPort(), sshSettings.getPassword());
 				}
 
 				// maybe unchecked the password button - so try to remove a saved password - if any
@@ -314,79 +312,15 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 				hostSettingsMap.put(host, hostSettings);
 
 				if (savePassword && sshSettings.getPassword() != null && sshSettings.getPassword().length() != 0) {
-					saveSecurePassword(host, sshSettings.getPassword());
+					SshPasswords.put(sshSettings.getUser(), host, sshSettings.getPort(), sshSettings.getPassword());
 				}
 			}
 		}
 	}
 
-	/**
-	 * Save the password to the secure storage.
-	 *
-	 * @param host The host. Must not be <code>null</code>.
-	 * @param password The password. Must not be <code>null</code>.
-	 */
-	private void saveSecurePassword(String host, String password) {
-		Assert.isNotNull(host);
-		Assert.isNotNull(password);
-
-		// To access the secure storage, we need the preference instance
-		ISecurePreferences preferences = SecurePreferencesFactory.getDefault();
-		if (preferences != null) {
-			// Construct the secure preferences node key
-			String nodeKey = "/Target Explorer SSH Password/" + host; //$NON-NLS-1$
-			ISecurePreferences node = preferences.node(nodeKey);
-			if (node != null) {
-				try {
-					node.put("password", password, true); //$NON-NLS-1$
-				} catch (StorageException ex) {
-					/* ignored on purpose */ }
-			}
-		}
-	}
-
-	/**
-	 * Reads the password from the secure storage.
-	 *
-	 * @param host The host. Must not be <code>null</code>.
-	 * @return The password or <code>null</code>.
-	 */
-	private String accessSecurePassword(String host) {
-		Assert.isNotNull(host);
-
-		// To access the secure storage, we need the preference instance
-		ISecurePreferences preferences = SecurePreferencesFactory.getDefault();
-		if (preferences != null) {
-			// Construct the secure preferences node key
-			String nodeKey = "/Target Explorer SSH Password/" + host; //$NON-NLS-1$
-			ISecurePreferences node = preferences.node(nodeKey);
-			if (node != null) {
-				String password = null;
-				try {
-					password = node.get("password", null); //$NON-NLS-1$
-				} catch (StorageException ex) {
-					/* ignored on purpose */ }
-
-				return password;
-			}
-		}
-		return null;
-	}
-
 	@Override
 	protected void removeSecurePassword(String host) {
-		Assert.isNotNull(host);
-
-		// To access the secure storage, we need the preference instance
-		ISecurePreferences preferences = SecurePreferencesFactory.getDefault();
-		if (preferences != null) {
-			// Construct the secure preferences node key
-			String nodeKey = "/Target Explorer SSH Password/" + host; //$NON-NLS-1$
-			ISecurePreferences node = preferences.node(nodeKey);
-			if (node != null) {
-				node.remove("password"); //$NON-NLS-1$
-			}
-		}
+		SshPasswords.remove(host);
 	}
 
 	@Override

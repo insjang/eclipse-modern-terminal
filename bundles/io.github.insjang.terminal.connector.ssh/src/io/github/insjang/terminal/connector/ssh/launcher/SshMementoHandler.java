@@ -14,9 +14,8 @@ package io.github.insjang.terminal.connector.ssh.launcher;
 import java.util.Map;
 
 import org.eclipse.core.runtime.Assert;
-import org.eclipse.equinox.security.storage.ISecurePreferences;
-import org.eclipse.equinox.security.storage.SecurePreferencesFactory;
-import org.eclipse.equinox.security.storage.StorageException;
+import io.github.insjang.terminal.connector.ssh.connector.ISshSettings;
+import io.github.insjang.terminal.connector.ssh.connector.SshPasswords;
 import io.github.insjang.terminal.view.core.ITerminalsConnectorConstants;
 import io.github.insjang.terminal.view.ui.IMementoHandler;
 import org.eclipse.ui.IMemento;
@@ -96,22 +95,12 @@ public class SshMementoHandler implements IMementoHandler {
 		properties.put(ITerminalsConnectorConstants.PROP_ENCODING,
 				memento.getString(ITerminalsConnectorConstants.PROP_ENCODING));
 
-		// The password is stored within the Eclipse secure preferences -> restore it from there
-		// To access the secure storage, we need the preference instance
-		String password = null;
-		ISecurePreferences preferences = SecurePreferencesFactory.getDefault();
-		if (preferences != null && (String) properties.get(ITerminalsConnectorConstants.PROP_IP_HOST) != null) {
-			// Construct the secure preferences node key
-			String nodeKey = "/Target Explorer SSH Password/" //$NON-NLS-1$
-					+ (String) properties.get(ITerminalsConnectorConstants.PROP_IP_HOST);
-			ISecurePreferences node = preferences.node(nodeKey);
-			if (node != null) {
-				try {
-					password = node.get("password", null); //$NON-NLS-1$
-				} catch (StorageException ex) {
-					/* ignored on purpose */ }
-			}
-		}
+		// The password is in the secure storage, saved for exactly this user@host:port only while
+		// "Save password" is on for it (see SshPasswords)
+		Integer port = memento.getInteger(ITerminalsConnectorConstants.PROP_IP_PORT);
+		String password = SshPasswords.get(memento.getString(ITerminalsConnectorConstants.PROP_SSH_USER),
+				memento.getString(ITerminalsConnectorConstants.PROP_IP_HOST),
+				port != null ? port.intValue() : ISshSettings.DEFAULT_SSH_PORT);
 
 		// Example of restoring the password from an 3DES encrypted string. Do not remove!
 		/*
