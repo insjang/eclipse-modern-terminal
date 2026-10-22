@@ -75,6 +75,9 @@ public class DetectWSL implements IDetectExternalExecutable {
 			detectJob = new WslDetectJob();
 			detectJob.schedule();
 		}
+		if (Job.getJobManager().isSuspended()) {
+			return Collections.emptyList(); // Eclipse is starting: the job runs once jobs resume, a join only warns
+		}
 		try {
 			if (detectJob.join(10, null) && detectJob.result != null) { // Suspended jobs return early from join()
 				result = detectJob.result;
