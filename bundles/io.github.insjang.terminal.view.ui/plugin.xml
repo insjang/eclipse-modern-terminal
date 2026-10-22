@@ -450,11 +450,11 @@
 
       <activityPatternBinding
             activityId="io.github.insjang.terminal.view.ui.activity.views"
-            pattern="org\.eclipse\.terminal\.view\.ui/org\.eclipse\.terminal\.view\.ui\.TerminalsView">
+            pattern="io\.github\.insjang\.terminal\.view\.ui/io\.github\.insjang\.terminal\.view\.ui\.TerminalsView">
       </activityPatternBinding>
       <activityPatternBinding
             activityId="io.github.insjang.terminal.view.ui.activity.views"
-            pattern="org\.eclipse\.terminal\.view\.ui/org\.eclipse\.terminal\.view\.ui\.commands\.^(?!org\.eclipse\.terminal\.view\.ui\.commands\.launchToolbar).*">
+            pattern="io\.github\.insjang\.terminal\.view\.ui/io\.github\.insjang\.terminal\.view\.ui\.commands\.(?!launchToolbar).*">
       </activityPatternBinding>
       
       <categoryActivityBinding
@@ -482,11 +482,11 @@
 
       <activityPatternBinding
             activityId="io.github.insjang.terminal.view.ui.activity.maintoolbar"
-            pattern="org\.eclipse\.terminal\.view\.ui/org\.eclipse\.terminal\.view\.ui\.toolbar">
+            pattern="io\.github\.insjang\.terminal\.view\.ui/io\.github\.insjang\.terminal\.view\.ui\.toolbar">
       </activityPatternBinding>
       <activityPatternBinding
             activityId="io.github.insjang.terminal.view.ui.activity.maintoolbar"
-            pattern="org\.eclipse\.terminal\.view\.ui/org\.eclipse\.terminal\.view\.ui\.command.*\.launchToolbar">
+            pattern="io\.github\.insjang\.terminal\.view\.ui/io\.github\.insjang\.terminal\.view\.ui\.command.*\.launchToolbar">
       </activityPatternBinding>
 
       <categoryActivityBinding

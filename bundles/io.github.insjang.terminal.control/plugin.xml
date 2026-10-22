@@ -257,16 +257,16 @@
 
    <extension point="org.eclipse.ui.themes" id="terminal.font">
       <fontDefinition
-            categoryId="terminal.views.theme.category"
+            categoryId="io.github.insjang.terminal.themeCategory"
             defaultsTo="org.eclipse.jface.textfont"
-            id="terminal.views.view.font.definition"
+            id="io.github.insjang.terminal.font"
             label="%terminal.font.label">
          <description>
             %terminal.font.description
          </description>
       </fontDefinition>
       <themeElementCategory
-            id="terminal.views.theme.category"
+            id="io.github.insjang.terminal.themeCategory"
             label="%terminal.views.theme.category.label">
          <description>
             %terminal.views.theme.category.description

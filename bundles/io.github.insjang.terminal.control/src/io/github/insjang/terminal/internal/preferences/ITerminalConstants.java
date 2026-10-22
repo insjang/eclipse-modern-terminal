@@ -24,7 +24,9 @@ import io.github.insjang.terminal.model.TerminalColor;
  */
 public interface ITerminalConstants {
 
-	public static final String FONT_DEFINITION = "terminal.views.view.font.definition"; //$NON-NLS-1$
+	public static final String FONT_DEFINITION = "io.github.insjang.terminal.font"; //$NON-NLS-1$
+	/** The id up to 1.1.0, which is the Eclipse Terminal's: a font set there is taken over once. */
+	public static final String OLD_FONT_DEFINITION = "terminal.views.view.font.definition"; //$NON-NLS-1$
 	public static final String PREF_HAS_MIGRATED = "TerminalPref.migrated"; //$NON-NLS-1$
 
 	public static final String PREF_BUFFERLINES = "TerminalPrefBufferLines"; //$NON-NLS-1$
