@@ -28,7 +28,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
 | Defaults | block cursor, 1000 lines | bar cursor, copy on select, 10000 lines |
 | SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH-style known_hosts, saved sessions |
-| SFTP | none | Files view: browse, transfer, edit remote files in Eclipse, follows the shell's folder |
+| SFTP | none | Files view: browse, transfer, edit remote files in Eclipse, follows the shell's folder; local tabs show local folders |
 
 Local shells (cmd, PowerShell, Git Bash, WSL distributions, detected on start) and SSH.
 
@@ -65,7 +65,7 @@ Load Presets offers Modern Terminal Defaults (what Restore Defaults gives), Tang
 
 - Ctrl+Alt+Shift+M (or Open Modern Terminal... in the view toolbar) > Choose terminal: SSH Terminal
   - Host, user, port, an optional key file, timeout and keepalive
-- Saved sessions: pick one under Session, Save... stores the fields under a name, Delete removes it and its saved password
+- Saved Sessions (as in PuTTY): type a name and Save, select one and Load, or double-click to connect; Delete removes it and its saved password
 - Authentication, as OpenSSH tries it:
   - Keys: the key file field first, then `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` and `IdentityFile` entries of `~/.ssh/config`; a passphrase is asked when needed
   - Password and keyboard-interactive (e.g. one-time codes)
@@ -86,6 +86,9 @@ Window > Show View > Other... > Modern Terminal > Modern Terminal Files.
   - Remote files are never opened in an external program
 - Uploads are written to a temporary name and then renamed over the file, so a cancel or a dropped connection keeps the original
   - This needs the `posix-rename@openssh.com` extension (OpenSSH has it); without it the file is written in place
+- For a local tab (cmd, PowerShell, Git Bash, WSL) the view shows the local folders instead; a WSL tab shows the distribution's files
+  - Browse, Open, New Folder..., Rename..., Delete; Upload and Download are SSH only
+  - Delete never goes into links or junctions
 
 ### Follow the shell's folder (OSC 7)
 

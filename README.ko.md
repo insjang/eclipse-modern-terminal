@@ -66,7 +66,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 
 - Ctrl+Alt+Shift+M (또는 뷰 툴바의 Open Modern Terminal...) → Choose terminal: SSH Terminal
   - 호스트, 사용자, 포트, 키 파일(선택), 타임아웃, keepalive 입력
-- 세션 저장: Session에서 고르면 값이 채워짐, Save...는 현재 값을 이름 붙여 저장, Delete는 세션과 저장된 비밀번호 삭제
+- Saved Sessions (PuTTY 방식): 이름 입력 후 Save, 골라서 Load, 더블클릭하면 바로 접속, Delete는 세션과 저장된 비밀번호 삭제
 - 인증: OpenSSH와 같은 순서로 시도
   - 키: 키 파일 칸 먼저, 다음 `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`, `~/.ssh/config`의 `IdentityFile`, 필요하면 암호(passphrase) 입력 창
   - 비밀번호, keyboard-interactive (일회용 코드 등)
@@ -86,6 +86,9 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
   - 원격 파일을 외부 프로그램으로 열지 않음
 - 업로드는 임시 이름으로 쓴 뒤 원래 이름으로 바꿈: 취소하거나 연결이 끊겨도 원래 파일 유지
   - `posix-rename@openssh.com` 확장 필요 (OpenSSH는 지원), 없으면 그 자리에 씀
+- 로컬 탭(cmd, PowerShell, Git Bash, WSL)을 고르면 로컬 폴더를 표시, WSL 탭은 해당 배포판의 파일
+  - 탐색, 열기, New Folder..., Rename..., Delete 지원, Upload·Download는 SSH 전용
+  - 삭제는 링크·junction 안으로 들어가지 않음
 
 ### 셸 폴더 따라가기 (OSC 7)
 
