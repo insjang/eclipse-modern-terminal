@@ -56,7 +56,7 @@ import org.eclipse.core.runtime.OperationCanceledException;
  * SFTP operations on the session of an SSH terminal, without UI. One {@link SftpClient} per session,
  * opened on first use; it closes with the session (or {@link #close()}). Remote paths use '/'.
  */
-public final class RemoteFiles implements AutoCloseable {
+public final class RemoteFiles implements FileAccess, AutoCloseable {
 	private static final AttributeKey<RemoteFiles> KEY = new AttributeKey<>();
 	private static final int BUFFER = 32 * 1024;
 	// Windows device names, also with an extension
@@ -69,6 +69,10 @@ public final class RemoteFiles implements AutoCloseable {
 					a.getModifyTime() != null ? a.getModifyTime().toMillis() : 0, a.getPermissions());
 		}
 	}
+
+	/** Folders first, then by name ignoring case. */
+	static final Comparator<Entry> ORDER = Comparator.comparing((Entry e) -> !e.dir()).thenComparing(Entry::name,
+			String.CASE_INSENSITIVE_ORDER);
 
 	private final ClientSession session;
 	private final SftpClient client;
@@ -94,6 +98,7 @@ public final class RemoteFiles implements AutoCloseable {
 		return session;
 	}
 
+	@Override
 	public boolean isOpen() {
 		return client.isOpen() && session.isOpen();
 	}
@@ -143,7 +148,7 @@ public final class RemoteFiles implements AutoCloseable {
 		return client.canonicalPath("."); //$NON-NLS-1$
 	}
 
-	/** The entries of a directory (no "." and ".."), folders first, then by name. */
+	@Override
 	public List<Entry> list(String dir) throws IOException {
 		List<Entry> entries = new ArrayList<>();
 		for (DirEntry e : client.readDir(dir)) {
@@ -163,7 +168,7 @@ public final class RemoteFiles implements AutoCloseable {
 			}
 			entries.add(Entry.of(path, a, isDir));
 		}
-		entries.sort(Comparator.comparing((Entry e) -> !e.dir()).thenComparing(Entry::name, String.CASE_INSENSITIVE_ORDER));
+		entries.sort(ORDER);
 		return entries;
 	}
 
@@ -180,15 +185,17 @@ public final class RemoteFiles implements AutoCloseable {
 		}
 	}
 
+	@Override
 	public void mkdir(String path) throws IOException {
 		client.mkdir(path);
 	}
 
+	@Override
 	public void rename(String from, String to) throws IOException {
 		client.rename(from, to);
 	}
 
-	/** Deletes a file, a link or a folder with all its content (links are not followed). */
+	@Override
 	public void delete(String path, IProgressMonitor monitor) throws IOException {
 		checkCanceled(monitor);
 		if (client.lstat(path).isDirectory()) {
@@ -493,6 +500,31 @@ public final class RemoteFiles implements AutoCloseable {
 		try (Stream<Path> s = Files.walk(local)) {
 			return s.filter(Files::isRegularFile).mapToLong(p -> p.toFile().length()).sum();
 		}
+	}
+
+	@Override
+	public String child(String dir, String name) {
+		return join(dir, name);
+	}
+
+	@Override
+	public String parentOf(String path) {
+		return normalize(path).equals("/") ? null : parent(path); //$NON-NLS-1$
+	}
+
+	@Override
+	public String typed(String current, String home, String text) {
+		return resolve(current, home, text);
+	}
+
+	@Override
+	public String fromShell(String path) {
+		return normalize(path);
+	}
+
+	@Override
+	public String shown(String path) {
+		return path;
 	}
 
 	// ---- pure helpers ----

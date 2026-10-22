@@ -31,7 +31,7 @@ Export-Package: io.github.insjang.terminal.view.ui;version="1.0.100",
  io.github.insjang.terminal.view.ui.internal.local.showin;x-internal:=true,
  io.github.insjang.terminal.view.ui.internal.local.showin.detectors;x-internal:=true,
  io.github.insjang.terminal.view.ui.internal.preferences;x-internal:=true,
- io.github.insjang.terminal.view.ui.internal.tabs;x-internal:=true,
+ io.github.insjang.terminal.view.ui.internal.tabs;x-internal:=true;x-friends:="io.github.insjang.terminal.connector.ssh",
  io.github.insjang.terminal.view.ui.internal.view;x-internal:=true,
  io.github.insjang.terminal.view.ui.launcher;version="1.0.100",
  io.github.insjang.terminal.view.ui.streams;version="1.0.100"

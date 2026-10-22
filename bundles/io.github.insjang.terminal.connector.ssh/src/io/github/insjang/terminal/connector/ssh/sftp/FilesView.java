@@ -19,6 +19,7 @@ import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -77,16 +78,18 @@ import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.part.ViewPart;
 
+import io.github.insjang.terminal.connector.ITerminalConnector;
 import io.github.insjang.terminal.connector.TerminalState;
 import io.github.insjang.terminal.connector.ssh.connector.SshConnector;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
 import io.github.insjang.terminal.control.ITerminalViewControl;
 import io.github.insjang.terminal.control.TerminalDirectory;
+import io.github.insjang.terminal.view.core.ITerminalsConnectorConstants;
 import io.github.insjang.terminal.view.ui.ITerminalsView;
 
 /**
- * Files of the SSH session of the selected Modern Terminal tab, over SFTP on the same session (no
- * second login). All SFTP calls run in jobs.
+ * Files of the selected Modern Terminal tab: of its SSH session over SFTP on the same session (no second
+ * login), or of the local file system for a local terminal. All file system calls run in jobs.
  */
 public class FilesView extends ViewPart {
 	public static final String ID = "io.github.insjang.terminal.connector.ssh.FilesView"; //$NON-NLS-1$
@@ -97,15 +100,17 @@ public class FilesView extends ViewPart {
 	private Composite stack;
 	private Label message;
 	private Composite browser;
+	private Label place;
 	private Text pathText;
 	private TableViewer viewer;
 	private final List<Action> selectionActions = new ArrayList<>();
 	private Action openAction, upAction, homeAction, refreshAction, uploadAction, newFolderAction, followAction;
 
-	// the terminal followed, and its SFTP client once open (UI thread only)
+	// the terminal followed, the properties of its tab, and its files once open (UI thread only)
 	private ITerminalViewControl terminal;
+	private Map<?, ?> tabProperties;
 	private boolean connecting; // waiting for the shell or opening SFTP
-	private RemoteFiles files;
+	private FileAccess files;
 	private String home = "/"; //$NON-NLS-1$
 	private String cwd;
 	private final Set<RemoteFiles> opened = new HashSet<>();
@@ -134,13 +139,17 @@ public class FilesView extends ViewPart {
 		GridLayout layout = new GridLayout(2, false);
 		layout.marginWidth = layout.marginHeight = 0;
 		browser.setLayout(layout);
-		Label label = new Label(browser, SWT.NONE);
-		label.setText(FilesMessages.path);
+		place = new Label(browser, SWT.NONE);
+		place.setText(FilesMessages.path);
 		pathText = new Text(browser, SWT.BORDER | SWT.SINGLE);
 		pathText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 		pathText.addListener(SWT.DefaultSelection, e -> {
 			if (files != null) {
-				navigate(RemoteFiles.resolve(cwd != null ? cwd : home, home, pathText.getText()));
+				try {
+					navigate(files.typed(cwd != null ? cwd : home, home, pathText.getText()));
+				} catch (InvalidPathException x) {
+					statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, pathText.getText(), x.getMessage()));
+				}
 			}
 		});
 
@@ -164,7 +173,7 @@ public class FilesView extends ViewPart {
 		column(FilesMessages.colSize, 80, SWT.RIGHT, text(e -> e.dir() ? "" : RemoteFiles.formatSize(e.size()))); //$NON-NLS-1$
 		column(FilesMessages.colModified, 130, SWT.LEFT,
 				text(e -> e.modified() > 0 ? DATE.format(Instant.ofEpochMilli(e.modified())) : "")); //$NON-NLS-1$
-		column(FilesMessages.colPermissions, 90, SWT.LEFT, text(e -> RemoteFiles.permissions(e.permissions())));
+		column(FilesMessages.colPermissions, 90, SWT.LEFT, text(e -> e.permissions() < 0 ? "" : RemoteFiles.permissions(e.permissions()))); //$NON-NLS-1$
 		viewer.addDoubleClickListener(e -> {
 			Entry entry = first();
 			if (entry != null && entry.dir()) {
@@ -216,7 +225,7 @@ public class FilesView extends ViewPart {
 	private void createActions() {
 		ISharedImages images = PlatformUI.getWorkbench().getSharedImages();
 		upAction = action(FilesMessages.up, images.getImageDescriptor(ISharedImages.IMG_TOOL_UP),
-				() -> navigate(RemoteFiles.parent(cwd)));
+				() -> navigate(files.parentOf(cwd)));
 		homeAction = action(FilesMessages.home, images.getImageDescriptor(ISharedImages.IMG_ETOOL_HOME_NAV),
 				() -> navigate(home));
 		followAction = new Action(FilesMessages.followTerminal, IAction.AS_CHECK_BOX) {
@@ -274,14 +283,15 @@ public class FilesView extends ViewPart {
 
 	private void updateActions() {
 		boolean ready = files != null && cwd != null;
+		boolean remote = ready && files instanceof RemoteFiles; // no transfers to and from the local files
 		int n = selection().size();
 		openAction.setEnabled(ready && n == 1 && !first().dir());
-		upAction.setEnabled(ready && !cwd.equals("/")); //$NON-NLS-1$
+		upAction.setEnabled(ready && files.parentOf(cwd) != null);
 		homeAction.setEnabled(ready);
 		refreshAction.setEnabled(ready);
-		uploadAction.setEnabled(ready);
+		uploadAction.setEnabled(remote);
 		newFolderAction.setEnabled(ready);
-		selectionActions.get(0).setEnabled(ready && n > 0);
+		selectionActions.get(0).setEnabled(remote && n > 0);
 		selectionActions.get(1).setEnabled(ready && n == 1);
 		selectionActions.get(2).setEnabled(ready && n > 0);
 	}
@@ -302,13 +312,13 @@ public class FilesView extends ViewPart {
 
 			private void check(DropTargetEvent event) {
 				// copy only, never move the user's files
-				event.detail = files != null && cwd != null && (event.operations & DND.DROP_COPY) != 0 ? DND.DROP_COPY
+				event.detail = files instanceof RemoteFiles && cwd != null && (event.operations & DND.DROP_COPY) != 0 ? DND.DROP_COPY
 						: DND.DROP_NONE;
 			}
 
 			@Override
 			public void drop(DropTargetEvent event) {
-				if (!(event.data instanceof String[] paths) || files == null || cwd == null) {
+				if (!(event.data instanceof String[] paths) || !(files instanceof RemoteFiles) || cwd == null) {
 					return;
 				}
 				// onto a folder: into it, else into the folder shown
@@ -339,15 +349,16 @@ public class FilesView extends ViewPart {
 		Object first = selection instanceof IStructuredSelection s ? s.getFirstElement() : null;
 		if (first instanceof CTabItem item) {
 			if (!item.isDisposed()) {
-				follow(item.getData() instanceof ITerminalViewControl t ? t : null);
+				follow(item.getData() instanceof ITerminalViewControl t ? t : null,
+						item.getData("properties") instanceof Map<?, ?> m ? m : null); //$NON-NLS-1$
 			}
 		} else if (first == null) {
-			follow((ITerminalViewControl) null); // no tab, or no terminal view
+			follow(null, null); // no tab, or no terminal view
 		}
 		// else: text selected in a terminal, the tab is the same
 	}
 
-	private void follow(ITerminalViewControl t) {
+	private void follow(ITerminalViewControl t, Map<?, ?> properties) {
 		if (t == terminal && (connecting || files != null && files.isOpen())) {
 			return;
 		}
@@ -367,6 +378,7 @@ public class FilesView extends ViewPart {
 			}
 		}
 		terminal = t;
+		tabProperties = properties;
 		connecting = false;
 		files = null;
 		cwd = null;
@@ -389,7 +401,7 @@ public class FilesView extends ViewPart {
 	private void connect() {
 		SshConnector connector = connector();
 		if (connector == null) {
-			show(FilesMessages.notSsh);
+			connectLocal();
 			return;
 		}
 		ClientSession session = connector.getSession();
@@ -443,6 +455,7 @@ public class FilesView extends ViewPart {
 				if (name != null) {
 					hostNames.add(name);
 				}
+				place(NLS.bind(FilesMessages.ssh, host));
 				session.addCloseFutureListener(future -> ui(() -> {
 					if (files == f) {
 						files = null;
@@ -458,6 +471,45 @@ public class FilesView extends ViewPart {
 				}
 			});
 		});
+	}
+
+	/** The local file system for a terminal that is not SSH: local shells, WSL, processes. */
+	private void connectLocal() {
+		ITerminalViewControl t = terminal;
+		if (t == null || t.isDisposed() || t.getTerminalConnector() == null) {
+			show(FilesMessages.noTerminal);
+			return;
+		}
+		ITerminalConnector c = t.getTerminalConnector();
+		Map<?, ?> p = tabProperties != null ? tabProperties : Map.of();
+		// the default shell is not in the properties: the connector tells its program
+		String shell = p.get(ITerminalsConnectorConstants.PROP_PROCESS_PATH) instanceof String s ? s : c.getSettingsSummary();
+		String args = p.get(ITerminalsConnectorConstants.PROP_PROCESS_ARGS) instanceof String s ? s : null;
+		String start = p.get(ITerminalsConnectorConstants.PROP_PROCESS_WORKING_DIR) instanceof String s ? s : null;
+		connecting = true;
+		background(FilesMessages.local, false, monitor -> {
+			LocalFiles f = LocalFiles.of(shell, args);
+			// where the shell is now (Linux tells it), else where it started; the home if neither lists
+			String now = c.getWorkingDirectory().orElse(start);
+			ui(() -> {
+				if (t != terminal) {
+					return;
+				}
+				connecting = false;
+				files = f;
+				home = f.home();
+				hostNames.addAll(f.hostNames());
+				place(f.distribution() == null ? FilesMessages.local : NLS.bind(FilesMessages.wsl, f.distribution()).replace(" :", ":")); //$NON-NLS-1$ //$NON-NLS-2$
+				if (!followTerminal(t.getWorkingDirectory())) {
+					navigate(now != null ? now : home);
+				}
+			});
+		});
+	}
+
+	private void place(String text) {
+		place.setText(text);
+		browser.layout();
 	}
 
 	/**
@@ -488,8 +540,8 @@ public class FilesView extends ViewPart {
 				|| !RemoteFiles.sameHost(dir.host(), hostNames)) {
 			return false;
 		}
-		String path = RemoteFiles.normalize(dir.path());
-		if (path.equals(followed)) {
+		String path = files.fromShell(dir.path());
+		if (path == null || path.equals(followed)) {
 			return false;
 		}
 		followed = path;
@@ -516,8 +568,8 @@ public class FilesView extends ViewPart {
 
 	/** Lists a folder in a job; {@code done} runs in the UI thread after it, whatever the outcome. */
 	private void navigate(String dir, Runnable done) {
-		RemoteFiles f = files;
-		if (f == null) {
+		FileAccess f = files;
+		if (f == null || dir == null) {
 			if (done != null) {
 				done.run();
 			}
@@ -534,14 +586,14 @@ public class FilesView extends ViewPart {
 		});
 	}
 
-	private void list(RemoteFiles f, String dir) {
+	private void list(FileAccess f, String dir) {
 		List<Entry> entries;
 		try {
 			entries = f.list(dir);
 		} catch (IOException e) {
 			ui(() -> {
-				statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, dir, e.getMessage()));
-				pathText.setText(cwd != null ? cwd : dir);
+				statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, f.shown(dir), e.getMessage()));
+				pathText.setText(f.shown(cwd != null ? cwd : dir));
 				if (cwd == null && files == f && !dir.equals(home)) {
 					navigate(home); // nothing shown yet, e.g. the shell's folder is not readable over SFTP
 				}
@@ -554,7 +606,9 @@ public class FilesView extends ViewPart {
 			}
 			boolean same = dir.equals(cwd);
 			cwd = dir;
-			pathText.setText(dir);
+			String shown = f.shown(dir);
+			pathText.setText(shown);
+			pathText.setToolTipText(shown.equals(dir) ? null : dir); // the Windows path of a WSL one
 			ISelection keep = same ? viewer.getSelection() : null;
 			viewer.setInput(entries);
 			if (keep != null) {
@@ -595,14 +649,18 @@ public class FilesView extends ViewPart {
 	}
 
 	private void open(Entry entry) {
-		RemoteEditor.open(getSite().getPage(), files, entry);
+		if (files instanceof RemoteFiles remote) {
+			RemoteEditor.open(getSite().getPage(), remote, entry);
+		} else if (files != null) {
+			RemoteEditor.openInEclipse(getSite().getPage(), Path.of(entry.path()), entry.path());
+		}
 	}
 
 	// ---- actions ----
 
 	private void download() {
 		List<Entry> entries = selected();
-		RemoteFiles f = files;
+		RemoteFiles f = (RemoteFiles) files;
 		DirectoryDialog dialog = new DirectoryDialog(getSite().getShell());
 		dialog.setText(FilesMessages.downloadTo);
 		String target = dialog.open();
@@ -642,7 +700,7 @@ public class FilesView extends ViewPart {
 	}
 
 	private void upload(String[] paths, String dir) {
-		RemoteFiles f = files;
+		RemoteFiles f = (RemoteFiles) files;
 		Predicate<String> overwrite = askOverwrite();
 		background(FilesMessages.uploading, true, monitor -> {
 			long total = 0;
@@ -665,8 +723,8 @@ public class FilesView extends ViewPart {
 		String dir = cwd;
 		String name = askName(FilesMessages.newFolder.replace("...", ""), FilesMessages.newFolderMessage, ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		if (name != null) {
-			RemoteFiles f = files;
-			String path = RemoteFiles.join(dir, name);
+			FileAccess f = files;
+			String path = f.child(dir, name);
 			background(FilesMessages.newFolder, false, monitor -> {
 				f.mkdir(path);
 				ui(this::refresh);
@@ -679,9 +737,9 @@ public class FilesView extends ViewPart {
 		String name = e != null ? askName(FilesMessages.rename.replace("...", ""), FilesMessages.renameMessage, e.name()) //$NON-NLS-1$ //$NON-NLS-2$
 				: null;
 		if (name != null && !name.equals(e.name())) {
-			RemoteFiles f = files;
+			FileAccess f = files;
 			background(FilesMessages.rename, false, monitor -> {
-				f.rename(e.path(), RemoteFiles.join(RemoteFiles.parent(e.path()), name));
+				f.rename(e.path(), f.child(f.parentOf(e.path()), name));
 				ui(this::refresh);
 			});
 		}
@@ -689,12 +747,12 @@ public class FilesView extends ViewPart {
 
 	private void delete() {
 		List<Entry> entries = selected();
-		String question = entries.size() == 1 ? NLS.bind(FilesMessages.deleteOne, entries.get(0).path())
+		String question = entries.size() == 1 ? NLS.bind(FilesMessages.deleteOne, files.shown(entries.get(0).path()))
 				: NLS.bind(FilesMessages.deleteMany, entries.size());
 		if (entries.isEmpty() || !MessageDialog.openConfirm(getSite().getShell(), FilesMessages.deleteTitle, question)) {
 			return;
 		}
-		RemoteFiles f = files;
+		FileAccess f = files;
 		background(FilesMessages.deleting, true, monitor -> {
 			monitor.beginTask(FilesMessages.deleting, IProgressMonitor.UNKNOWN);
 			try {
@@ -708,8 +766,12 @@ public class FilesView extends ViewPart {
 	}
 
 	private String askName(String title, String label, String initial) {
+		// one name in the folder: never a path, nor on Windows a drive ("C:x" is relative to the current folder of C:)
+		String forbidden = files instanceof LocalFiles ? LocalFiles.NOT_IN_NAMES : "/"; //$NON-NLS-1$
 		InputDialog dialog = new InputDialog(getSite().getShell(), title, label, initial,
-				s -> s.isBlank() || s.contains("/") || s.equals(".") || s.equals("..") ? FilesMessages.invalidName : null); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+				s -> s.isBlank() || s.chars().anyMatch(c -> forbidden.indexOf(c) >= 0) || s.equals(".") || s.equals("..") //$NON-NLS-1$ //$NON-NLS-2$
+						? NLS.bind(FilesMessages.invalidName, String.join(" ", forbidden.split(""))) //$NON-NLS-1$ //$NON-NLS-2$
+						: null);
 		return dialog.open() == Window.OK ? dialog.getValue() : null;
 	}
 
@@ -756,7 +818,7 @@ public class FilesView extends ViewPart {
 		void run(IProgressMonitor monitor) throws IOException;
 	}
 
-	/** Runs SFTP work in a job; an I/O error is shown in a dialog, a cancel quietly. */
+	/** Runs file system work in a job; an I/O error is shown in a dialog, a cancel quietly. */
 	private void background(String name, boolean user, IoWork work) {
 		if (user) {
 			running.incrementAndGet();

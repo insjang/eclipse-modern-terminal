@@ -26,6 +26,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 import org.apache.sshd.client.session.ClientSession;
+import org.eclipse.core.resources.IFile;
+import org.eclipse.core.resources.ResourcesPlugin;
+import org.eclipse.core.runtime.IPath;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.OperationCanceledException;
@@ -36,6 +39,7 @@ import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorRegistry;
@@ -141,29 +145,9 @@ public final class RemoteEditor {
 	}
 
 	private void openEditor(IWorkbenchPage page) {
-		try {
-			// a text editor would change the bytes on save
-			if (binary(local) && new MessageDialog(page.getWorkbenchWindow().getShell(), FilesMessages.errorTitle, null,
-					NLS.bind(FilesMessages.binaryFile, remote), MessageDialog.QUESTION, 1, IDialogConstants.YES_LABEL,
-					IDialogConstants.NO_LABEL).open() != 0) {
-				deleteTree(local.getParent());
-				return;
-			}
-		} catch (IOException e) {
-			// the editor shows the error
-		}
-		try {
-			// never the system editor: on Windows that runs a remote .bat, .exe, .lnk, .js ... locally
-			IEditorDescriptor d = PlatformUI.getWorkbench().getEditorRegistry()
-					.getDefaultEditor(local.getFileName().toString());
-			editor = IDE.openEditor(page, local.toUri(),
-					editorFor(d != null ? d.getId() : null, d != null && d.isInternal(), d != null && d.isOpenInPlace()),
-					true);
-		} catch (PartInitException e) {
-			MessageDialog.openError(page.getWorkbenchWindow().getShell(), FilesMessages.errorTitle, e.getMessage());
-			return;
-		}
+		editor = openInEclipse(page, local, remote);
 		if (editor == null) {
+			deleteTree(local.getParent());
 			return;
 		}
 		EDITS.put(local, this);
@@ -187,6 +171,37 @@ public final class RemoteEditor {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Opens a local file in the Eclipse editor registered for its name, never in a program outside Eclipse:
+	 * on Windows the system editor runs a .bat, .exe, .lnk, .js ... A binary file is opened only after asking.
+	 * A file of a workspace project opens as that resource.
+	 *
+	 * @param shown the file in the messages
+	 * @return the editor, or null if none is opened
+	 */
+	public static IEditorPart openInEclipse(IWorkbenchPage page, Path file, String shown) {
+		Shell shell = page.getWorkbenchWindow().getShell();
+		try {
+			// a text editor would change the bytes on save
+			if (binary(file) && new MessageDialog(shell, FilesMessages.errorTitle, null, NLS.bind(FilesMessages.binaryFile, shown),
+					MessageDialog.QUESTION, 1, IDialogConstants.YES_LABEL, IDialogConstants.NO_LABEL).open() != 0) {
+				return null;
+			}
+		} catch (IOException e) {
+			// the editor shows the error
+		}
+		IEditorDescriptor d = PlatformUI.getWorkbench().getEditorRegistry().getDefaultEditor(file.getFileName().toString());
+		String id = editorFor(d != null ? d.getId() : null, d != null && d.isInternal(), d != null && d.isOpenInPlace());
+		try {
+			IFile resource = ResourcesPlugin.getWorkspace().getRoot().getFileForLocation(IPath.fromOSString(file.toString()));
+			return resource != null && resource.exists() ? IDE.openEditor(page, resource, id, true)
+					: IDE.openEditor(page, file.toUri(), id, true);
+		} catch (PartInitException e) {
+			MessageDialog.openError(shell, FilesMessages.errorTitle, e.getMessage());
+			return null;
+		}
 	}
 
 	private long localModified() {

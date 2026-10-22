@@ -39,7 +39,7 @@ if [ "${1:-}" != "--skip-tests" ]; then
 		$P.model.CharWidthTest $P.model.TerminalTextDataStoreTest $P.model.TerminalTextDataTest $P.model.TerminalTextDataWindowTest \
 		$P.model.TerminalTextDataFastScrollTest $P.model.SynchronizedTerminalTextDataTest $P.model.TerminalTextDataSnapshotTest \
 		io.github.insjang.terminal.connector.ssh.HostKeysTest io.github.insjang.terminal.connector.ssh.SshSessionTest \
-		io.github.insjang.terminal.connector.ssh.RemoteFilesTest
+		io.github.insjang.terminal.connector.ssh.RemoteFilesTest io.github.insjang.terminal.connector.ssh.LocalFilesTest
 fi
 
 if [ "${1:-}" = site ]; then

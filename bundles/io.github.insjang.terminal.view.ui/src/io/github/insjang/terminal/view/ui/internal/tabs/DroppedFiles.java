@@ -38,9 +38,9 @@ public final class DroppedFiles {
 		if (!windows) {
 			argument = DroppedFiles::posixQuote;
 		} else if (shell.endsWith("/wsl.exe") || shell.endsWith("/system32/bash.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
-			argument = p -> posixQuote(toWsl(p));
+			argument = p -> posixQuote(ShellPaths.toWsl(p));
 		} else if (shell.endsWith("/sh.exe") || shell.endsWith("/bash.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
-			argument = p -> posixQuote(toMsys(p));
+			argument = p -> posixQuote(ShellPaths.toMsys(p));
 		} else if (shell.matches("(.*/)?(powershell|pwsh)(\\.exe)?")) { //$NON-NLS-1$
 			// single quotes: in double quotes PowerShell would run a $(...) in the name; it takes the curly quotes
 			// as single quotes too, so every one of them is doubled
@@ -51,27 +51,6 @@ public final class DroppedFiles {
 		}
 		// a control character in a name (a newline is legal on Linux) must not reach the shell as a key
 		return Arrays.stream(paths).map(p -> p.replaceAll("\\p{Cntrl}", "")).map(argument).collect(Collectors.joining(" ")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-	}
-
-	/** C:\a\b is /mnt/c/a/b, \\wsl$\Ubuntu\home\a (or \\wsl.localhost\...) is /home/a. */
-	static String toWsl(String path) {
-		String p = path.replace('\\', '/');
-		String lower = p.toLowerCase(Locale.ROOT);
-		if (lower.startsWith("//wsl$/") || lower.startsWith("//wsl.localhost/")) { //$NON-NLS-1$ //$NON-NLS-2$
-			int slash = p.indexOf('/', p.indexOf('/', 2) + 1);
-			return slash == -1 ? "/" : p.substring(slash); //$NON-NLS-1$
-		}
-		return hasDrive(p) ? "/mnt/" + Character.toLowerCase(p.charAt(0)) + p.substring(2) : p; //$NON-NLS-1$
-	}
-
-	/** C:\a\b is /c/a/b, as Git Bash sees it. */
-	static String toMsys(String path) {
-		String p = path.replace('\\', '/');
-		return hasDrive(p) ? "/" + Character.toLowerCase(p.charAt(0)) + p.substring(2) : p; //$NON-NLS-1$
-	}
-
-	private static boolean hasDrive(String p) {
-		return p.length() >= 2 && p.charAt(1) == ':' && Character.isLetter(p.charAt(0));
 	}
 
 	private static String posixQuote(String p) {

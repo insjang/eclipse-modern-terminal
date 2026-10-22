@@ -16,11 +16,14 @@ public class FilesMessages extends NLS {
 		NLS.initializeMessages("io.github.insjang.terminal.connector.ssh.sftp.FilesMessages", FilesMessages.class); //$NON-NLS-1$
 	}
 
-	public static String notSsh;
+	public static String noTerminal;
 	public static String notConnected;
 	public static String connecting;
 	public static String sessionClosed;
 	public static String path;
+	public static String local;
+	public static String wsl;
+	public static String ssh;
 	public static String colName;
 	public static String colSize;
 	public static String colModified;

@@ -11,10 +11,8 @@
 package io.github.insjang.terminal.view.ui.internal.tabs;
 
 import java.io.File;
-import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -72,7 +70,6 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	private final ITerminalViewControl terminal;
 	private final Pattern regex = Pattern.compile("(\\d*)(:(\\d*))?.*"); //$NON-NLS-1$
 	private static final Pattern SURROUNDING = Pattern.compile("^[(\\[<`]+|[)\\]>`,;.]+$"); //$NON-NLS-1$
-	private static final Pattern WSL_DRIVE = Pattern.compile("/mnt/([a-zA-Z])(/.*)?"); //$NON-NLS-1$
 	private final IWorkbenchPartSite site;
 
 	/**
@@ -220,11 +217,6 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	}
 
 	/**
-	 * A path as a WSL shell prints it, turned into one Windows can open: /mnt/d/a is
-	 * D:/a, and the rest of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;.
-	 * Anything else, and anything on another platform, is left as it is.
-	 */
-	/**
 	 * A UNC path other than WSL's: probing it would hand the Windows credentials to whatever host the terminal
 	 * output named.
 	 */
@@ -234,39 +226,26 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				&& !p.startsWith("//wsl$/"); //$NON-NLS-1$
 	}
 
+	/**
+	 * A path as a WSL shell prints it, turned into one Windows can open: /mnt/d/a is D:\a, and the rest
+	 * of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;. Anything else, and
+	 * anything on another platform, is left as it is.
+	 */
 	private static String toWindowsPath(String path) {
 		if (File.separatorChar != '\\' || !path.startsWith("/")) { //$NON-NLS-1$
 			return path;
 		}
-		Matcher drive = WSL_DRIVE.matcher(path);
-		if (drive.matches()) {
-			return drive.group(1).toUpperCase() + ":" + (drive.group(2) == null ? "/" : drive.group(2)); //$NON-NLS-1$ //$NON-NLS-2$
+		String drive = ShellPaths.toWindows(path, ""); //$NON-NLS-1$
+		if (drive != null) {
+			return drive;
 		}
-		for (String distribution : wslDistributions()) {
-			File file = new File("\\\\wsl.localhost\\" + distribution + path.replace('/', '\\')); //$NON-NLS-1$
+		for (String distribution : ShellPaths.wslDistributions()) {
+			File file = new File(ShellPaths.toWindows(path, distribution));
 			if (file.exists()) {
 				return file.getPath();
 			}
 		}
 		return path;
-	}
-
-	private static List<String> distributions;
-
-	// ponytail: asks wsl.exe once, on the first click, and keeps the answer until restart
-	private static synchronized List<String> wslDistributions() {
-		if (distributions == null) {
-			distributions = List.of();
-			try {
-				Process wsl = new ProcessBuilder("wsl.exe", "-l", "-q").redirectErrorStream(true).start(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				// wsl.exe writes UTF-16, the default distribution first
-				distributions = new String(wsl.getInputStream().readAllBytes(), StandardCharsets.UTF_16LE)
-						.replace("\uFEFF", "").lines().map(String::strip).filter(l -> !l.isEmpty()).toList(); //$NON-NLS-1$ //$NON-NLS-2$
-			} catch (IOException e) {
-				// no WSL
-			}
-		}
-		return distributions;
 	}
 
 	private boolean bundleAvailable(String symbolicName) {
