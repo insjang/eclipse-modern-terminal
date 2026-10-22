@@ -37,6 +37,7 @@ public class Messages extends NLS {
 	public static String SshLauncherDelegate_terminalTitle_default;
 	public static String SshWizardConfigurationPanel_savePassword;
 	public static String SshWizardConfigurationPanel_savedSessions;
+	public static String SshWizardConfigurationPanel_name;
 	public static String SshWizardConfigurationPanel_nameTooltip;
 	public static String SshWizardConfigurationPanel_defaultSettings;
 	public static String SshWizardConfigurationPanel_load;

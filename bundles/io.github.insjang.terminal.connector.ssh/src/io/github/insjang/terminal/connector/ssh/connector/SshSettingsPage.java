@@ -43,6 +43,8 @@ public class SshSettingsPage extends AbstractSettingsPage {
 	private Text fPort;
 	private Text fPassword;
 	private Text fKeyFile;
+	private String nameLabel; // a session name row above Host, if set
+	private Text fName;
 
 	public SshSettingsPage(SshSettings settings) {
 		fTerminalSettings = settings;
@@ -175,6 +177,16 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		return valid;
 	}
 
+	/** Adds a session name field above Host; call before {@link #createControl(Composite)}. */
+	public void setNameLabel(String label) {
+		nameLabel = label;
+	}
+
+	/** The session name field, or null without {@link #setNameLabel(String)}. */
+	public Text getNameText() {
+		return fName;
+	}
+
 	@Override
 	public void createControl(Composite parent) {
 		Composite composite = new Composite(parent, SWT.NONE);
@@ -185,6 +197,9 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		composite.setLayout(gridLayout);
 		composite.setLayoutData(gridData);
 
+		if (nameLabel != null) {
+			fName = span(createTextField(composite, nameLabel));
+		}
 		fHostText = createTextField(composite, SshMessages.HOST);
 		fPort = createTextField(composite, SshMessages.PORT);
 		GridData portData = (GridData) fPort.getLayoutData();

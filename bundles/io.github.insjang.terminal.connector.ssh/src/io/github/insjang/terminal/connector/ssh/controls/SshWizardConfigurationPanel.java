@@ -86,11 +86,18 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sshSettings.setHost(getSelectionHost());
 		sshSettings.setUser(getDefaultUser());
 
-		sshSettingsPage = new SshSettingsPage(sshSettings);
+		SshSettingsPage page = new SshSettingsPage(sshSettings);
+		page.setNameLabel(Messages.SshWizardConfigurationPanel_name); // the name on top, as in PuTTY
+		sshSettingsPage = page;
 		if (sshSettingsPage instanceof AbstractSettingsPage) {
 			((AbstractSettingsPage) sshSettingsPage).setHasControlDecoration(true);
 		}
 		sshSettingsPage.createControl(panel);
+		nameText = page.getNameText();
+		nameText.setToolTipText(Messages.SshWizardConfigurationPanel_nameTooltip);
+		// "Default Settings" is not a session: it cannot be saved over
+		nameText.addListener(SWT.Modify, e -> saveButton
+				.setEnabled(!nameText.getText().trim().equals(Messages.SshWizardConfigurationPanel_defaultSettings)));
 
 		// Add the listener to the settings page
 		sshSettingsPage.addListener(new ISettingsPage.Listener() {
@@ -401,20 +408,12 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		return sshSettings.getHost();
 	}
 
-	// like PuTTY: a name field over the list, Load / Save / Delete beside the list
+	// like PuTTY: Load / Save / Delete beside the list; the name field is the first row of the settings
 	private void createSessionsUI(Composite parent) {
 		Group group = new Group(parent, SWT.NONE);
 		group.setText(Messages.SshWizardConfigurationPanel_savedSessions);
 		group.setLayout(new GridLayout(2, false));
 		group.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
-
-		nameText = new Text(group, SWT.BORDER);
-		nameText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-		nameText.setToolTipText(Messages.SshWizardConfigurationPanel_nameTooltip);
-		// "Default Settings" is not a session: it cannot be saved over
-		nameText.addListener(SWT.Modify, e -> saveButton
-				.setEnabled(!nameText.getText().trim().equals(Messages.SshWizardConfigurationPanel_defaultSettings)));
-		new Label(group, SWT.NONE);
 
 		sessionList = new org.eclipse.swt.widgets.List(group, SWT.SINGLE | SWT.BORDER | SWT.V_SCROLL);
 		GridData data = new GridData(SWT.FILL, SWT.FILL, true, true);
