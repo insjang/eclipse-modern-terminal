@@ -24,6 +24,11 @@ public interface FileAccess {
 	/** The entries of a folder (no "." and ".."), folders first, then by name. */
 	List<Entry> list(String dir) throws IOException;
 
+	/** Where to go to open an entry: its path, or for a link the system cannot follow, its target. */
+	default String target(Entry entry) {
+		return entry.path();
+	}
+
 	void mkdir(String path) throws IOException;
 
 	void rename(String from, String to) throws IOException;

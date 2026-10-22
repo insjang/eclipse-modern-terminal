@@ -21,6 +21,7 @@ import java.util.List;
 
 import org.junit.jupiter.api.Test;
 
+import io.github.insjang.terminal.connector.ssh.sftp.FilesView;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteEditor;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
@@ -139,5 +140,33 @@ public class RemoteFilesTest {
 			}
 			Files.delete(dir);
 		}
+	}
+
+	@Test
+	public void sortKeepsParentAndFoldersOnTop() {
+		Entry up = RemoteFiles.parentRow("/");
+		Entry dirB = new Entry("b", "/b", true, false, 0, 300, -1);
+		Entry dirA = new Entry("A", "/A", true, true, 0, 100, -1); // a link to a folder sorts as a folder
+		Entry big = new Entry("c", "/c", false, false, 50, 200, -1);
+		Entry small = new Entry("D", "/D", false, false, 5, 400, -1);
+		Entry same = new Entry("e", "/e", false, false, 5, 400, -1);
+		List<Entry> all = List.of(small, same, big, dirB, up, dirA);
+		assertEquals(List.of(up, dirA, dirB, big, small, same), sorted(all, RemoteFiles.BY_NAME, false));
+		assertEquals(List.of(up, dirB, dirA, same, small, big), sorted(all, RemoteFiles.BY_NAME, true));
+		assertEquals(List.of(up, dirA, dirB, small, same, big), sorted(all, RemoteFiles.BY_SIZE, false)); // ties by name
+		assertEquals(List.of(up, dirB, dirA, big, same, small), sorted(all, RemoteFiles.BY_SIZE, true));
+		assertEquals(List.of(up, dirA, dirB, big, small, same), sorted(all, RemoteFiles.BY_MODIFIED, false));
+		assertEquals(List.of(up, dirB, dirA, same, small, big), sorted(all, RemoteFiles.BY_MODIFIED, true));
+	}
+
+	private static List<Entry> sorted(List<Entry> entries, int column, boolean descending) {
+		return entries.stream().sorted(RemoteFiles.order(column, descending)).toList();
+	}
+
+	@Test
+	public void recentFoldersMostRecentFirstNoDuplicatesAtMostFive() {
+		assertEquals(List.of("/a"), FilesView.remember(List.of(), "/a"));
+		assertEquals(List.of("/c", "/a", "/b"), FilesView.remember(List.of("/a", "/c", "/b"), "/c"));
+		assertEquals(List.of("/f", "/1", "/2", "/3", "/4"), FilesView.remember(List.of("/1", "/2", "/3", "/4", "/5"), "/f"));
 	}
 }

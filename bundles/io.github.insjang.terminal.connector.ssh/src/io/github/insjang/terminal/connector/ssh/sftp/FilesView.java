@@ -17,6 +17,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.time.format.FormatStyle;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -31,23 +32,36 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.core.runtime.preferences.IEclipsePreferences;
+import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.jface.action.Action;
 import org.eclipse.jface.action.IAction;
 import org.eclipse.jface.action.IStatusLineManager;
 import org.eclipse.jface.action.IToolBarManager;
 import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
+import org.eclipse.jface.dialogs.DialogSettings;
 import org.eclipse.jface.dialogs.IDialogConstants;
+import org.eclipse.jface.dialogs.IDialogSettings;
 import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.fieldassist.ComboContentAdapter;
+import org.eclipse.jface.fieldassist.ContentProposalAdapter;
+import org.eclipse.jface.fieldassist.SimpleContentProposalProvider;
 import org.eclipse.jface.resource.ImageDescriptor;
+import org.eclipse.jface.resource.JFaceResources;
+import org.eclipse.jface.resource.LocalResourceManager;
 import org.eclipse.jface.resource.ResourceLocator;
 import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
+import org.eclipse.jface.viewers.DecorationOverlayIcon;
+import org.eclipse.jface.viewers.IDecoration;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.jface.viewers.TableViewerColumn;
+import org.eclipse.jface.viewers.Viewer;
+import org.eclipse.jface.viewers.ViewerComparator;
 import org.eclipse.jface.window.Window;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
@@ -62,24 +76,32 @@ import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.events.KeyAdapter;
 import org.eclipse.swt.events.KeyEvent;
 import org.eclipse.swt.graphics.Image;
+import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
+import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.swt.widgets.Table;
-import org.eclipse.swt.widgets.Text;
+import org.eclipse.swt.widgets.TableColumn;
 import org.eclipse.swt.widgets.Widget;
 import org.eclipse.ui.ISelectionListener;
 import org.eclipse.ui.ISharedImages;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.part.ViewPart;
+import org.osgi.service.prefs.BackingStoreException;
 
 import io.github.insjang.terminal.connector.ITerminalConnector;
 import io.github.insjang.terminal.connector.TerminalState;
+import io.github.insjang.terminal.connector.ssh.activator.UIPlugin;
+import io.github.insjang.terminal.connector.ssh.connector.ISshSettings;
 import io.github.insjang.terminal.connector.ssh.connector.SshConnector;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
 import io.github.insjang.terminal.control.ITerminalViewControl;
@@ -94,6 +116,10 @@ import io.github.insjang.terminal.view.ui.ITerminalsView;
 public class FilesView extends ViewPart {
 	public static final String ID = "io.github.insjang.terminal.connector.ssh.FilesView"; //$NON-NLS-1$
 	private static final String TERMINALS_VIEW = "io.github.insjang.terminal.view.ui.TerminalsView"; //$NON-NLS-1$
+	private static final int[] WIDTHS = { 220, 80, 130, 90 }; // Name, Size, Modified, Permissions
+	private static final String SETTINGS = "FilesView", SORT = "sort", DESCENDING = "descending", HIDDEN = "hidden."; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
+	private static final String RECENT = "recentFolders."; //$NON-NLS-1$
+	private static final int RECENT_MAX = 5;
 	private static final DateTimeFormatter DATE = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
 			.withZone(ZoneId.systemDefault());
 
@@ -101,9 +127,12 @@ public class FilesView extends ViewPart {
 	private Label message;
 	private Composite browser;
 	private Label place;
-	private Text pathText;
+	private Combo pathText; // with the recent folders of the connection
+	private SimpleContentProposalProvider recentProposals;
+	private String recentKey; // user@host:port, "local" or "wsl:<distribution>"; null if none
 	private TableViewer viewer;
 	private final List<Action> selectionActions = new ArrayList<>();
+	private Menu rowMenu;
 	private Action openAction, upAction, homeAction, refreshAction, uploadAction, newFolderAction, followAction;
 
 	// the terminal followed, the properties of its tab, and its files once open (UI thread only)
@@ -141,17 +170,17 @@ public class FilesView extends ViewPart {
 		browser.setLayout(layout);
 		place = new Label(browser, SWT.NONE);
 		place.setText(FilesMessages.path);
-		pathText = new Text(browser, SWT.BORDER | SWT.SINGLE);
+		pathText = new Combo(browser, SWT.BORDER | SWT.DROP_DOWN);
 		pathText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-		pathText.addListener(SWT.DefaultSelection, e -> {
-			if (files != null) {
-				try {
-					navigate(files.typed(cwd != null ? cwd : home, home, pathText.getText()));
-				} catch (InvalidPathException x) {
-					statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, pathText.getText(), x.getMessage()));
-				}
-			}
-		});
+		pathText.addListener(SWT.DefaultSelection, e -> go(pathText.getText()));
+		pathText.addListener(SWT.Selection, e -> go(pathText.getText())); // a recent folder from the list
+		// typing: the recent folders that start with the text
+		recentProposals = new SimpleContentProposalProvider();
+		recentProposals.setFiltering(true);
+		ContentProposalAdapter proposals = new ContentProposalAdapter(pathText, new ComboContentAdapter(), recentProposals,
+				null, null);
+		proposals.setProposalAcceptanceStyle(ContentProposalAdapter.PROPOSAL_REPLACE);
+		proposals.addContentProposalListener(p -> go(p.getContent()));
 
 		viewer = new TableViewer(browser, SWT.MULTI | SWT.FULL_SELECTION | SWT.BORDER);
 		Table table = viewer.getTable();
@@ -159,7 +188,13 @@ public class FilesView extends ViewPart {
 		table.setHeaderVisible(true);
 		viewer.setContentProvider(ArrayContentProvider.getInstance());
 		ISharedImages images = PlatformUI.getWorkbench().getSharedImages();
-		column(FilesMessages.colName, 220, SWT.LEFT, new ColumnLabelProvider() {
+		// links: the symbolic link overlay of the IDE's resources
+		LocalResourceManager resources = new LocalResourceManager(JFaceResources.getResources(), table);
+		ImageDescriptor linkOverlay = ResourceLocator
+				.imageDescriptorFromBundle("org.eclipse.ui.ide", "icons/full/ovr16/symlink_ovr.png").orElse(null); //$NON-NLS-1$ //$NON-NLS-2$
+		Image folderLink = linked(resources, images.getImageDescriptor(ISharedImages.IMG_OBJ_FOLDER), linkOverlay);
+		Image fileLink = linked(resources, images.getImageDescriptor(ISharedImages.IMG_OBJ_FILE), linkOverlay);
+		column(FilesMessages.colName, SWT.LEFT, new ColumnLabelProvider() {
 			@Override
 			public String getText(Object o) {
 				return ((Entry) o).name();
@@ -167,19 +202,30 @@ public class FilesView extends ViewPart {
 
 			@Override
 			public Image getImage(Object o) {
-				return images.getImage(((Entry) o).dir() ? ISharedImages.IMG_OBJ_FOLDER : ISharedImages.IMG_OBJ_FILE);
+				Entry e = (Entry) o;
+				if (isParent(e)) {
+					return images.getImage(ISharedImages.IMG_TOOL_UP);
+				}
+				if (e.link()) {
+					return e.dir() ? folderLink : fileLink;
+				}
+				return images.getImage(e.dir() ? ISharedImages.IMG_OBJ_FOLDER : ISharedImages.IMG_OBJ_FILE);
 			}
 		});
-		column(FilesMessages.colSize, 80, SWT.RIGHT, text(e -> e.dir() ? "" : RemoteFiles.formatSize(e.size()))); //$NON-NLS-1$
-		column(FilesMessages.colModified, 130, SWT.LEFT,
+		column(FilesMessages.colSize, SWT.RIGHT, text(e -> e.dir() ? "" : RemoteFiles.formatSize(e.size()))); //$NON-NLS-1$
+		column(FilesMessages.colModified, SWT.LEFT,
 				text(e -> e.modified() > 0 ? DATE.format(Instant.ofEpochMilli(e.modified())) : "")); //$NON-NLS-1$
-		column(FilesMessages.colPermissions, 90, SWT.LEFT, text(e -> e.permissions() < 0 ? "" : RemoteFiles.permissions(e.permissions()))); //$NON-NLS-1$
+		column(FilesMessages.colPermissions, SWT.LEFT, text(e -> e.permissions() < 0 ? "" : RemoteFiles.permissions(e.permissions()))); //$NON-NLS-1$
+		createSorting();
 		viewer.addDoubleClickListener(e -> {
-			Entry entry = first();
-			if (entry != null && entry.dir()) {
-				navigate(entry.path());
-			} else if (entry != null && files != null) {
-				open(entry);
+			// also Enter; ".." included
+			Entry entry = selection().getFirstElement() instanceof Entry x ? x : null;
+			if (entry != null && files != null) {
+				if (entry.dir()) {
+					navigate(files.target(entry));
+				} else {
+					open(entry);
+				}
 			}
 		});
 		viewer.addSelectionChangedListener(e -> updateActions());
@@ -206,11 +252,121 @@ public class FilesView extends ViewPart {
 		follow(getSite().getPage().getSelection(TERMINALS_VIEW));
 	}
 
-	private void column(String title, int width, int style, ColumnLabelProvider provider) {
+	private void go(String text) {
+		if (files != null) {
+			try {
+				navigate(files.typed(cwd != null ? cwd : home, home, text));
+			} catch (InvalidPathException x) {
+				statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, text, x.getMessage()));
+			}
+		}
+	}
+
+	// ---- recent folders, per connection, in the instance preferences ----
+
+	/** The folder first, then the others it already had, at most {@link #RECENT_MAX}. */
+	public static List<String> remember(List<String> recent, String folder) {
+		List<String> list = new ArrayList<>(List.of(folder));
+		recent.stream().filter(f -> !f.equals(folder)).limit(RECENT_MAX - 1).forEach(list::add);
+		return list;
+	}
+
+	private static IEclipsePreferences preferences() {
+		return InstanceScope.INSTANCE.getNode(UIPlugin.getUniqueIdentifier());
+	}
+
+	// ponytail: one folder per line, a folder name with a line break is not remembered right
+	private List<String> recent() {
+		String value = recentKey == null ? null : preferences().get(RECENT + recentKey, null);
+		return value == null || value.isEmpty() ? List.of() : List.of(value.split("\n")); //$NON-NLS-1$
+	}
+
+	private void remember(String folder) {
+		if (recentKey != null) {
+			List<String> recent = remember(recent(), folder);
+			preferences().put(RECENT + recentKey, String.join("\n", recent)); //$NON-NLS-1$
+			showRecent(recent);
+		}
+	}
+
+	private void showRecent(List<String> recent) {
+		String text = pathText.getText();
+		pathText.setItems(recent.toArray(String[]::new));
+		pathText.setText(text);
+		recentProposals.setProposals(recent.toArray(String[]::new));
+	}
+
+	private void column(String title, int style, ColumnLabelProvider provider) {
 		TableViewerColumn c = new TableViewerColumn(viewer, style);
 		c.getColumn().setText(title);
-		c.getColumn().setWidth(width);
+		c.getColumn().setWidth(WIDTHS[viewer.getTable().getColumnCount() - 1]);
 		c.setLabelProvider(provider);
+	}
+
+	private static Image linked(LocalResourceManager resources, ImageDescriptor base, ImageDescriptor overlay) {
+		return resources.create(overlay == null ? base : new DecorationOverlayIcon(base, overlay, IDecoration.BOTTOM_RIGHT));
+	}
+
+	private static boolean isParent(Entry e) {
+		return e.name().equals(RemoteFiles.PARENT);
+	}
+
+	// ---- sorting and columns, kept in the dialog settings ----
+
+	/** Sorts by a click on Name, Size or Modified (again: the other way); hides columns from the header's menu. */
+	private void createSorting() {
+		Table table = viewer.getTable();
+		IDialogSettings settings = DialogSettings.getOrCreateSection(UIPlugin.getDefault().getDialogSettings(), SETTINGS);
+		int sorted = settings.get(SORT) != null ? settings.getInt(SORT) : RemoteFiles.BY_NAME;
+		sort(sorted >= 0 && sorted <= RemoteFiles.BY_MODIFIED ? sorted : RemoteFiles.BY_NAME, settings.getBoolean(DESCENDING));
+		for (int i = 0; i <= RemoteFiles.BY_MODIFIED; i++) {
+			int column = i;
+			table.getColumn(i).addListener(SWT.Selection, e -> {
+				boolean descending = table.getSortColumn() == table.getColumn(column) && table.getSortDirection() == SWT.UP;
+				sort(column, descending);
+				settings.put(SORT, column);
+				settings.put(DESCENDING, descending);
+			});
+		}
+		// right-click on the header: which columns are shown (Name always)
+		Menu header = new Menu(table);
+		for (int i = 1; i < table.getColumnCount(); i++) {
+			TableColumn column = table.getColumn(i);
+			String key = HIDDEN + i;
+			MenuItem item = new MenuItem(header, SWT.CHECK);
+			item.setText(column.getText());
+			item.setSelection(!settings.getBoolean(key));
+			showColumn(column, WIDTHS[i], item.getSelection());
+			item.addListener(SWT.Selection, e -> {
+				showColumn(column, WIDTHS[table.indexOf(column)], item.getSelection());
+				settings.put(key, !item.getSelection());
+			});
+		}
+		table.addListener(SWT.Dispose, e -> header.dispose());
+		table.addListener(SWT.MenuDetect, e -> {
+			Point p = table.getDisplay().map(null, table, new Point(e.x, e.y));
+			Rectangle area = table.getClientArea();
+			boolean onHeader = area.y <= p.y && p.y < area.y + table.getHeaderHeight();
+			table.setMenu(onHeader ? header : rowMenu);
+		});
+	}
+
+	private void sort(int column, boolean descending) {
+		Table table = viewer.getTable();
+		table.setSortColumn(table.getColumn(column));
+		table.setSortDirection(descending ? SWT.DOWN : SWT.UP);
+		Comparator<Entry> order = RemoteFiles.order(column, descending);
+		viewer.setComparator(new ViewerComparator() {
+			@Override
+			public int compare(Viewer v, Object a, Object b) {
+				return order.compare((Entry) a, (Entry) b);
+			}
+		});
+	}
+
+	private static void showColumn(TableColumn column, int width, boolean show) {
+		column.setWidth(show ? width : 0);
+		column.setResizable(show);
 	}
 
 	private static ColumnLabelProvider text(java.util.function.Function<Entry, String> f) {
@@ -266,7 +422,8 @@ public class FilesView extends ViewPart {
 		menu.add(uploadAction);
 		menu.add(newFolderAction);
 		menu.add(refreshAction);
-		viewer.getTable().setMenu(menu.createContextMenu(viewer.getTable()));
+		rowMenu = menu.createContextMenu(viewer.getTable());
+		viewer.getTable().setMenu(rowMenu);
 		updateActions();
 	}
 
@@ -284,7 +441,7 @@ public class FilesView extends ViewPart {
 	private void updateActions() {
 		boolean ready = files != null && cwd != null;
 		boolean remote = ready && files instanceof RemoteFiles; // no transfers to and from the local files
-		int n = selection().size();
+		int n = selected().size();
 		openAction.setEnabled(ready && n == 1 && !first().dir());
 		upAction.setEnabled(ready && files.parentOf(cwd) != null);
 		homeAction.setEnabled(ready);
@@ -340,6 +497,11 @@ public class FilesView extends ViewPart {
 			terminal.removeWorkingDirectoryListener(directoryListener);
 		}
 		opened.forEach(RemoteFiles::close);
+		try {
+			preferences().flush(); // the recent folders
+		} catch (BackingStoreException e) {
+			// written on exit
+		}
 		super.dispose();
 	}
 
@@ -386,6 +548,8 @@ public class FilesView extends ViewPart {
 		pendingDirectory.set(null);
 		followListing = false;
 		hostNames.clear();
+		recentKey = null;
+		showRecent(List.of());
 		viewer.setInput(null);
 		updateActions();
 		connect();
@@ -456,6 +620,9 @@ public class FilesView extends ViewPart {
 					hostNames.add(name);
 				}
 				place(NLS.bind(FilesMessages.ssh, host));
+				ISshSettings ssh = connector.getSshSettings();
+				recentKey = ssh.getUser() + '@' + host + ':' + ssh.getPort();
+				showRecent(recent());
 				session.addCloseFutureListener(future -> ui(() -> {
 					if (files == f) {
 						files = null;
@@ -499,6 +666,8 @@ public class FilesView extends ViewPart {
 				files = f;
 				home = f.home();
 				hostNames.addAll(f.hostNames());
+				recentKey = f.distribution() == null ? "local" : "wsl:" + f.distribution(); //$NON-NLS-1$ //$NON-NLS-2$
+				showRecent(recent());
 				place(f.distribution() == null ? FilesMessages.local : NLS.bind(FilesMessages.wsl, f.distribution()).replace(" :", ":")); //$NON-NLS-1$ //$NON-NLS-2$
 				if (!followTerminal(t.getWorkingDirectory())) {
 					navigate(now != null ? now : home);
@@ -609,8 +778,16 @@ public class FilesView extends ViewPart {
 			String shown = f.shown(dir);
 			pathText.setText(shown);
 			pathText.setToolTipText(shown.equals(dir) ? null : dir); // the Windows path of a WSL one
+			if (!same) {
+				remember(shown);
+			}
 			ISelection keep = same ? viewer.getSelection() : null;
-			viewer.setInput(entries);
+			String up = f.parentOf(dir);
+			List<Entry> rows = new ArrayList<>(entries);
+			if (up != null) {
+				rows.add(RemoteFiles.parentRow(up)); // sorted first
+			}
+			viewer.setInput(rows);
 			if (keep != null) {
 				viewer.setSelection(keep);
 			}
@@ -631,19 +808,23 @@ public class FilesView extends ViewPart {
 		return getViewSite().getActionBars().getStatusLineManager();
 	}
 
+	/** The first selected entry, never "..". */
 	private Entry first() {
-		Object o = selection().getFirstElement();
-		return o instanceof Entry e ? e : null;
+		List<Entry> list = selected();
+		return list.isEmpty() ? null : list.get(0);
 	}
 
 	private IStructuredSelection selection() {
 		return viewer.getStructuredSelection();
 	}
 
+	/** The selected entries without "..": nothing is downloaded, renamed or deleted through it. */
 	private List<Entry> selected() {
 		List<Entry> list = new ArrayList<>();
 		for (Object o : selection()) {
-			list.add((Entry) o);
+			if (o instanceof Entry e && !isParent(e)) {
+				list.add(e);
+			}
 		}
 		return list;
 	}
@@ -652,7 +833,8 @@ public class FilesView extends ViewPart {
 		if (files instanceof RemoteFiles remote) {
 			RemoteEditor.open(getSite().getPage(), remote, entry);
 		} else if (files != null) {
-			RemoteEditor.openInEclipse(getSite().getPage(), Path.of(entry.path()), entry.path());
+			String target = files.target(entry); // a WSL link: its target
+			RemoteEditor.openInEclipse(getSite().getPage(), Path.of(target), target);
 		}
 	}
 

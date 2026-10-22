@@ -19,6 +19,7 @@ import java.nio.file.AccessDeniedException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 import org.eclipse.core.runtime.NullProgressMonitor;
@@ -118,5 +119,18 @@ public class LocalFilesTest {
 				s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
 			}
 		}
+	}
+
+	@Test
+	public void wslLinksAreResolvedInWsl() {
+		assertEquals(List.of("wsl.exe", "--distribution", "Ubuntu", "--exec", "realpath", "-m", "-z", "--", "/home/me/proj",
+				"/mnt/c/a b"),
+				LocalFiles.realpathCommand("Ubuntu", List.of("\\\\wsl.localhost\\Ubuntu\\home\\me\\proj", "C:\\a b")));
+		assertEquals(List.of("wsl.exe", "--exec", "realpath", "-m", "-z", "--", "/x"),
+				LocalFiles.realpathCommand("", List.of("\\\\wsl$\\Debian\\x"))); // the default distribution
+		// realpath -z: each target ended by NUL; Windows drives back to drive letters, the rest under \\wsl.localhost
+		assertEquals(List.of("C:\\appdev\\work", "\\\\wsl.localhost\\Ubuntu\\etc", "\\\\wsl.localhost\\Ubuntu\\a\nb"),
+				LocalFiles.wslTargets("/mnt/c/appdev/work\0/etc\0/a\nb\0", "Ubuntu"));
+		assertEquals(Arrays.asList("D:\\x", null), LocalFiles.wslTargets("/mnt/d/x\0/home\0", "")); // not known
 	}
 }

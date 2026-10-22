@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -52,6 +53,8 @@ public final class LocalFiles implements FileAccess {
 	private final String distribution; // the WSL distribution, "" if not known; null if not WSL
 	private final String home;
 	private final List<String> hostNames;
+	// WSL links Windows cannot read, by path: where they point, as a Windows path
+	private final Map<String, String> targets = new ConcurrentHashMap<>();
 
 	private LocalFiles(String distribution, String home, List<String> hostNames) {
 		this.distribution = distribution;
@@ -87,22 +90,35 @@ public final class LocalFiles implements FileAccess {
 
 	private static List<String> run(List<String> command) {
 		return OUTPUT.computeIfAbsent(command, c -> {
-			try {
-				Process p = new ProcessBuilder(c).redirectError(Redirect.DISCARD).start();
-				p.getOutputStream().close();
-				if (!p.waitFor(5, TimeUnit.SECONDS)) {
-					p.destroyForcibly();
-					return List.of();
-				}
-				String out = new String(p.getInputStream().readNBytes(4096), StandardCharsets.UTF_8);
-				return p.exitValue() != 0 ? List.of() : out.lines().map(String::strip).toList();
-			} catch (IOException e) {
-				return List.of();
-			} catch (InterruptedException e) {
-				Thread.currentThread().interrupt();
-				return List.of();
-			}
+			String out = output(c);
+			return out == null ? List.of() : out.lines().map(String::strip).toList();
 		});
+	}
+
+	/** What a command prints, null if it fails or takes more than 5 seconds. */
+	private static String output(List<String> command) {
+		try {
+			Process p = new ProcessBuilder(command).redirectError(Redirect.DISCARD).start();
+			p.getOutputStream().close();
+			// read while waiting: a long output would fill the pipe
+			CompletableFuture<byte[]> out = CompletableFuture.supplyAsync(() -> {
+				try {
+					return p.getInputStream().readNBytes(1 << 20);
+				} catch (IOException e) {
+					return new byte[0];
+				}
+			});
+			if (!p.waitFor(5, TimeUnit.SECONDS)) {
+				p.destroyForcibly();
+				return null;
+			}
+			return p.exitValue() != 0 ? null : new String(out.join(), StandardCharsets.UTF_8);
+		} catch (IOException e) {
+			return null;
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+			return null;
+		}
 	}
 
 	/** The WSL distribution, "" if it is not known, null if the shell is not WSL. */
@@ -122,21 +138,72 @@ public final class LocalFiles implements FileAccess {
 	@Override
 	public List<Entry> list(String dir) throws IOException {
 		List<Entry> entries = new ArrayList<>();
+		List<String> unread = new ArrayList<>();
 		try (DirectoryStream<Path> s = Files.newDirectoryStream(Path.of(dir))) {
 			for (Path p : s) {
 				try {
 					entries.add(entry(p));
 				} catch (IOException e) {
 					// a WSL symbolic link seen from Windows over \\wsl.localhost: no attributes, whether
-					// followed or not, and it cannot be deleted from here either; listed as a link to nothing
-					entries.add(new Entry(p.getFileName().toString(), p.toString(), false, true, 0, 0, -1));
+					// followed or not, and it cannot be deleted from here either
+					unread.add(p.toString());
 				}
 			}
 		} catch (FileSystemException e) {
 			throw new IOException(reason(e), e);
 		}
+		entries.addAll(wslLinks(unread));
 		entries.sort(RemoteFiles.ORDER);
 		return entries;
+	}
+
+	/**
+	 * Links that Windows cannot read, resolved in WSL by one wsl.exe for the whole folder: a link to a
+	 * folder is a folder (opened at its target), anything else (also a broken link) a file.
+	 */
+	private List<Entry> wslLinks(List<String> links) {
+		List<String> resolved = List.of();
+		if (distribution != null && !links.isEmpty()) {
+			String out = output(realpathCommand(distribution, links));
+			resolved = out == null ? List.of() : wslTargets(out, distribution);
+		}
+		List<Entry> entries = new ArrayList<>();
+		for (int i = 0; i < links.size(); i++) {
+			String link = links.get(i);
+			String target = i < resolved.size() ? resolved.get(i) : null;
+			boolean dir = false;
+			if (target != null) {
+				targets.put(link, target);
+				dir = Files.isDirectory(Path.of(target)); // resolved: no link left on the way
+			}
+			entries.add(new Entry(Path.of(link).getFileName().toString(), link, dir, true, 0, 0, -1));
+		}
+		return entries;
+	}
+
+	/** wsl.exe printing the targets of Windows paths in WSL, all links resolved, each ended by NUL. */
+	public static List<String> realpathCommand(String distribution, List<String> paths) {
+		List<String> command = new ArrayList<>(List.of("wsl.exe")); //$NON-NLS-1$
+		if (!distribution.isEmpty()) {
+			command.addAll(List.of("--distribution", distribution)); //$NON-NLS-1$
+		}
+		command.addAll(List.of("--exec", "realpath", "-m", "-z", "--")); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$
+		paths.forEach(p -> command.add(ShellPaths.toWsl(p)));
+		return command;
+	}
+
+	/** The output of {@link #realpathCommand} as Windows paths, in order; null for one that cannot be mapped. */
+	public static List<String> wslTargets(String out, String distribution) {
+		List<String> targets = new ArrayList<>();
+		for (String linux : out.split("\0")) { //$NON-NLS-1$
+			targets.add(ShellPaths.toWindows(linux, distribution));
+		}
+		return targets;
+	}
+
+	@Override
+	public String target(Entry entry) {
+		return targets.getOrDefault(entry.path(), entry.path());
 	}
 
 	static Entry entry(Path p) throws IOException {

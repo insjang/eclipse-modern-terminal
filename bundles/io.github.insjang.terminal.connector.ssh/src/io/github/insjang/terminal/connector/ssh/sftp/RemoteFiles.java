@@ -74,6 +74,28 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 	static final Comparator<Entry> ORDER = Comparator.comparing((Entry e) -> !e.dir()).thenComparing(Entry::name,
 			String.CASE_INSENSITIVE_ORDER);
 
+	/** The name of the row to the parent folder, which no listed entry has. */
+	public static final String PARENT = ".."; //$NON-NLS-1$
+	/** The columns {@link #order(int, boolean)} sorts by. */
+	public static final int BY_NAME = 0, BY_SIZE = 1, BY_MODIFIED = 2;
+
+	/** The row to the parent folder. */
+	public static Entry parentRow(String path) {
+		return new Entry(PARENT, path, true, false, 0, 0, -1);
+	}
+
+	/** {@link #PARENT} first, folders before files, then by the column (ties by name), either way up. */
+	public static Comparator<Entry> order(int column, boolean descending) {
+		Comparator<Entry> name = Comparator.comparing(Entry::name, String.CASE_INSENSITIVE_ORDER);
+		Comparator<Entry> by = switch (column) {
+		case BY_SIZE -> Comparator.comparingLong(Entry::size).thenComparing(name);
+		case BY_MODIFIED -> Comparator.comparingLong(Entry::modified).thenComparing(name);
+		default -> name;
+		};
+		return Comparator.comparing((Entry e) -> !e.name().equals(PARENT)).thenComparing(e -> !e.dir())
+				.thenComparing(descending ? by.reversed() : by);
+	}
+
 	private final ClientSession session;
 	private final SftpClient client;
 
