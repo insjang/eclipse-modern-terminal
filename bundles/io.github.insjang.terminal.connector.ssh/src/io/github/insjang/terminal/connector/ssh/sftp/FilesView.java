@@ -724,9 +724,8 @@ public class FilesView extends ViewPart {
 		String name = askName(FilesMessages.newFolder.replace("...", ""), FilesMessages.newFolderMessage, ""); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 		if (name != null) {
 			FileAccess f = files;
-			String path = f.child(dir, name);
 			background(FilesMessages.newFolder, false, monitor -> {
-				f.mkdir(path);
+				f.mkdir(f.child(dir, name));
 				ui(this::refresh);
 			});
 		}
