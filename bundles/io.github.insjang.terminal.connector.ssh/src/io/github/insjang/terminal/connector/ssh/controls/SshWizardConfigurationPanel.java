@@ -200,6 +200,14 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 			return;
 		}
 		setupData(properties);
+		// a tab from before sessions were recorded, or typed in: the one saved session with its login
+		sshSettingsPage.saveSettings();
+		SshSession typed = fields(""); //$NON-NLS-1$
+		List<SshSession> same = sessions.stream().filter(s -> s.sameLogin(typed)).toList();
+		if (same.size() == 1) {
+			load(same.get(0));
+			return;
+		}
 		String password = SshPasswords.get(sshSettings.getUser(), sshSettings.getHost(), sshSettings.getPort());
 		if (password != null) {
 			sshSettings.setPassword(password);

@@ -223,6 +223,16 @@ public class LocalLauncherDelegate extends AbstractLauncherDelegate {
 				}
 			}
 		}
+		// WSL in the Windows home (the default) starts in the Linux home instead, as in Windows Terminal
+		if (properties.get(ITerminalsConnectorConstants.PROP_PROCESS_PATH) instanceof String path
+				&& path.toLowerCase().endsWith("wsl.exe") //$NON-NLS-1$
+				&& System.getProperty("user.home").equals(properties.get(ITerminalsConnectorConstants.PROP_PROCESS_WORKING_DIR))) { //$NON-NLS-1$
+			String args = properties.get(ITerminalsConnectorConstants.PROP_PROCESS_ARGS) instanceof String a ? a : ""; //$NON-NLS-1$
+			if (!args.contains("--cd") && !args.contains("~")) { //$NON-NLS-1$ //$NON-NLS-2$
+				properties.put(ITerminalsConnectorConstants.PROP_PROCESS_ARGS, (args + " --cd ~").strip()); //$NON-NLS-1$
+				properties.remove(ITerminalsConnectorConstants.PROP_PROCESS_WORKING_DIR);
+			}
+		}
 		try {
 			return getTerminalService().openConsole(properties);
 		} catch (RuntimeException e) {
