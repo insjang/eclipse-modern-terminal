@@ -10,6 +10,7 @@
 package io.github.insjang.terminal.connector.ssh.sftp;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -115,10 +116,29 @@ public final class RemoteEditor {
 			@Override
 			public boolean preShutdown(IWorkbench workbench, boolean forced) {
 				for (RemoteEditor edit : EDITS.values()) {
-					// a dirty one asks to save (and upload); Cancel keeps Eclipse running
-					if (edit.editor != null && !edit.editor.getSite().getPage().closeEditor(edit.editor, true) && !forced) {
+					// a dirty one asks to save (and upload); Cancel keeps Eclipse running. Closed ones only upload.
+					if (!edit.closed && edit.editor != null
+							&& !edit.editor.getSite().getPage().closeEditor(edit.editor, !forced) && !forced) {
 						return false;
 					}
+				}
+				// the last uploads end before the connections close; what they could not send is kept
+				for (RemoteEditor edit : EDITS.values()) {
+					try {
+						workbench.getProgressService().busyCursorWhile(monitor -> {
+							try {
+								edit.upload.join(30_000, monitor);
+							} catch (OperationCanceledException e) {
+								// kept below
+							}
+						});
+					} catch (InvocationTargetException e) {
+						// kept below
+					} catch (InterruptedException e) {
+						Thread.currentThread().interrupt();
+					}
+					edit.upload.cancel();
+					edit.finishNow();
 				}
 				return true;
 			}
@@ -303,7 +323,13 @@ public final class RemoteEditor {
 			Display.getDefault().timerExec(200, this::finish); // still uploading a last save
 			return;
 		}
-		EDITS.remove(local);
+		finishNow();
+	}
+
+	private void finishNow() {
+		if (EDITS.remove(local) == null) {
+			return; // finished already
+		}
 		if (Files.exists(local) && localModified() != localSynced) {
 			// moved aside, so opening the file again does not overwrite it
 			// outside the area, which the next start empties

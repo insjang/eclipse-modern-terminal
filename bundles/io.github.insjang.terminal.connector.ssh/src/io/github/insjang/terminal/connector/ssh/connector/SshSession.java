@@ -86,12 +86,13 @@ public record SshSession(String name, String host, int port, String user, String
 	 * The command of an exec channel that starts the login shell in the folder: SSH has no request for
 	 * the working folder, so the remote shell changes to it, then replaces itself with "$SHELL -l"
 	 * (as in <code>ssh -t host 'cd dir; exec $SHELL -l'</code>). A folder that cannot be entered leaves
-	 * the error and the shell in the home. "~" and "~/" stay unquoted so that the shell expands them.
+	 * the error and the shell in the home. "~" and "~/" stay unquoted so that the shell expands them; no
+	 * "--", which csh rejects: a leading "-" gets "./".
 	 */
 	public static String startCommand(String folder) {
 		String dir = folder.equals("~") ? "~" //$NON-NLS-1$ //$NON-NLS-2$
-				: folder.startsWith("~/") ? "~/" + quote(folder.substring(2)) : quote(folder); //$NON-NLS-1$ //$NON-NLS-2$
-		return "cd -- " + dir + "; exec \"$SHELL\" -l"; //$NON-NLS-1$ //$NON-NLS-2$
+				: folder.startsWith("~/") ? "~/" + quote(folder.substring(2)) : quote(folder.startsWith("-") ? "./" + folder : folder); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		return "cd " + dir + "; exec \"$SHELL\" -l"; //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/** A POSIX sh word: in single quotes, a ' as '\''. */
