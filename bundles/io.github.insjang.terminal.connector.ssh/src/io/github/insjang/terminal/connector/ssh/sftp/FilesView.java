@@ -143,6 +143,7 @@ public class FilesView extends ViewPart {
 	private String home = "/"; //$NON-NLS-1$
 	private String cwd;
 	private final Set<RemoteFiles> opened = new HashSet<>();
+	private volatile RemoteFiles reopened; // opened again after the server closed the channel, not listed yet
 	// following the shell's folder (OSC 7): the server's names, the last folder followed
 	private Consumer<TerminalDirectory> directoryListener;
 	private final List<String> hostNames = new ArrayList<>();
@@ -615,15 +616,7 @@ public class FilesView extends ViewPart {
 				ISshSettings ssh = connector.getSshSettings();
 				recentKey = ssh.getUser() + '@' + host + ':' + ssh.getPort();
 				showRecent(recent());
-				session.addCloseFutureListener(future -> ui(() -> {
-					if (files == f) {
-						files = null;
-						cwd = null;
-						viewer.setInput(null);
-						updateActions();
-						show(FilesMessages.sessionClosed);
-					}
-				}));
+				watchClose(f);
 				// the shell's folder if it has told it, else the start folder of the session (the home if it cannot be listed)
 				if (!followTerminal(t.getWorkingDirectory())) {
 					String start = ssh.getStartFolder();
@@ -631,6 +624,20 @@ public class FilesView extends ViewPart {
 				}
 			});
 		});
+	}
+
+	// the view leaves the files of a session when it ends
+	private void watchClose(RemoteFiles f) {
+		f.getSession().addCloseFutureListener(future -> ui(() -> {
+			f.close();
+			if (files == f) {
+				files = null;
+				cwd = null;
+				viewer.setInput(null);
+				updateActions();
+				show(FilesMessages.sessionClosed);
+			}
+		}));
 	}
 
 	/** The local file system for a terminal that is not SSH: local shells, WSL, processes. */
@@ -754,12 +761,16 @@ public class FilesView extends ViewPart {
 			entries = f.list(dir);
 		} catch (IOException e) {
 			// the server closed the SFTP channel (idle, a limit), the session lives on: once more on a new one
-			if (f instanceof RemoteFiles r && !r.isOpen() && r.getSession().isOpen()) {
+			// (not again when the new one fails at once)
+			if (f instanceof RemoteFiles r && r != reopened && !r.isOpen() && r.getSession().isOpen()) {
 				try {
 					RemoteFiles again = RemoteFiles.of(r.getSession());
+					reopened = again;
 					ui(() -> {
 						if (files == f) {
+							opened.add(again);
 							files = again;
+							watchClose(again);
 							navigate(dir);
 						}
 					});
@@ -776,6 +787,9 @@ public class FilesView extends ViewPart {
 				}
 			});
 			return;
+		}
+		if (f == reopened) {
+			reopened = null; // it works: may be opened again later
 		}
 		ui(() -> {
 			if (files != f) {
@@ -898,14 +912,17 @@ public class FilesView extends ViewPart {
 				total += RemoteFiles.localSize(Path.of(p));
 			}
 			monitor.beginTask(FilesMessages.uploading, (int) Math.min(total, Integer.MAX_VALUE));
+			List<String> skipped = new ArrayList<>();
 			try {
 				for (String p : paths) {
-					f.upload(Path.of(p), dir, overwrite, bytes(monitor, total > Integer.MAX_VALUE));
+					skipped.addAll(f.upload(Path.of(p), dir, overwrite, bytes(monitor, total > Integer.MAX_VALUE)));
 				}
 			} finally {
 				ui(this::refresh);
 			}
-			ui(() -> statusLine().setMessage(NLS.bind(FilesMessages.uploaded, dir)));
+			String done = NLS.bind(FilesMessages.uploaded, dir);
+			ui(() -> statusLine().setMessage(skipped.isEmpty() ? done
+					: done + ' ' + NLS.bind(FilesMessages.linksNotUploaded, skipped.size(), skipped.get(0))));
 		});
 	}
 

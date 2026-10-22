@@ -14,6 +14,7 @@ import java.io.IOException;
 import java.lang.ProcessBuilder.Redirect;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;
+import java.nio.file.DirectoryIteratorException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
@@ -153,6 +154,8 @@ public final class LocalFiles implements FileAccess {
 			}
 		} catch (FileSystemException e) {
 			throw new IOException(reason(e), e);
+		} catch (DirectoryIteratorException e) {
+			throw e.getCause(); // e.g. WSL or a network share gone while reading
 		}
 		entries.addAll(wslLinks(unread));
 		entries = wslModes(dir, entries);
@@ -211,11 +214,12 @@ public final class LocalFiles implements FileAccess {
 	private List<Entry> wslLinks(List<String> links) {
 		List<String> resolved = new ArrayList<>();
 		if (distribution != null) {
-			// one wsl.exe per ~30000 characters: the Windows command line ends at 32767
+			// one wsl.exe per ~30000 characters: the Windows command line ends at 32767. Counted as passed:
+			// the WSL path (/mnt/c/... is longer than C:\...), quotes and a space
 			for (int from = 0, to; from < links.size(); from = to) {
 				int length = 0;
-				for (to = from; to < links.size() && (to == from || length + links.get(to).length() < 30000); to++) {
-					length += links.get(to).length() + 3;
+				for (to = from; to < links.size() && (to == from || length + argLength(links.get(to)) < 30000); to++) {
+					length += argLength(links.get(to));
 				}
 				String out = output(realpathCommand(distribution, links.subList(from, to)));
 				List<String> part = out == null ? List.of() : wslTargets(out, distribution);
@@ -236,6 +240,11 @@ public final class LocalFiles implements FileAccess {
 			entries.add(new Entry(Path.of(link).getFileName().toString(), link, dir, true, 0, 0, -1));
 		}
 		return entries;
+	}
+
+	/** The characters a Windows path takes on the wsl.exe command line, at most. */
+	public static int argLength(String windowsPath) {
+		return ShellPaths.toWsl(windowsPath).length() + 3;
 	}
 
 	/** wsl.exe printing the targets of Windows paths in WSL, all links resolved, each ended by NUL. */
@@ -279,7 +288,7 @@ public final class LocalFiles implements FileAccess {
 	}
 
 	/** A symbolic link, or on Windows a junction (or other reparse point) to a folder: never entered to delete. */
-	private static boolean link(BasicFileAttributes a) {
+	static boolean link(BasicFileAttributes a) {
 		return a.isSymbolicLink() || a.isDirectory() && a.isOther();
 	}
 
@@ -328,6 +337,8 @@ public final class LocalFiles implements FileAccess {
 				for (Path child : s) {
 					delete(child, monitor);
 				}
+			} catch (DirectoryIteratorException e) {
+				throw e.getCause();
 			}
 		}
 		try {

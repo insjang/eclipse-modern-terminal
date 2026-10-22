@@ -132,6 +132,8 @@ public class LocalFilesTest {
 		assertEquals(List.of("C:\\appdev\\work", "\\\\wsl.localhost\\Ubuntu\\etc", "\\\\wsl.localhost\\Ubuntu\\a\nb"),
 				LocalFiles.wslTargets("/mnt/c/appdev/work\0/etc\0/a\nb\0", "Ubuntu"));
 		assertEquals(Arrays.asList("D:\\x", null), LocalFiles.wslTargets("/mnt/d/x\0/home\0", "")); // not known
+		// a batch is cut by the length as passed: "/mnt/c/a b" in quotes and a space
+		assertEquals("\"/mnt/c/a b\" ".length(), LocalFiles.argLength("C:\\a b"));
 	}
 
 	@Test

@@ -17,11 +17,14 @@ import java.io.OutputStream;
 import java.nio.channels.Channels;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.DirectoryIteratorException;
+import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
@@ -36,7 +39,6 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
 
 import org.apache.sshd.client.channel.ChannelExec;
 import org.apache.sshd.client.channel.ClientChannelEvent;
@@ -186,8 +188,8 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 	private void list(String dir, List<Entry> entries) throws IOException {
 		for (DirEntry e : client.readDir(dir)) {
 			String name = e.getFilename();
-			if (name.equals(".") || name.equals("..")) { //$NON-NLS-1$ //$NON-NLS-2$
-				continue;
+			if (!validName(name)) {
+				continue; // also what a broken or hostile server sends: "a/b" or "" would nest a download forever
 			}
 			Attributes a = e.getAttributes();
 			String path = join(dir, name);
@@ -232,7 +234,7 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 		if (client.lstat(path).isDirectory()) {
 			for (DirEntry e : client.readDir(path)) {
 				String name = e.getFilename();
-				if (!name.equals(".") && !name.equals("..")) { //$NON-NLS-1$ //$NON-NLS-2$
+				if (validName(name)) {
 					delete(join(path, name), monitor);
 				}
 			}
@@ -342,10 +344,22 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 
 	/**
 	 * Copies a local file or folder into a remote folder. {@code overwrite} is asked for each file
-	 * that exists already: false skips it, {@link OperationCanceledException} stops.
+	 * that exists already: false skips it, {@link OperationCanceledException} stops. Inside a folder,
+	 * links and junctions are not followed and other non-regular files are not read, as OpenSSH
+	 * {@code sftp put -R} does: a link to ~/.ssh in a project would upload private keys, a link to a
+	 * parent would loop. The file or folder given is followed if it is a link (it was chosen).
+	 *
+	 * @return the local paths skipped
 	 */
-	public void upload(Path local, String remoteDir, Predicate<String> overwrite, IProgressMonitor monitor)
+	public List<String> upload(Path local, String remoteDir, Predicate<String> overwrite, IProgressMonitor monitor)
 			throws IOException {
+		List<String> skipped = new ArrayList<>();
+		upload(local, remoteDir, overwrite, monitor, skipped);
+		return skipped;
+	}
+
+	private void upload(Path local, String remoteDir, Predicate<String> overwrite, IProgressMonitor monitor,
+			List<String> skipped) throws IOException {
 		String remote = join(remoteDir, local.getFileName().toString());
 		checkCanceled(monitor);
 		if (Files.isDirectory(local)) {
@@ -355,16 +369,36 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 			} else if (!existing.dir()) {
 				throw new IOException("Not a folder: " + remote); //$NON-NLS-1$
 			}
-			List<Path> children;
-			try (Stream<Path> s = Files.list(local)) {
-				children = s.sorted().toList();
-			}
-			for (Path child : children) {
-				upload(child, remote, overwrite, monitor);
+			for (Path child : children(local, skipped)) {
+				upload(child, remote, overwrite, monitor, skipped);
 			}
 		} else if (stat(remote) == null || overwrite.test(remote)) {
 			put(local, remote, monitor);
 		}
+	}
+
+	// the folders (not links or junctions) and regular files in a local folder, sorted; the rest goes to skipped
+	private static List<Path> children(Path dir, List<String> skipped) throws IOException {
+		List<Path> children = new ArrayList<>();
+		try (DirectoryStream<Path> s = Files.newDirectoryStream(dir)) {
+			for (Path p : s) {
+				BasicFileAttributes a;
+				try {
+					a = Files.readAttributes(p, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+				} catch (IOException e) {
+					a = null; // a WSL link seen from Windows has no attributes
+				}
+				if (a == null || LocalFiles.link(a) || !a.isDirectory() && !a.isRegularFile()) {
+					skipped.add(p.toString());
+				} else {
+					children.add(p);
+				}
+			}
+		} catch (DirectoryIteratorException e) {
+			throw e.getCause();
+		}
+		children.sort(null);
+		return children;
 	}
 
 	/**
@@ -526,11 +560,16 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 		}
 	}
 
-	/** Total bytes of the local files below a path (for progress). */
+	/** Total bytes of the local files {@link #upload} copies (for progress). */
 	public static long localSize(Path local) throws IOException {
-		try (Stream<Path> s = Files.walk(local)) {
-			return s.filter(Files::isRegularFile).mapToLong(p -> p.toFile().length()).sum();
+		if (!Files.isDirectory(local)) {
+			return Files.isRegularFile(local) ? Files.size(local) : 0;
 		}
+		long size = 0;
+		for (Path child : children(local, new ArrayList<>())) {
+			size += localSize(child);
+		}
+		return size;
 	}
 
 	@Override
@@ -568,6 +607,12 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 	public static boolean sameHost(String host, List<String> names) {
 		return host.isEmpty() || host.equalsIgnoreCase("localhost") //$NON-NLS-1$
 				|| names.stream().anyMatch(host::equalsIgnoreCase);
+	}
+
+	/** Whether a name from the server is one entry of its folder: not empty, ".", "..", nor with '/' or NUL. */
+	public static boolean validName(String name) {
+		return !name.isEmpty() && !name.equals(".") && !name.equals("..") && name.indexOf('/') < 0 //$NON-NLS-1$ //$NON-NLS-2$
+				&& name.indexOf('\0') < 0;
 	}
 
 	/** dir + "/" + name, without doubling the '/'. */

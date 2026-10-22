@@ -124,6 +124,9 @@ public final class RemoteEditor {
 				}
 				// the last uploads end before the connections close; what they could not send is kept
 				for (RemoteEditor edit : EDITS.values()) {
+					if (edit.editor == null) {
+						continue; // still downloading: the next start empties its folder
+					}
 					try {
 						workbench.getProgressService().busyCursorWhile(monitor -> {
 							try {
@@ -176,6 +179,9 @@ public final class RemoteEditor {
 			return;
 		}
 		RemoteEditor edit = new RemoteEditor(files.getSession(), entry.path(), local);
+		if (EDITS.putIfAbsent(local, edit) != null) {
+			return; // being downloaded for an editor: a second one would share the copy
+		}
 		Display display = page.getWorkbenchWindow().getShell().getDisplay();
 		Job job = Job.create(NLS.bind(FilesMessages.downloadingFile, entry.path()), monitor -> {
 			try {
@@ -185,8 +191,10 @@ public final class RemoteEditor {
 				edit.remoteRead = files.get(entry.path(), local, monitor);
 				edit.localSynced = Files.getLastModifiedTime(local).toMillis();
 			} catch (OperationCanceledException e) {
+				EDITS.remove(local, edit);
 				return Status.CANCEL_STATUS;
-			} catch (IOException e) {
+			} catch (IOException | RuntimeException e) {
+				EDITS.remove(local, edit);
 				display.asyncExec(() -> MessageDialog.openError(page.getWorkbenchWindow().getShell(),
 						FilesMessages.errorTitle, entry.path() + ": " + e.getMessage())); //$NON-NLS-1$
 				return Status.OK_STATUS;
@@ -201,10 +209,10 @@ public final class RemoteEditor {
 	private void openEditor(IWorkbenchPage page) {
 		editor = openInEclipse(page, local, remote);
 		if (editor == null) {
+			EDITS.remove(local, this);
 			deleteTree(local.getParent());
 			return;
 		}
-		EDITS.put(local, this);
 		closeAtShutdown();
 		// a save leaves the editor clean; the file time tells a save from a revert
 		editor.addPropertyListener((source, id) -> {

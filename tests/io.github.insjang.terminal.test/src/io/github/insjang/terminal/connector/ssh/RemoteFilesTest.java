@@ -169,4 +169,34 @@ public class RemoteFilesTest {
 		assertEquals(List.of("/c", "/a", "/b"), FilesView.remember(List.of("/a", "/c", "/b"), "/c"));
 		assertEquals(List.of("/f", "/1", "/2", "/3", "/4"), FilesView.remember(List.of("/1", "/2", "/3", "/4", "/5"), "/f"));
 	}
+
+	@Test
+	public void uploadSizeSkipsLinksInFolders() throws IOException {
+		Path dir = Files.createTempDirectory("mt-upload");
+		try {
+			Path tree = Files.createDirectory(dir.resolve("tree"));
+			Path secrets = Files.createDirectory(dir.resolve("secrets"));
+			Files.write(secrets.resolve("id_ed25519"), new byte[100]);
+			Files.write(tree.resolve("a"), new byte[3]);
+			Files.write(Files.createDirectory(tree.resolve("sub")).resolve("b"), new byte[2]);
+			Files.createSymbolicLink(tree.resolve("keys"), secrets); // a folder link
+			Files.createSymbolicLink(tree.resolve("key"), secrets.resolve("id_ed25519")); // a file link
+			Files.createSymbolicLink(tree.resolve("sub").resolve("back"), tree); // a loop
+			assertEquals(5, RemoteFiles.localSize(tree));
+			assertEquals(100, RemoteFiles.localSize(tree.resolve("keys"))); // chosen itself: followed
+		} finally {
+			try (var s = Files.walk(dir)) {
+				s.sorted(java.util.Comparator.reverseOrder()).forEach(p -> p.toFile().delete());
+			}
+		}
+	}
+
+	@Test
+	public void serverNamesThatAreNotOneEntryAreRejected() {
+		assertTrue(RemoteFiles.validName("a b"));
+		assertTrue(RemoteFiles.validName("..."));
+		for (String bad : List.of("", ".", "..", "a/b", "/", "a\0b")) {
+			assertFalse(RemoteFiles.validName(bad), bad);
+		}
+	}
 }
