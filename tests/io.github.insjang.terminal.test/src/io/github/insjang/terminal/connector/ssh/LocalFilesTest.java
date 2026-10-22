@@ -133,4 +133,13 @@ public class LocalFilesTest {
 				LocalFiles.wslTargets("/mnt/c/appdev/work\0/etc\0/a\nb\0", "Ubuntu"));
 		assertEquals(Arrays.asList("D:\\x", null), LocalFiles.wslTargets("/mnt/d/x\0/home\0", "")); // not known
 	}
+
+	@Test
+	public void wslModes() {
+		assertEquals(List.of("wsl.exe", "--distribution", "Ubuntu", "--exec", "find", "/home/me", "-mindepth", "1", "-maxdepth",
+				"1", "-printf", "%m %y %f\\0"), LocalFiles.modesCommand("Ubuntu", "\\\\wsl.localhost\\Ubuntu\\home\\me"));
+		// find -printf "%m %y %f\0": octal mode, type, name (spaces kept); type bits added as in SFTP
+		assertEquals(java.util.Map.of("a b", 0100644, "d", 0040755, "l", 0120777),
+				LocalFiles.wslModes("644 f a b\0" + "755 d d\0" + "777 l l\0"));
+	}
 }

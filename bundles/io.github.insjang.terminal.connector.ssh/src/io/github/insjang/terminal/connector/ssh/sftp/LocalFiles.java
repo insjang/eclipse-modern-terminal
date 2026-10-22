@@ -25,12 +25,14 @@ import java.nio.file.attribute.DosFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.OperationCanceledException;
@@ -153,8 +155,53 @@ public final class LocalFiles implements FileAccess {
 			throw new IOException(reason(e), e);
 		}
 		entries.addAll(wslLinks(unread));
+		entries = wslModes(dir, entries);
 		entries.sort(RemoteFiles.ORDER);
 		return entries;
+	}
+
+	/** In WSL the Linux permissions, which Windows does not see, from one wsl.exe for the folder. */
+	private List<Entry> wslModes(String dir, List<Entry> entries) {
+		String out = distribution == null || entries.isEmpty() ? null : output(modesCommand(distribution, dir));
+		if (out == null) {
+			return entries;
+		}
+		Map<String, Integer> modes = wslModes(out);
+		return entries.stream().map(e -> modes.containsKey(e.name())
+				? new Entry(e.name(), e.path(), e.dir(), e.link(), e.size(), e.modified(), modes.get(e.name()))
+				: e).collect(Collectors.toCollection(ArrayList::new));
+	}
+
+	/** wsl.exe printing "<octal mode> <type> <name>" for each entry of a Windows path in WSL, each ended by NUL. */
+	public static List<String> modesCommand(String distribution, String dir) {
+		List<String> command = new ArrayList<>(List.of("wsl.exe")); //$NON-NLS-1$
+		if (!distribution.isEmpty()) {
+			command.addAll(List.of("--distribution", distribution)); //$NON-NLS-1$
+		}
+		command.addAll(List.of("--exec", "find", ShellPaths.toWsl(dir), "-mindepth", "1", "-maxdepth", "1", "-printf", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$
+				"%m %y %f\\0")); //$NON-NLS-1$
+		return command;
+	}
+
+	/** The output of {@link #modesCommand} as file modes (type bits included) by name. */
+	public static Map<String, Integer> wslModes(String out) {
+		Map<String, Integer> modes = new HashMap<>();
+		for (String line : out.split("\0")) { //$NON-NLS-1$
+			String[] f = line.split(" ", 3); //$NON-NLS-1$
+			if (f.length == 3 && !f[1].isEmpty()) {
+				try {
+					int type = switch (f[1].charAt(0)) {
+					case 'd' -> 0040000;
+					case 'l' -> 0120000;
+					default -> 0100000;
+					};
+					modes.put(f[2], type | Integer.parseInt(f[0], 8));
+				} catch (NumberFormatException e) {
+					// not a find line: left without permissions
+				}
+			}
+		}
+		return modes;
 	}
 
 	/**

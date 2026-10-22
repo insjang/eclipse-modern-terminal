@@ -15,7 +15,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.format.FormatStyle;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
@@ -120,7 +119,7 @@ public class FilesView extends ViewPart {
 	private static final String SETTINGS = "FilesView", SORT = "sort", DESCENDING = "descending", HIDDEN = "hidden."; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	private static final String RECENT = "recentFolders."; //$NON-NLS-1$
 	private static final int RECENT_MAX = 5;
-	private static final DateTimeFormatter DATE = DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
+	private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yy.MM.dd HH:mm") //$NON-NLS-1$
 			.withZone(ZoneId.systemDefault());
 
 	private Composite stack;
