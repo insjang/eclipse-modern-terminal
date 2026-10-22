@@ -44,6 +44,10 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 
 ## 설치
 
+- Eclipse Marketplace: 실행 중인 Eclipse에 버튼을 끌어 놓기, 또는 Help → Eclipse Marketplace에서 "Modern Terminal" 검색 ([목록](https://marketplace.eclipse.org/content/modern-terminal))
+
+  [![Drag to your running Eclipse workspace to install Modern Terminal](https://marketplace.eclipse.org/modules/custom/eclipsefdn/eclipsefdn_marketplace/images/btn-install.svg)](https://marketplace.eclipse.org/marketplace-client-intro?mpc_install=7574373 "Drag to your running Eclipse workspace to install Modern Terminal")
+
 - 업데이트 사이트: Help → Install New Software → Work with에 `https://insjang.github.io/eclipse-modern-terminal/updates/` 입력 → Modern Terminal 체크 → 설치 → 재시작
   - 코드 서명이 없어 신뢰 여부를 물음: Trust Selected
   - 이후 Help → Check for Updates로 업데이트

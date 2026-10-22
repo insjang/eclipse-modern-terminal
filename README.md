@@ -43,6 +43,10 @@ Local shells (cmd, PowerShell, Git Bash, WSL distributions, detected on start) a
 
 ## Install
 
+- Eclipse Marketplace: drag the button onto a running Eclipse, or search for "Modern Terminal" in Help > Eclipse Marketplace ([listing](https://marketplace.eclipse.org/content/modern-terminal))
+
+  [![Drag to your running Eclipse workspace to install Modern Terminal](https://marketplace.eclipse.org/modules/custom/eclipsefdn/eclipsefdn_marketplace/images/btn-install.svg)](https://marketplace.eclipse.org/marketplace-client-intro?mpc_install=7574373 "Drag to your running Eclipse workspace to install Modern Terminal")
+
 - Update site: Help > Install New Software > Work with `https://insjang.github.io/eclipse-modern-terminal/updates/` > check Modern Terminal > install > restart
   - The bundles are not signed, so Eclipse asks whether to trust them: Trust Selected
   - Later versions come with Help > Check for Updates
