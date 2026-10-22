@@ -20,6 +20,7 @@ import org.eclipse.jface.fieldassist.FieldDecorationRegistry;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
+import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import java.nio.file.Files;
@@ -177,7 +178,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 	@Override
 	public void createControl(Composite parent) {
 		Composite composite = new Composite(parent, SWT.NONE);
-		GridLayout gridLayout = new GridLayout(2, false);
+		GridLayout gridLayout = new GridLayout(4, false); // Host and Port share the first row
 		GridData gridData = new GridData(GridData.FILL_HORIZONTAL);
 		gridData.horizontalIndent = FieldDecorationRegistry.getDefault().getMaximumDecorationWidth();
 
@@ -185,14 +186,25 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		composite.setLayoutData(gridData);
 
 		fHostText = createTextField(composite, SshMessages.HOST);
-		fUser = createTextField(composite, SshMessages.USER);
-		fPassword = createTextField(composite, SshMessages.PASSWORD, SWT.PASSWORD);
-		fTimeout = createTextField(composite, SshMessages.TIMEOUT);
-		fKeepalive = createTextField(composite, SshMessages.KEEPALIVE);
-		fKeepalive.setToolTipText(SshMessages.KEEPALIVE_Tooltip);
 		fPort = createTextField(composite, SshMessages.PORT);
+		GridData portData = (GridData) fPort.getLayoutData();
+		portData.grabExcessHorizontalSpace = false;
+		GC gc = new GC(fPort);
+		portData.widthHint = gc.stringExtent("000000").x; //$NON-NLS-1$
+		gc.dispose();
+		fUser = span(createTextField(composite, SshMessages.USER));
 		createKeyFileField(composite);
+		fPassword = span(createTextField(composite, SshMessages.PASSWORD, SWT.PASSWORD));
+		fTimeout = span(createTextField(composite, SshMessages.TIMEOUT));
+		fKeepalive = span(createTextField(composite, SshMessages.KEEPALIVE));
+		fKeepalive.setToolTipText(SshMessages.KEEPALIVE_Tooltip);
 		loadSettings();
+	}
+
+	// over the field columns of the Host row
+	private static Text span(Text text) {
+		((GridData) text.getLayoutData()).horizontalSpan = 3;
+		return text;
 	}
 
 	private static boolean isFile(String path) {
@@ -212,7 +224,9 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		layout.marginHeight = 0;
 		layout.marginWidth = 0;
 		row.setLayout(layout);
-		row.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
+		GridData rowData = new GridData(GridData.FILL_HORIZONTAL);
+		rowData.horizontalSpan = 3;
+		row.setLayoutData(rowData);
 		fKeyFile = new Text(row, SWT.BORDER);
 		fKeyFile.setLayoutData(new GridData(GridData.FILL_HORIZONTAL));
 		fKeyFile.setToolTipText(SshMessages.KEY_FILE_Tooltip);

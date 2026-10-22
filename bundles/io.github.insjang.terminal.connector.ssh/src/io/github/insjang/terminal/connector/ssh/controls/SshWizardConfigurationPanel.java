@@ -17,19 +17,19 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.core.runtime.Assert;
+import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.IDialogSettings;
-import org.eclipse.jface.dialogs.InputDialog;
 import org.eclipse.jface.viewers.ISelection;
 import org.eclipse.jface.viewers.IStructuredSelection;
-import org.eclipse.jface.window.Window;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
-import org.eclipse.swt.widgets.Combo;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Text;
 import io.github.insjang.terminal.connector.AbstractSettingsPage;
 import io.github.insjang.terminal.connector.ISettingsPage;
 import io.github.insjang.terminal.connector.ssh.connector.ISshSettings;
@@ -59,7 +59,10 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	private Button passwordButton;
 	// loaded here, not only in doRestoreWidgetValues: that is skipped while the dialog has no settings yet
 	private List<SshSession> sessions = new ArrayList<>(SshSession.load());
-	private Combo sessionCombo;
+	private SshSession loaded; // remembered as the last session when the dialog launches
+	private Text nameText;
+	private org.eclipse.swt.widgets.List sessionList; // "Default Settings", then the sessions
+	private Button saveButton;
 	private Button deleteButton;
 
 	/**
@@ -77,8 +80,6 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		panel.setLayout(new GridLayout());
 		GridData data = new GridData(SWT.FILL, SWT.FILL, true, true);
 		panel.setLayoutData(data);
-
-		createSessionsUI(panel);
 
 		SshConnector conn = new SshConnector();
 		sshSettings = (SshSettings) conn.getSshSettings();
@@ -106,6 +107,8 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 
 		// if the password is saved with the session or not
 		createSaveButtonsUI(panel, true);
+
+		createSessionsUI(panel);
 
 		setControl(panel);
 	}
@@ -212,24 +215,23 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	@Override
 	public void doRestoreWidgetValues(IDialogSettings settings, String idPrefix) {
 		sessions = new ArrayList<>(SshSession.load()); // before super: it may call fillSettingsForHost
-		fillSessionCombo();
+		fillSessionList();
 		super.doRestoreWidgetValues(settings, idPrefix);
 		if (isWithoutSelection()) {
-			select(find(settings.get(LAST_SESSION)));
+			load(find(settings.get(LAST_SESSION)));
 		}
 	}
 
 	@Override
 	public void doSaveWidgetValues(IDialogSettings settings, String idPrefix) {
 		super.doSaveWidgetValues(settings, idPrefix);
-		SshSession session = selected();
-		settings.put(LAST_SESSION, session != null ? session.name() : ""); //$NON-NLS-1$
+		settings.put(LAST_SESSION, loaded != null ? loaded.name() : ""); //$NON-NLS-1$
 	}
 
 	// a selection with a host (no host history here): its first session, if any
 	@Override
 	protected void fillSettingsForHost(String host) {
-		sessions.stream().filter(s -> s.host().equals(host)).findFirst().ifPresent(this::select);
+		sessions.stream().filter(s -> s.host().equals(host)).findFirst().ifPresent(this::load);
 	}
 
 	@Override
@@ -241,25 +243,50 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		return sessions.stream().filter(s -> s.name().equals(name)).findFirst().orElse(null);
 	}
 
+	// the session selected in the list; null for none and for "Default Settings"
 	private SshSession selected() {
-		int index = sessionCombo != null ? sessionCombo.getSelectionIndex() : -1;
-		return index >= 0 ? find(sessionCombo.getItem(index)) : null;
+		int index = sessionList != null ? sessionList.getSelectionIndex() : -1;
+		return index > 0 ? sessions.get(index - 1) : null;
 	}
 
-	private void fillSessionCombo() {
-		sessionCombo.removeAll();
-		sessions.forEach(s -> sessionCombo.add(s.name()));
-		sessionCombo.setEnabled(!sessions.isEmpty());
+	private void fillSessionList() {
+		sessionList.removeAll();
+		sessionList.add(Messages.SshWizardConfigurationPanel_defaultSettings);
+		sessions.forEach(s -> sessionList.add(s.name()));
 		deleteButton.setEnabled(false);
 	}
 
+	// only shows the session in the list and the name field (Load or a double-click fills the fields)
+	private void show(SshSession session) {
+		sessionList.select(sessions.indexOf(session) + 1);
+		sessionList.showSelection();
+		onListSelected();
+	}
+
+	private void onListSelected() {
+		int index = sessionList.getSelectionIndex();
+		if (index >= 0) {
+			nameText.setText(sessionList.getItem(index));
+		}
+		deleteButton.setEnabled(index > 0);
+	}
+
+	// fills the fields from the list selection: a session, or the defaults for "Default Settings"
+	private void loadSelected() {
+		if (sessionList.getSelectionIndex() == 0) {
+			loadDefaults();
+		} else {
+			load(selected());
+		}
+	}
+
 	// fills the fields from the session, its password from the secure storage
-	private void select(SshSession session) {
+	private void load(SshSession session) {
 		if (session == null) {
 			return;
 		}
-		sessionCombo.select(sessionCombo.indexOf(session.name()));
-		deleteButton.setEnabled(true);
+		loaded = session;
+		show(session);
 		sshSettings.setHost(session.host());
 		sshSettings.setPort(Integer.toString(session.port()));
 		sshSettings.setUser(session.user());
@@ -275,21 +302,51 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		passwordButton.setSelection(session.savePassword());
 	}
 
+	// "Default Settings": empty fields for a new session
+	private void loadDefaults() {
+		loaded = null;
+		sshSettings.setHost(""); //$NON-NLS-1$
+		sshSettings.setPort(Integer.toString(ISshSettings.DEFAULT_SSH_PORT));
+		sshSettings.setUser(getDefaultUser());
+		sshSettings.setKeyFile(""); //$NON-NLS-1$
+		sshSettings.setTimeout("0"); //$NON-NLS-1$
+		sshSettings.setKeepalive("300"); //$NON-NLS-1$
+		sshSettings.setPassword(""); //$NON-NLS-1$
+		sshSettingsPage.loadSettings();
+		passwordButton.setSelection(false);
+	}
+
+	// a double-click (or Enter in the list) loads the session and launches it like OK
+	private void launchSelected() {
+		int index = sessionList.getSelectionIndex();
+		loadSelected();
+		if (index <= 0) {
+			return;
+		}
+		if (getContainer() != null) {
+			getContainer().validate();
+		}
+		// no API from the panel to the dialog's OK: press its default button, which is OK
+		Button ok = sessionList.getShell().getDefaultButton();
+		if (ok != null && ok.isEnabled() && Integer.valueOf(IDialogConstants.OK_ID).equals(ok.getData())) {
+			ok.notifyListeners(SWT.Selection, new org.eclipse.swt.widgets.Event());
+		}
+	}
+
+	// saves the fields under the name in the name field (user@host[:port] if empty), replacing a session of that name
 	private void saveSession() {
+		String name = nameText.getText().trim();
+		if (name.equals(Messages.SshWizardConfigurationPanel_defaultSettings)) {
+			return;
+		}
 		sshSettingsPage.saveSettings();
 		if (!sshSettingsPage.validateSettings()) {
 			return;
 		}
-		SshSession current = selected();
-		String name = current != null ? current.name()
-				: SshSession.defaultName(sshSettings.getUser(), sshSettings.getHost(), sshSettings.getPort());
-		InputDialog dialog = new InputDialog(sessionCombo.getShell(), Messages.SshWizardConfigurationPanel_saveTitle,
-				Messages.SshWizardConfigurationPanel_saveMessage, name,
-				text -> text.trim().isEmpty() ? "" : null); //$NON-NLS-1$
-		if (dialog.open() != Window.OK) {
-			return;
+		if (name.isEmpty()) {
+			name = SshSession.defaultName(sshSettings.getUser().trim(), sshSettings.getHost().trim(), sshSettings.getPort());
 		}
-		SshSession session = new SshSession(dialog.getValue().trim(), sshSettings.getHost().trim(), sshSettings.getPort(),
+		SshSession session = new SshSession(name, sshSettings.getHost().trim(), sshSettings.getPort(),
 				sshSettings.getUser().trim(), sshSettings.getKeyFile(), sshSettings.getTimeout(), sshSettings.getKeepalive(),
 				getEncoding(), passwordButton.getSelection());
 		SshSession old = find(session.name());
@@ -306,28 +363,9 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		}
 		SshSession.save(sessions);
 		sessions = new ArrayList<>(SshSession.load()); // sorted
-		fillSessionCombo();
-		select(find(session.name()));
-		// a password not saved with the session is still used for this launch
-		if (password != null && !password.isEmpty()) {
-			sshSettings.setPassword(password);
-			sshSettingsPage.loadSettings();
-		}
-	}
-
-	// empty fields for a new session; Save... then names it user@host
-	private void newSession() {
-		sessionCombo.deselectAll();
-		deleteButton.setEnabled(false);
-		sshSettings.setHost(""); //$NON-NLS-1$
-		sshSettings.setPort(Integer.toString(ISshSettings.DEFAULT_SSH_PORT));
-		sshSettings.setUser(getDefaultUser());
-		sshSettings.setKeyFile(""); //$NON-NLS-1$
-		sshSettings.setTimeout("0"); //$NON-NLS-1$
-		sshSettings.setKeepalive("300"); //$NON-NLS-1$
-		sshSettings.setPassword(""); //$NON-NLS-1$
-		sshSettingsPage.loadSettings();
-		passwordButton.setSelection(false);
+		fillSessionList();
+		loaded = find(session.name()); // the fields are left as they are, a typed password included
+		show(loaded);
 	}
 
 	private void deleteSession() {
@@ -338,7 +376,11 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sessions.remove(session);
 		dropPasswordIfUnused(session);
 		SshSession.save(sessions);
-		fillSessionCombo();
+		if (session.equals(loaded)) {
+			loaded = null;
+		}
+		fillSessionList();
+		nameText.setText(""); //$NON-NLS-1$
 	}
 
 	// the password of user@host:port goes once no session with "Save password" logs in so
@@ -359,35 +401,53 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		return sshSettings.getHost();
 	}
 
+	// like PuTTY: a name field over the list, Load / Save / Delete beside the list
 	private void createSessionsUI(Composite parent) {
-		Composite panel = new Composite(parent, SWT.NONE);
-		GridLayout layout = new GridLayout(5, false);
+		Group group = new Group(parent, SWT.NONE);
+		group.setText(Messages.SshWizardConfigurationPanel_savedSessions);
+		group.setLayout(new GridLayout(2, false));
+		group.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+		nameText = new Text(group, SWT.BORDER);
+		nameText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+		nameText.setToolTipText(Messages.SshWizardConfigurationPanel_nameTooltip);
+		// "Default Settings" is not a session: it cannot be saved over
+		nameText.addListener(SWT.Modify, e -> saveButton
+				.setEnabled(!nameText.getText().trim().equals(Messages.SshWizardConfigurationPanel_defaultSettings)));
+		new Label(group, SWT.NONE);
+
+		sessionList = new org.eclipse.swt.widgets.List(group, SWT.SINGLE | SWT.BORDER | SWT.V_SCROLL);
+		GridData data = new GridData(SWT.FILL, SWT.FILL, true, true);
+		data.widthHint = 100; // fills the width; the hint only keeps a long name from widening the dialog
+		data.heightHint = sessionList.getItemHeight() * 5;
+		sessionList.setLayoutData(data);
+		sessionList.addListener(SWT.Selection, e -> onListSelected());
+		sessionList.addListener(SWT.DefaultSelection, e -> launchSelected());
+
+		Composite buttons = new Composite(group, SWT.NONE);
+		GridLayout layout = new GridLayout();
 		layout.marginHeight = 0;
 		layout.marginWidth = 0;
-		panel.setLayout(layout);
-		panel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-
-		Label label = new Label(panel, SWT.HORIZONTAL);
-		label.setText(Messages.SshWizardConfigurationPanel_session);
-		sessionCombo = new Combo(panel, SWT.READ_ONLY);
-		sessionCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
-		sessionCombo.addListener(SWT.Selection, e -> select(selected()));
-		Button newButton = new Button(panel, SWT.PUSH);
-		newButton.setText(Messages.SshWizardConfigurationPanel_new);
-		newButton.setToolTipText(Messages.SshWizardConfigurationPanel_newTooltip);
-		newButton.addListener(SWT.Selection, e -> newSession());
-		Button saveButton = new Button(panel, SWT.PUSH);
-		saveButton.setText(Messages.SshWizardConfigurationPanel_save);
-		saveButton.setToolTipText(Messages.SshWizardConfigurationPanel_saveTooltip);
+		buttons.setLayout(layout);
+		buttons.setLayoutData(new GridData(SWT.FILL, SWT.TOP, false, false));
+		Button loadButton = createButton(buttons, Messages.SshWizardConfigurationPanel_load,
+				Messages.SshWizardConfigurationPanel_loadTooltip);
+		loadButton.addListener(SWT.Selection, e -> loadSelected());
+		saveButton = createButton(buttons, Messages.SshWizardConfigurationPanel_save,
+				Messages.SshWizardConfigurationPanel_saveTooltip);
 		saveButton.addListener(SWT.Selection, e -> saveSession());
-		deleteButton = new Button(panel, SWT.PUSH);
-		deleteButton.setText(Messages.SshWizardConfigurationPanel_delete);
-		deleteButton.setToolTipText(Messages.SshWizardConfigurationPanel_deleteTooltip);
+		deleteButton = createButton(buttons, Messages.SshWizardConfigurationPanel_delete,
+				Messages.SshWizardConfigurationPanel_deleteTooltip);
 		deleteButton.addListener(SWT.Selection, e -> deleteSession());
-		fillSessionCombo();
+		fillSessionList();
+	}
 
-		Label sep = new Label(parent, SWT.SEPARATOR | SWT.HORIZONTAL);
-		sep.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+	private static Button createButton(Composite parent, String text, String tooltip) {
+		Button button = new Button(parent, SWT.PUSH);
+		button.setText(text);
+		button.setToolTipText(tooltip);
+		button.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+		return button;
 	}
 
 	private void createSaveButtonsUI(final Composite parent, boolean separator) {
