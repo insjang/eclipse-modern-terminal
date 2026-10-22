@@ -26,6 +26,7 @@ public class SshSettings implements ISshSettings {
 	protected String fTimeout;
 	protected String fKeepalive;
 	protected String fKeyFile;
+	protected String fStartFolder;
 
 	@Override
 	public String getHost() {
@@ -57,6 +58,7 @@ public class SshSettings implements ISshSettings {
 		fTimeout = store.get("Timeout", "0");//$NON-NLS-1$ //$NON-NLS-2$
 		fKeepalive = store.get("Keepalive", "300");//$NON-NLS-1$ //$NON-NLS-2$
 		fKeyFile = store.get("KeyFile", "");//$NON-NLS-1$ //$NON-NLS-2$
+		fStartFolder = store.get("StartFolder", "");//$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	@Override
@@ -70,6 +72,7 @@ public class SshSettings implements ISshSettings {
 		store.put("Timeout", fTimeout);//$NON-NLS-1$
 		store.put("Keepalive", fKeepalive);//$NON-NLS-1$
 		store.put("KeyFile", fKeyFile);//$NON-NLS-1$
+		store.put("StartFolder", fStartFolder);//$NON-NLS-1$
 	}
 
 	@Override
@@ -139,6 +142,15 @@ public class SshSettings implements ISshSettings {
 
 	public void setKeyFile(String keyFile) {
 		fKeyFile = keyFile;
+	}
+
+	@Override
+	public String getStartFolder() {
+		return fStartFolder == null || fStartFolder.isBlank() ? null : fStartFolder.trim();
+	}
+
+	public void setStartFolder(String startFolder) {
+		fStartFolder = startFolder;
 	}
 
 	@Override

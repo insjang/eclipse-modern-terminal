@@ -66,6 +66,11 @@ public interface ISshSettings {
 	String getKeyFile();
 
 	/**
+	 * @return The folder the shell starts in, or <code>null</code> for the home.
+	 */
+	String getStartFolder();
+
+	/**
 	 * Return a human-readable String summarizing all relevant connection data.
 	 * This String can be displayed in the Terminal caption, for instance.
 	 * @return a human-readable String summarizing relevant connection data.

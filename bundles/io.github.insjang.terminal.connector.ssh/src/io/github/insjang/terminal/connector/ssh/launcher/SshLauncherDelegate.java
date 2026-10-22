@@ -26,6 +26,7 @@ import io.github.insjang.terminal.connector.ITerminalConnector;
 import io.github.insjang.terminal.connector.InMemorySettingsStore;
 import io.github.insjang.terminal.connector.TerminalConnectorExtension;
 import io.github.insjang.terminal.connector.ssh.connector.ISshSettings;
+import io.github.insjang.terminal.connector.ssh.connector.SshSession;
 import io.github.insjang.terminal.connector.ssh.connector.SshSettings;
 import io.github.insjang.terminal.connector.ssh.controls.SshWizardConfigurationPanel;
 import io.github.insjang.terminal.connector.ssh.nls.Messages;
@@ -164,6 +165,7 @@ public class SshLauncherDelegate extends AbstractLauncherDelegate {
 		sshSettings.setPassword(password);
 		sshSettings.setUser(user);
 		sshSettings.setKeyFile(keyFile);
+		sshSettings.setStartFolder((String) properties.get(SshSession.PROP_START_FOLDER));
 
 		// And save the settings to the store
 		sshSettings.save(store);

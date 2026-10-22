@@ -49,4 +49,13 @@
             name="%FilesView.name">
       </view>
    </extension>
+<!-- Edit Session... in the context menu of an SSH terminal (none on other tabs) -->
+   <extension point="org.eclipse.ui.menus">
+      <menuContribution locationURI="popup:io.github.insjang.terminal.view.ui.TerminalsView?before=additions">
+         <dynamic
+               class="io.github.insjang.terminal.connector.ssh.launcher.EditSessionContribution"
+               id="io.github.insjang.terminal.connector.ssh.editSession">
+         </dynamic>
+      </menuContribution>
+   </extension>
 </plugin>

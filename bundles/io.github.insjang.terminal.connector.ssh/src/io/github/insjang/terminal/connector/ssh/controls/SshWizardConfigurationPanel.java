@@ -64,6 +64,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	private org.eclipse.swt.widgets.List sessionList; // "Default Settings", then the sessions
 	private Button saveButton;
 	private Button deleteButton;
+	private final boolean editing; // Edit Session of a terminal tab: no saved sessions list
 
 	/**
 	 * Constructor.
@@ -71,7 +72,13 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	 * @param container The configuration panel container or <code>null</code>.
 	 */
 	public SshWizardConfigurationPanel(IConfigurationPanelContainer container) {
+		this(container, false);
+	}
+
+	/** With editing, the panel edits one session: no list, {@link #edit(Map)} and {@link #save()} instead. */
+	public SshWizardConfigurationPanel(IConfigurationPanelContainer container, boolean editing) {
 		super(container);
+		this.editing = editing;
 	}
 
 	@Override
@@ -96,8 +103,11 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		nameText = page.getNameText();
 		nameText.setToolTipText(Messages.SshWizardConfigurationPanel_nameTooltip);
 		// "Default Settings" is not a session: it cannot be saved over
-		nameText.addListener(SWT.Modify, e -> saveButton
-				.setEnabled(!nameText.getText().trim().equals(Messages.SshWizardConfigurationPanel_defaultSettings)));
+		nameText.addListener(SWT.Modify, e -> {
+			if (saveButton != null) {
+				saveButton.setEnabled(!nameText.getText().trim().equals(Messages.SshWizardConfigurationPanel_defaultSettings));
+			}
+		});
 
 		// Add the listener to the settings page
 		sshSettingsPage.addListener(new ISettingsPage.Listener() {
@@ -115,7 +125,9 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		// if the password is saved with the session or not
 		createSaveButtonsUI(panel, true);
 
-		createSessionsUI(panel);
+		if (!editing) {
+			createSessionsUI(panel);
+		}
 
 		setControl(panel);
 	}
@@ -169,7 +181,36 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 			setEncoding(value);
 		}
 
+		value = (String) data.get(SshSession.PROP_START_FOLDER);
+		if (value != null) {
+			sshSettings.setStartFolder(value);
+		}
+
 		sshSettingsPage.loadSettings();
+	}
+
+	/**
+	 * Fills the fields from the saved session the terminal was launched from, else from its properties
+	 * (the password from the secure storage then, if saved).
+	 */
+	public void edit(Map<String, Object> properties) {
+		SshSession session = find((String) properties.get(SshSession.PROP_SESSION));
+		if (session != null) {
+			load(session);
+			return;
+		}
+		setupData(properties);
+		String password = SshPasswords.get(sshSettings.getUser(), sshSettings.getHost(), sshSettings.getPort());
+		if (password != null) {
+			sshSettings.setPassword(password);
+			sshSettingsPage.loadSettings();
+			passwordButton.setSelection(true);
+		}
+	}
+
+	/** Saves the fields as the session of the name field; false if they are not valid. */
+	public boolean save() {
+		return saveSession();
 	}
 
 	/**
@@ -212,6 +253,11 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		data.put(ITerminalsConnectorConstants.PROP_SSH_USER, sshSettings.getUser());
 		data.put(ITerminalsConnectorConstants.PROP_SSH_KEY_FILE, sshSettings.getKeyFile());
 		data.put(ITerminalsConnectorConstants.PROP_ENCODING, getEncoding());
+		data.put(SshSession.PROP_START_FOLDER, sshSettings.getStartFolder());
+		// the session the fields came from, for Edit Session; none once the login differs
+		if (loaded != null && loaded.sameLogin(fields(loaded.name()))) {
+			data.put(SshSession.PROP_SESSION, loaded.name());
+		}
 	}
 
 	@Override
@@ -257,6 +303,9 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	}
 
 	private void fillSessionList() {
+		if (sessionList == null) {
+			return;
+		}
 		sessionList.removeAll();
 		sessionList.add(Messages.SshWizardConfigurationPanel_defaultSettings);
 		sessions.forEach(s -> sessionList.add(s.name()));
@@ -265,6 +314,10 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 
 	// only shows the session in the list and the name field (Load or a double-click fills the fields)
 	private void show(SshSession session) {
+		if (sessionList == null) {
+			nameText.setText(session.name());
+			return;
+		}
 		sessionList.select(sessions.indexOf(session) + 1);
 		sessionList.showSelection();
 		onListSelected();
@@ -300,6 +353,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sshSettings.setKeyFile(session.keyFile());
 		sshSettings.setTimeout(Integer.toString(session.timeout()));
 		sshSettings.setKeepalive(Integer.toString(session.keepalive()));
+		sshSettings.setStartFolder(session.startFolder());
 		String password = session.savePassword() ? SshPasswords.get(session.user(), session.host(), session.port()) : null;
 		sshSettings.setPassword(password != null ? password : ""); //$NON-NLS-1$
 		if (session.encoding() != null) {
@@ -318,6 +372,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sshSettings.setKeyFile(""); //$NON-NLS-1$
 		sshSettings.setTimeout("0"); //$NON-NLS-1$
 		sshSettings.setKeepalive("300"); //$NON-NLS-1$
+		sshSettings.setStartFolder(""); //$NON-NLS-1$
 		sshSettings.setPassword(""); //$NON-NLS-1$
 		sshSettingsPage.loadSettings();
 		passwordButton.setSelection(false);
@@ -341,21 +396,19 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	}
 
 	// saves the fields under the name in the name field (user@host[:port] if empty), replacing a session of that name
-	private void saveSession() {
+	private boolean saveSession() {
 		String name = nameText.getText().trim();
 		if (name.equals(Messages.SshWizardConfigurationPanel_defaultSettings)) {
-			return;
+			return false;
 		}
 		sshSettingsPage.saveSettings();
 		if (!sshSettingsPage.validateSettings()) {
-			return;
+			return false;
 		}
 		if (name.isEmpty()) {
 			name = SshSession.defaultName(sshSettings.getUser().trim(), sshSettings.getHost().trim(), sshSettings.getPort());
 		}
-		SshSession session = new SshSession(name, sshSettings.getHost().trim(), sshSettings.getPort(),
-				sshSettings.getUser().trim(), sshSettings.getKeyFile(), sshSettings.getTimeout(), sshSettings.getKeepalive(),
-				getEncoding(), passwordButton.getSelection());
+		SshSession session = fields(name);
 		SshSession old = find(session.name());
 		sessions.remove(old);
 		sessions.add(session);
@@ -373,6 +426,14 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		fillSessionList();
 		loaded = find(session.name()); // the fields are left as they are, a typed password included
 		show(loaded);
+		return true;
+	}
+
+	// the fields as a session of that name (the settings page saved into sshSettings)
+	private SshSession fields(String name) {
+		return new SshSession(name, sshSettings.getHost().trim(), sshSettings.getPort(), sshSettings.getUser().trim(),
+				sshSettings.getKeyFile(), sshSettings.getTimeout(), sshSettings.getKeepalive(), getEncoding(),
+				passwordButton.getSelection(), sshSettings.getStartFolder());
 	}
 
 	private void deleteSession() {

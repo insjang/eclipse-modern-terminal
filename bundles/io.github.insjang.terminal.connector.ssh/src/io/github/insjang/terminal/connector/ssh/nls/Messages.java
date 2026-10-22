@@ -46,4 +46,7 @@ public class Messages extends NLS {
 	public static String SshWizardConfigurationPanel_saveTooltip;
 	public static String SshWizardConfigurationPanel_delete;
 	public static String SshWizardConfigurationPanel_deleteTooltip;
+	public static String EditSession_menu;
+	public static String EditSession_title;
+	public static String EditSession_message;
 }

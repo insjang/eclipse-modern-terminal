@@ -28,7 +28,10 @@ import org.osgi.service.prefs.BackingStoreException;
  * The sessions are one instance preference of the bundle, a line per session.
  */
 public record SshSession(String name, String host, int port, String user, String keyFile, int timeout, int keepalive,
-		String encoding, boolean savePassword) {
+		String encoding, boolean savePassword, String startFolder) {
+	/** Tab properties: the saved session a terminal was launched from, and the folder to start in. */
+	public static final String PROP_SESSION = "ssh.session"; //$NON-NLS-1$
+	public static final String PROP_START_FOLDER = "ssh.startFolder"; //$NON-NLS-1$
 	private static final String NODE = "io.github.insjang.terminal.connector.ssh"; //$NON-NLS-1$
 	private static final String KEY = "sessions"; //$NON-NLS-1$
 
@@ -42,11 +45,11 @@ public record SshSession(String name, String host, int port, String user, String
 	public static String encode(List<SshSession> sessions) {
 		return sessions.stream().sorted(Comparator.comparing(SshSession::name, String.CASE_INSENSITIVE_ORDER))
 				.map(s -> Arrays.stream(new Object[] { s.name, s.host, s.port, s.user, s.keyFile, s.timeout, s.keepalive,
-						s.encoding, s.savePassword }).map(SshSession::enc).collect(Collectors.joining(" "))) //$NON-NLS-1$
+						s.encoding, s.savePassword, s.startFolder }).map(SshSession::enc).collect(Collectors.joining(" "))) //$NON-NLS-1$
 				.collect(Collectors.joining("\n")); //$NON-NLS-1$
 	}
 
-	/** The sessions of {@link #encode}; a broken line is skipped. */
+	/** The sessions of {@link #encode}; a broken line is skipped. Lines from before Start folder have 9 fields. */
 	public static List<SshSession> decode(String text) {
 		List<SshSession> sessions = new ArrayList<>();
 		if (text == null) {
@@ -62,7 +65,8 @@ public record SshSession(String name, String host, int port, String user, String
 					f[i] = URLDecoder.decode(f[i], StandardCharsets.UTF_8);
 				}
 				sessions.add(new SshSession(f[0], f[1], Integer.parseInt(f[2]), f[3], nullIfEmpty(f[4]),
-						Integer.parseInt(f[5]), Integer.parseInt(f[6]), nullIfEmpty(f[7]), Boolean.parseBoolean(f[8])));
+						Integer.parseInt(f[5]), Integer.parseInt(f[6]), nullIfEmpty(f[7]), Boolean.parseBoolean(f[8]),
+						f.length > 9 ? nullIfEmpty(f[9]) : null));
 			} catch (IllegalArgumentException e) {
 				// a bad escape or number: skip that line
 			}
@@ -76,6 +80,23 @@ public record SshSession(String name, String host, int port, String user, String
 
 	private static String nullIfEmpty(String value) {
 		return value.isEmpty() ? null : value;
+	}
+
+	/**
+	 * The command of an exec channel that starts the login shell in the folder: SSH has no request for
+	 * the working folder, so the remote shell changes to it, then replaces itself with "$SHELL -l"
+	 * (as in <code>ssh -t host 'cd dir; exec $SHELL -l'</code>). A folder that cannot be entered leaves
+	 * the error and the shell in the home. "~" and "~/" stay unquoted so that the shell expands them.
+	 */
+	public static String startCommand(String folder) {
+		String dir = folder.equals("~") ? "~" //$NON-NLS-1$ //$NON-NLS-2$
+				: folder.startsWith("~/") ? "~/" + quote(folder.substring(2)) : quote(folder); //$NON-NLS-1$ //$NON-NLS-2$
+		return "cd -- " + dir + "; exec \"$SHELL\" -l"; //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	/** A POSIX sh word: in single quotes, a ' as '\''. */
+	public static String quote(String text) {
+		return '\'' + text.replace("'", "'\\''") + '\''; //$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	/** True if the session logs in as the same user@host:port, so it shares the saved password. */

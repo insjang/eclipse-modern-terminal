@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-import org.apache.sshd.client.channel.ChannelShell;
+import org.apache.sshd.client.channel.PtyCapableChannelSession;
 import org.apache.sshd.client.session.ClientSession;
 
 import io.github.insjang.terminal.connector.ISettingsStore;
@@ -31,7 +31,7 @@ import io.github.insjang.terminal.connector.provider.AbstractTerminalConnector;
 public class SshConnector extends AbstractTerminalConnector {
 	private OutputStream fOutputStream;
 	private InputStream fInputStream;
-	private ChannelShell fChannel;
+	private PtyCapableChannelSession fChannel;
 	private SshConnection fConnection;
 	private final SshSettings fSettings;
 	private int fWidth;
@@ -74,7 +74,7 @@ public class SshConnector extends AbstractTerminalConnector {
 
 	@Override
 	public void setTerminalSize(int newWidth, int newHeight) {
-		ChannelShell channel;
+		PtyCapableChannelSession channel;
 		synchronized (this) {
 			fWidth = newWidth;
 			fHeight = newHeight;
@@ -84,7 +84,7 @@ public class SshConnector extends AbstractTerminalConnector {
 	}
 
 	// the remote only hears about a size it does not have yet
-	private static void sendWindowChange(ChannelShell channel, int width, int height) {
+	private static void sendWindowChange(PtyCapableChannelSession channel, int width, int height) {
 		if (channel == null || !channel.isOpen() || width <= 0 || height <= 0
 				|| (channel.getPtyColumns() == width && channel.getPtyLines() == height)) {
 			return;
@@ -149,17 +149,17 @@ public class SshConnector extends AbstractTerminalConnector {
 	}
 
 	/** The shell channel while connected, else <code>null</code>. */
-	public synchronized ChannelShell getChannel() {
+	public synchronized PtyCapableChannelSession getChannel() {
 		return fChannel;
 	}
 
 	/** The SSH session while connected, else <code>null</code> (e.g. to open an SFTP channel on it). */
 	public ClientSession getSession() {
-		ChannelShell channel = getChannel();
+		PtyCapableChannelSession channel = getChannel();
 		return channel != null ? channel.getClientSession() : null;
 	}
 
-	void setChannel(ChannelShell channel) {
+	void setChannel(PtyCapableChannelSession channel) {
 		int width, height;
 		synchronized (this) {
 			fChannel = channel;

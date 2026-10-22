@@ -623,9 +623,10 @@ public class FilesView extends ViewPart {
 						show(FilesMessages.sessionClosed);
 					}
 				}));
-				// the shell's folder if it has told it, else the home
+				// the shell's folder if it has told it, else the start folder of the session (the home if it cannot be listed)
 				if (!followTerminal(t.getWorkingDirectory())) {
-					navigate(home);
+					String start = ssh.getStartFolder();
+					navigate(start != null ? f.typed(home, home, start) : home);
 				}
 			});
 		});

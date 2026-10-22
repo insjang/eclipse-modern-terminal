@@ -43,6 +43,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 	private Text fPort;
 	private Text fPassword;
 	private Text fKeyFile;
+	private Text fStartFolder;
 	private String nameLabel; // a session name row above Host, if set
 	private Text fName;
 
@@ -59,6 +60,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		fTerminalSettings.setTimeout(fTimeout.getText());
 		fTerminalSettings.setKeepalive(fKeepalive.getText());
 		fTerminalSettings.setKeyFile(fKeyFile.getText());
+		fTerminalSettings.setStartFolder(fStartFolder.getText());
 	}
 
 	@Override
@@ -71,6 +73,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 			fPort.setText(get(fTerminalSettings.getPortString(), String.valueOf(ISshSettings.DEFAULT_SSH_PORT)));
 			fPassword.setText(get(fTerminalSettings.getPassword(), ""));//$NON-NLS-1$
 			fKeyFile.setText(get(fTerminalSettings.getKeyFile(), ""));//$NON-NLS-1$
+			fStartFolder.setText(get(fTerminalSettings.getStartFolder(), ""));//$NON-NLS-1$
 		}
 	}
 
@@ -213,6 +216,8 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		fTimeout = span(createTextField(composite, SshMessages.TIMEOUT));
 		fKeepalive = span(createTextField(composite, SshMessages.KEEPALIVE));
 		fKeepalive.setToolTipText(SshMessages.KEEPALIVE_Tooltip);
+		fStartFolder = span(createTextField(composite, SshMessages.START_FOLDER));
+		fStartFolder.setToolTipText(SshMessages.START_FOLDER_Tooltip);
 		loadSettings();
 	}
 

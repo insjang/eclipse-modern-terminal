@@ -43,7 +43,7 @@ import java.util.stream.Stream;
 
 import org.apache.sshd.client.SshClient;
 import org.apache.sshd.client.auth.keyboard.UserInteraction;
-import org.apache.sshd.client.channel.ChannelShell;
+import org.apache.sshd.client.channel.PtyCapableChannelSession;
 import org.apache.sshd.client.future.ConnectFuture;
 import org.apache.sshd.client.ClientFactoryManager;
 import org.apache.sshd.client.session.ClientSession;
@@ -219,7 +219,11 @@ public class SshConnection extends Thread {
 			if (!isSessionConnected()) {
 				return;
 			}
-			ChannelShell channel = session.createShellChannel();
+			// a start folder: the login shell from an exec channel that changes to it first (SSH has no request for the folder)
+			String startFolder = settings.getStartFolder();
+			PtyCapableChannelSession channel = startFolder == null ? session.createShellChannel()
+					: session.createExecChannel(SshSession.startCommand(startFolder));
+			channel.setUsePty(true); // an exec channel has none by default
 			channel.setPtyType(TERM);
 			int[] size = fConn.getTerminalSize();
 			if (size[0] > 0 && size[1] > 0) {

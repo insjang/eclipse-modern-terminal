@@ -33,6 +33,8 @@ public class SshMessages extends NLS {
 	public static String KEY_FILE;
 	public static String KEY_FILE_Tooltip;
 	public static String KEY_FILE_NOT_FOUND;
+	public static String START_FOLDER;
+	public static String START_FOLDER_Tooltip;
 	public static String BROWSE;
 	public static String WARNING;
 	public static String INFO;
