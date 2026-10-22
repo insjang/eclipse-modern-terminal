@@ -11,6 +11,7 @@ package io.github.insjang.terminal.connector.ssh.sftp;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.channels.Channels;
@@ -173,6 +174,16 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 	@Override
 	public List<Entry> list(String dir) throws IOException {
 		List<Entry> entries = new ArrayList<>();
+		try {
+			list(dir, entries);
+		} catch (UncheckedIOException e) {
+			throw e.getCause(); // the listing reads on while iterating
+		}
+		entries.sort(ORDER);
+		return entries;
+	}
+
+	private void list(String dir, List<Entry> entries) throws IOException {
 		for (DirEntry e : client.readDir(dir)) {
 			String name = e.getFilename();
 			if (name.equals(".") || name.equals("..")) { //$NON-NLS-1$ //$NON-NLS-2$
@@ -190,8 +201,6 @@ public final class RemoteFiles implements FileAccess, AutoCloseable {
 			}
 			entries.add(Entry.of(path, a, isDir));
 		}
-		entries.sort(ORDER);
-		return entries;
 	}
 
 	/** The entry of a path (links followed), or <code>null</code> if there is none. */

@@ -10,6 +10,7 @@
 package io.github.insjang.terminal.connector.ssh.sftp;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -752,6 +753,21 @@ public class FilesView extends ViewPart {
 		try {
 			entries = f.list(dir);
 		} catch (IOException e) {
+			// the server closed the SFTP channel (idle, a limit), the session lives on: once more on a new one
+			if (f instanceof RemoteFiles r && !r.isOpen() && r.getSession().isOpen()) {
+				try {
+					RemoteFiles again = RemoteFiles.of(r.getSession());
+					ui(() -> {
+						if (files == f) {
+							files = again;
+							navigate(dir);
+						}
+					});
+					return;
+				} catch (IOException notAgain) {
+					// shown below
+				}
+			}
 			ui(() -> {
 				statusLine().setErrorMessage(NLS.bind(FilesMessages.listFailed, f.shown(dir), e.getMessage()));
 				pathText.setText(f.shown(cwd != null ? cwd : dir));
@@ -1001,8 +1017,8 @@ public class FilesView extends ViewPart {
 				work.run(monitor);
 			} catch (OperationCanceledException e) {
 				return Status.CANCEL_STATUS;
-			} catch (IOException | InvalidPathException e) {
-				// InvalidPathException: a remote name this system cannot have
+			} catch (IOException | UncheckedIOException | InvalidPathException e) {
+				// InvalidPathException: a remote name this system cannot have; Unchecked: an SFTP listing read on
 				ui(() -> MessageDialog.openError(getSite().getShell(), FilesMessages.errorTitle,
 						name + ": " + e.getMessage())); //$NON-NLS-1$
 			} finally {
