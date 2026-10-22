@@ -173,6 +173,9 @@ public class SshLauncherDelegate extends AbstractLauncherDelegate {
 		// MWE TODO make sure this is NOT passed outside as this is plain text
 		store.put("Password", password); //$NON-NLS-1$
 
+		// dropped files are quoted for a POSIX shell (csh and fish take single quotes too)
+		properties.put(ITerminalsConnectorConstants.PROP_SHELL, "/bin/sh"); //$NON-NLS-1$
+
 		// Construct the terminal connector instance
 		ITerminalConnector connector = TerminalConnectorExtension.makeTerminalConnector(connectorId);
 		// Apply default settings

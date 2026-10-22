@@ -229,7 +229,7 @@ public class LocalLauncherDelegate extends AbstractLauncherDelegate {
 				&& System.getProperty("user.home").equals(properties.get(ITerminalsConnectorConstants.PROP_PROCESS_WORKING_DIR))) { //$NON-NLS-1$
 			String args = properties.get(ITerminalsConnectorConstants.PROP_PROCESS_ARGS) instanceof String a ? a : ""; //$NON-NLS-1$
 			if (!args.contains("--cd") && !args.contains("~")) { //$NON-NLS-1$ //$NON-NLS-2$
-				properties.put(ITerminalsConnectorConstants.PROP_PROCESS_ARGS, (args + " --cd ~").strip()); //$NON-NLS-1$
+				properties.put(ITerminalsConnectorConstants.PROP_PROCESS_ARGS, homeFirst(args));
 				properties.remove(ITerminalsConnectorConstants.PROP_PROCESS_WORKING_DIR);
 			}
 		}
@@ -238,6 +238,11 @@ public class LocalLauncherDelegate extends AbstractLauncherDelegate {
 		} catch (RuntimeException e) {
 			return CompletableFuture.failedFuture(e);
 		}
+	}
+
+	/** wsl.exe arguments starting in the Linux home: "--cd ~" first, as what follows -e or -- is the command. */
+	public static String homeFirst(String args) {
+		return ("--cd ~ " + args).strip(); //$NON-NLS-1$
 	}
 
 	/**
@@ -321,6 +326,7 @@ public class LocalLauncherDelegate extends AbstractLauncherDelegate {
 			File defaultShell = defaultShell();
 			image = defaultShell.isAbsolute() ? defaultShell.getAbsolutePath() : defaultShell.getPath();
 			isDefaultShell = true;
+			properties.put(ITerminalsConnectorConstants.PROP_SHELL, image); // not the path: a restored tab takes the default of then
 		} else {
 			image = (String) properties.get(ITerminalsConnectorConstants.PROP_PROCESS_PATH);
 		}

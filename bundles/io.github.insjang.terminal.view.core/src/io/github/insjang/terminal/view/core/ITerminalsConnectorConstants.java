@@ -221,6 +221,15 @@ public interface ITerminalsConnectorConstants {
 	public static final String PROP_PROCESS_PATH = "process.path"; //$NON-NLS-1$
 
 	/**
+	 * Property: The shell a terminal runs when {@link #PROP_PROCESS_PATH} does not tell it: the default
+	 * shell of a local terminal, "/bin/sh" for a remote POSIX shell. Set when the terminal starts, for the
+	 * form of dropped paths.
+	 * <p>
+	 * Property Type: {@link String}
+	 */
+	public static final String PROP_SHELL = "process.shell"; //$NON-NLS-1$
+
+	/**
 	 * Property: Process arguments.
 	 *           <p>Typical for process terminals.
 	 * <p>

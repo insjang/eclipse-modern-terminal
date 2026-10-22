@@ -25,6 +25,7 @@ import java.util.List;
 import org.eclipse.core.runtime.NullProgressMonitor;
 import org.junit.jupiter.api.Test;
 
+import io.github.insjang.terminal.connector.local.launcher.LocalLauncherDelegate;
 import io.github.insjang.terminal.connector.ssh.sftp.LocalFiles;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
@@ -35,6 +36,9 @@ public class LocalFilesTest {
 	public void wslDistributionFromTheLaunch() {
 		assertEquals("Ubuntu", ShellPaths.wslDistribution("C:\\Windows\\System32\\wsl.exe", "--distribution Ubuntu"));
 		assertEquals("Ubuntu-24.04", ShellPaths.wslDistribution("C:\\WINDOWS\\system32\\WSL.EXE", " -d Ubuntu-24.04  --cd ~"));
+		// the home before the command: after "-e zsh" it would be zsh's arguments
+		assertEquals("--cd ~ -d Ubuntu -e zsh", LocalLauncherDelegate.homeFirst("-d Ubuntu -e zsh"));
+		assertEquals("--cd ~", LocalLauncherDelegate.homeFirst(""));
 		assertEquals("", ShellPaths.wslDistribution("wsl.exe", null)); // the default distribution
 		assertEquals("", ShellPaths.wslDistribution("wsl.exe", "-d")); // no name after it
 		assertEquals("", ShellPaths.wslDistribution("C:\\Windows\\System32\\bash.exe", "")); // the old launcher
@@ -143,5 +147,14 @@ public class LocalFilesTest {
 		// find -printf "%m %y %f\0": octal mode, type, name (spaces kept); type bits added as in SFTP
 		assertEquals(java.util.Map.of("a b", 0100644, "d", 0040755, "l", 0120777),
 				LocalFiles.wslModes("644 f a b\0" + "755 d d\0" + "777 l l\0"));
+	}
+
+	@Test
+	public void wslListIsReadAsUtf16OrUtf8() {
+		// wsl -l -q: UTF-16LE, or UTF-8 with WSL_UTF8=1
+		String list = "Ubuntu-24.04\r\n우분투\r\n";
+		assertEquals(list, ShellPaths.wslText(list.getBytes(java.nio.charset.StandardCharsets.UTF_16LE)));
+		assertEquals(list, ShellPaths.wslText(("\uFEFF" + list).getBytes(java.nio.charset.StandardCharsets.UTF_16LE)));
+		assertEquals(list, ShellPaths.wslText(list.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
 	}
 }

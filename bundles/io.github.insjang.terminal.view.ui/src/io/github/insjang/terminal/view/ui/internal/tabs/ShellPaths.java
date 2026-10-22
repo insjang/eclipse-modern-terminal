@@ -100,6 +100,18 @@ public final class ShellPaths {
 		return p.length() >= 2 && p.charAt(1) == ':' && Character.isLetter(p.charAt(0));
 	}
 
+	/**
+	 * What wsl.exe prints about itself (-l): UTF-16LE, or UTF-8 when WSL_UTF8=1 is set. UTF-16 has a NUL
+	 * byte in every line end, UTF-8 none.
+	 */
+	public static String wslText(byte[] out) {
+		boolean utf16 = false;
+		for (byte b : out) {
+			utf16 |= b == 0;
+		}
+		return new String(out, utf16 ? StandardCharsets.UTF_16LE : StandardCharsets.UTF_8).replace("\uFEFF", ""); //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
 	/** The WSL distributions, the default one first; empty without WSL. */
 	// ponytail: asks wsl.exe once, on the first use, and keeps the answer until restart
 	public static synchronized List<String> wslDistributions() {
@@ -107,9 +119,8 @@ public final class ShellPaths {
 			distributions = List.of();
 			try {
 				Process wsl = new ProcessBuilder("wsl.exe", "-l", "-q").redirectErrorStream(true).start(); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-				// wsl.exe writes UTF-16
-				distributions = new String(wsl.getInputStream().readAllBytes(), StandardCharsets.UTF_16LE)
-						.replace("\uFEFF", "").lines().map(String::strip).filter(l -> !l.isEmpty()).toList(); //$NON-NLS-1$ //$NON-NLS-2$
+				distributions = wslText(wsl.getInputStream().readAllBytes()).lines().map(String::strip)
+						.filter(l -> !l.isEmpty()).toList();
 			} catch (IOException e) {
 				// no WSL
 			}

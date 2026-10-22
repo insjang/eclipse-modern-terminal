@@ -28,18 +28,21 @@ public final class DroppedFiles {
 	 * Returns the dropped paths as shell arguments separated by spaces.
 	 *
 	 * @param paths The dropped file paths. Must not be <code>null</code>.
-	 * @param processPath The path of the shell process of the terminal or <code>null</code> if unknown.
+	 * @param processPath The path of the shell process of the terminal ("/bin/sh" for SSH) or <code>null</code> if
+	 *            unknown (taken as cmd.exe on Windows).
 	 * @param windows Whether Eclipse runs on Windows.
 	 * @return The text to type into the terminal.
 	 */
 	public static String format(String[] paths, String processPath, boolean windows) {
 		String shell = processPath == null ? "" : processPath.replace('\\', '/').toLowerCase(Locale.ROOT); //$NON-NLS-1$
 		UnaryOperator<String> argument;
-		if (!windows) {
+		if (!windows || shell.startsWith("/") && !shell.startsWith("//")) { //$NON-NLS-1$ //$NON-NLS-2$
+			// a remote shell from Windows (SSH) too
 			argument = DroppedFiles::posixQuote;
-		} else if (shell.endsWith("/wsl.exe") || shell.endsWith("/system32/bash.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
+		} else if (shell.matches("(.*/)?wsl(\\.exe)?|bash(\\.exe)?|.*/system32/bash(\\.exe)?")) { //$NON-NLS-1$
+			// bash.exe without a folder: System32 comes first in the PATH
 			argument = p -> posixQuote(ShellPaths.toWsl(p));
-		} else if (shell.endsWith("/sh.exe") || shell.endsWith("/bash.exe")) { //$NON-NLS-1$ //$NON-NLS-2$
+		} else if (shell.matches("(.*/)?(sh|bash)(\\.exe)?")) { //$NON-NLS-1$
 			argument = p -> posixQuote(ShellPaths.toMsys(p));
 		} else if (shell.matches("(.*/)?(powershell|pwsh)(\\.exe)?")) { //$NON-NLS-1$
 			// single quotes: in double quotes PowerShell would run a $(...) in the name; it takes the curly quotes

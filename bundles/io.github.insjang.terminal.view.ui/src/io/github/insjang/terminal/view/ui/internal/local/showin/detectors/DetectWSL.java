@@ -13,8 +13,7 @@ package io.github.insjang.terminal.view.ui.internal.local.showin.detectors;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -32,6 +31,7 @@ import org.eclipse.core.runtime.Status;
 import org.eclipse.core.runtime.jobs.Job;
 import io.github.insjang.terminal.view.ui.IExternalExecutablesProperties;
 import io.github.insjang.terminal.view.ui.internal.local.showin.IDetectExternalExecutable;
+import io.github.insjang.terminal.view.ui.internal.tabs.ShellPaths;
 
 public class DetectWSL implements IDetectExternalExecutable {
 
@@ -124,7 +124,7 @@ public class DetectWSL implements IDetectExternalExecutable {
 					}
 
 					try (BufferedReader reader = new BufferedReader(
-							new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_16LE))) {
+							new StringReader(ShellPaths.wslText(process.getInputStream().readAllBytes())))) {
 						result = new ArrayList<>();
 						String line = null;
 						while ((line = reader.readLine()) != null) {

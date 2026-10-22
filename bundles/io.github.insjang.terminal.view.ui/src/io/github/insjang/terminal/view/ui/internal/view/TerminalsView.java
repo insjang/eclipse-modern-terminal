@@ -451,7 +451,9 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 			return;
 		}
 		Map<String, Object> properties = (Map<String, Object>) item.getData("properties"); //$NON-NLS-1$
-		Object processPath = properties != null ? properties.get(ITerminalsConnectorConstants.PROP_PROCESS_PATH) : null;
+		Object processPath = properties == null ? null
+				: properties.get(ITerminalsConnectorConstants.PROP_PROCESS_PATH) instanceof String path ? path
+						: properties.get(ITerminalsConnectorConstants.PROP_SHELL);
 		terminal.pasteString(DroppedFiles.format(paths, processPath instanceof String s ? s : null,
 				Platform.OS_WIN32.equals(Platform.getOS())));
 		getSite().getPage().activate(this);

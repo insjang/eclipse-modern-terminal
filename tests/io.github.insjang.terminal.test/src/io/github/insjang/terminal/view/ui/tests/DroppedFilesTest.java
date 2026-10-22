@@ -74,4 +74,20 @@ public class DroppedFilesTest {
 	public void controlCharactersAreDropped() {
 		assertEquals("'/tmp/arm'", DroppedFiles.format(new String[] { "/tmp/a\nr\rm" }, null, false));
 	}
+
+	@Test
+	public void sshTabsArePosixFromWindowsToo() {
+		// SSH tabs record "/bin/sh": in double quotes a remote shell would run $(...)
+		assertEquals("'C:\\dl\\$(calc).txt'", DroppedFiles.format(new String[] { "C:\\dl\\$(calc).txt" }, "/bin/sh", true));
+	}
+
+	@Test
+	public void defaultShellsWithoutFolderAreKnown() {
+		// the default shell of the preferences as typed there
+		assertEquals("'/mnt/c/dl/$(calc).txt'", DroppedFiles.format(new String[] { "C:\\dl\\$(calc).txt" }, "wsl.exe", true));
+		assertEquals("'/mnt/c/a'", DroppedFiles.format(new String[] { "C:\\a" }, "bash.exe", true));
+		assertEquals("'/c/a'", DroppedFiles.format(new String[] { "C:\\a" }, "sh.exe", true));
+		assertEquals("'C:\\a`id`.txt'", DroppedFiles.format(new String[] { "C:\\a`id`.txt" }, "pwsh.exe", true));
+		assertEquals("\"C:\\a&b\"", DroppedFiles.format(new String[] { "C:\\a&b" }, "\\\\server\\x\\cmd.exe", true));
+	}
 }
