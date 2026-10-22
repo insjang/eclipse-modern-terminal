@@ -31,6 +31,12 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.ILog;
 import org.eclipse.core.runtime.Path;
 import org.eclipse.core.runtime.Platform;
+import org.eclipse.e4.ui.model.application.ui.MElementContainer;
+import org.eclipse.e4.ui.model.application.ui.MUIElement;
+import org.eclipse.e4.ui.model.application.ui.advanced.MArea;
+import org.eclipse.e4.ui.model.application.ui.basic.MPart;
+import org.eclipse.e4.ui.model.application.ui.basic.MPartStack;
+import org.eclipse.e4.ui.workbench.modeling.EModelService;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.window.Window;
@@ -118,6 +124,7 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				if (!neededBundlesAvailable) {
 					return;
 				}
+				selectEditorStack();
 
 				// extract the path from file:// URLs
 				if (textToOpen.startsWith("file://")) { //$NON-NLS-1$
@@ -328,5 +335,70 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 			provider.disconnect(input);
 		}
 		return Optional.empty();
+	}
+
+	/**
+	 * An editor opens in the selected stack of the editor area. With the terminal view docked in the
+	 * editor area that is the terminal's own stack, so the file would cover the terminal: select the
+	 * stack of the last active editor, or else another editor stack, before opening.
+	 */
+	private void selectEditorStack() {
+		MPart part = site.getService(MPart.class);
+		EModelService models = site.getService(EModelService.class);
+		if (part == null || models == null) {
+			return;
+		}
+		MUIElement terminalStack = stackOf(part);
+		MArea area = areaOf(terminalStack);
+		if (area == null) {
+			return; // a view outside the editor area: editors open elsewhere anyway
+		}
+		MPartStack target = null;
+		IEditorPart last = site.getPage().getActiveEditor();
+		if (last != null && stackOf(last.getSite().getService(MPart.class)) instanceof MPartStack stack
+				&& isOtherEditorStack(stack, terminalStack, area, models)) {
+			target = stack;
+		}
+		if (target == null) {
+			List<MPartStack> stacks = new ArrayList<>(
+					models.findElements(area, null, MPartStack.class, List.of("org.eclipse.e4.primaryDataStack"))); //$NON-NLS-1$
+			stacks.addAll(models.findElements(area, null, MPartStack.class, List.of("EditorStack"))); //$NON-NLS-1$
+			target = stacks.stream().filter(s -> isOtherEditorStack(s, terminalStack, area, models)).findFirst()
+					.orElse(null);
+		}
+		if (target == null) {
+			return; // the terminal's stack is the only one
+		}
+		MUIElement child = target;
+		for (MElementContainer<MUIElement> parent = child.getParent(); parent != null; parent = parent.getParent()) {
+			parent.setSelectedElement(child);
+			if ((Object) parent == area) {
+				break;
+			}
+			child = parent;
+		}
+	}
+
+	private static MArea areaOf(MUIElement element) {
+		for (MUIElement e = element; e != null; e = e.getParent()) {
+			if (e instanceof MArea area) {
+				return area;
+			}
+		}
+		return null;
+	}
+
+	private static MUIElement stackOf(MPart part) {
+		if (part == null) {
+			return null;
+		}
+		MUIElement ref = part.getCurSharedRef() != null ? part.getCurSharedRef() : part;
+		return ref.getParent();
+	}
+
+	private static boolean isOtherEditorStack(MPartStack stack, MUIElement terminalStack, MArea area,
+			EModelService models) {
+		return stack != terminalStack && stack.isToBeRendered() && stack.isVisible()
+				&& models.findElements(area, null, MPartStack.class).contains(stack);
 	}
 }
