@@ -84,16 +84,21 @@ public record SshSession(String name, String host, int port, String user, String
 
 	/**
 	 * The command of an exec channel that starts the login shell in the folder: SSH has no request for
-	 * the working folder, so the remote shell changes to it, then replaces itself with "$SHELL -l"
-	 * (as in <code>ssh -t host 'cd dir; exec $SHELL -l'</code>). A folder that cannot be entered leaves
-	 * the error and the shell in the home. "~" and "~/" stay unquoted so that the shell expands them; no
-	 * "--", which csh rejects: a leading "-" gets "./".
+	 * the working folder, so a shell changes to it, then replaces itself with "$SHELL -l" (as in
+	 * <code>ssh -t host 'cd dir; exec $SHELL -l'</code>). The login shell may be csh or fish, which run
+	 * "cd dir; ..." differently (csh stops at a failed cd), so it only starts sh with the folder as an
+	 * argument. A folder that cannot be entered leaves the error and the shell in the home. "~" and "~/"
+	 * are the home; a leading "-" gets "./".
 	 */
 	public static String startCommand(String folder) {
-		String dir = folder.equals("~") ? "~" //$NON-NLS-1$ //$NON-NLS-2$
-				: folder.startsWith("~/") ? "~/" + quote(folder.substring(2)) : quote(folder.startsWith("-") ? "./" + folder : folder); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
-		return "cd " + dir + "; exec \"$SHELL\" -l"; //$NON-NLS-1$ //$NON-NLS-2$
+		// csh expands "!" even in single quotes and in "csh -c": a \! outside them is "!" for csh and sh
+		String dir = quote(folder.startsWith("-") ? "./" + folder : folder).replace("!", "'\\!'"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		return "exec sh -c " + quote(START) + " sh " + dir; //$NON-NLS-1$ //$NON-NLS-2$
 	}
+
+	// no ' or \ (quoted for any login shell), no "!" (csh history)
+	private static final String START = "case $1 in \"~\") set -- \"$HOME\";; \"~/\"*) set -- \"$HOME/${1#??}\";; esac; " //$NON-NLS-1$
+			+ "cd \"$1\"; exec \"$SHELL\" -l"; //$NON-NLS-1$
 
 	/** A POSIX sh word: in single quotes, a ' as '\''. */
 	public static String quote(String text) {

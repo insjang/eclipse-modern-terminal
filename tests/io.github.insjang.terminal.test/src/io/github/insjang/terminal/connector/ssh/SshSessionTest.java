@@ -59,13 +59,17 @@ public class SshSessionTest {
 
 	@Test
 	public void startCommandQuotesTheFolderForSh() {
-		assertEquals("cd '/srv/a b'; exec \"$SHELL\" -l", SshSession.startCommand("/srv/a b"));
-		assertEquals("cd '/x/it'\\''s'; exec \"$SHELL\" -l", SshSession.startCommand("/x/it's"));
+		// the login shell (sh, csh, fish) only starts sh, with the folder as its argument
+		String sh = "exec sh -c 'case $1 in \"~\") set -- \"$HOME\";; \"~/\"*) set -- \"$HOME/${1#??}\";; esac; "
+				+ "cd \"$1\"; exec \"$SHELL\" -l' sh ";
+		assertEquals(sh + "'/srv/a b'", SshSession.startCommand("/srv/a b"));
+		assertEquals(sh + "'/x/it'\\''s'", SshSession.startCommand("/x/it's"));
+		assertEquals(sh + "'/x/a'\\!'b'", SshSession.startCommand("/x/a!b")); // csh history even in quotes
 		assertEquals("'$(rm -rf ~)`x`;\"'", SshSession.quote("$(rm -rf ~)`x`;\""));
-		// the home stays unquoted, so that the shell expands it
-		assertEquals("cd ~/'my proj'; exec \"$SHELL\" -l", SshSession.startCommand("~/my proj"));
-		assertEquals("cd ~; exec \"$SHELL\" -l", SshSession.startCommand("~"));
-		assertEquals("cd './-x'; exec \"$SHELL\" -l", SshSession.startCommand("-x")); // no "--": csh rejects it
+		// the home: sh puts $HOME for "~" and "~/"
+		assertEquals(sh + "'~/my proj'", SshSession.startCommand("~/my proj"));
+		assertEquals(sh + "'~'", SshSession.startCommand("~"));
+		assertEquals(sh + "'./-x'", SshSession.startCommand("-x"));
 		assertEquals("'~user'", SshSession.quote("~user"));
 	}
 

@@ -90,4 +90,25 @@ public class HostKeysTest {
 				+ PublicKeyEntry.toString(rsa) + "\n");
 		assertEquals(Decision.REFUSE, HostKeys.decide(HostKeys.load(file, "example.org", 2222), rsa));
 	}
+
+	@Test
+	public void revokedWithoutPortCoversOtherPorts() throws Exception {
+		Path file = Files.createTempDirectory("kh").resolve("known_hosts");
+		PublicKey rsa = key("ssh-rsa", 2048);
+		// as OpenSSH: the entry without a port is the fallback; a revoked key there is refused on any port
+		Files.writeString(file, "@revoked example.org " + PublicKeyEntry.toString(rsa) + "\nexample.org "
+				+ PublicKeyEntry.toString(rsa) + "\n");
+		assertEquals(Decision.REFUSE, HostKeys.decide(HostKeys.load(file, "example.org", 2222), rsa));
+		assertEquals(List.of(), HostKeys.load(file, "example.org", 2222).keys()); // a plain one is asked about
+		assertEquals(List.of(), HostKeys.load(file, "other.org", 2222).revoked());
+	}
+
+	@Test
+	public void hostNamesMatchInLowerCase() throws Exception {
+		Path file = Files.createTempDirectory("kh").resolve("known_hosts");
+		PublicKey ed = key("ssh-ed25519", 256);
+		HostKeys.add(file, "LocalHost", 2222, ed);
+		assertEquals("[localhost]:2222", Files.readString(file).split(" ")[0]);
+		assertEquals(Decision.ACCEPT, HostKeys.decide(HostKeys.load(file, "LOCALHOST", 2222), ed));
+	}
 }

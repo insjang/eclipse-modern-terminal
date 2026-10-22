@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -81,8 +82,12 @@ public final class HostKeys {
 		return String.join(",", algorithms); //$NON-NLS-1$
 	}
 
-	/** The entries of known_hosts for host:port; nothing if the file does not exist. */
-	public static Known load(Path file, String host, int port) throws IOException {
+	/**
+	 * The entries of known_hosts for host:port; nothing if the file does not exist. The host name is
+	 * matched in lower case, as OpenSSH does.
+	 */
+	public static Known load(Path file, String hostName, int port) throws IOException {
+		String host = hostName.toLowerCase(Locale.ROOT);
 		List<PublicKey> keys = new ArrayList<>();
 		List<PublicKey> revoked = new ArrayList<>();
 		if (!Files.isRegularFile(file)) {
@@ -91,7 +96,12 @@ public final class HostKeys {
 		for (KnownHostEntry entry : KnownHostEntry.readKnownHostEntries(file)) {
 			String marker = entry.getMarker();
 			// @cert-authority lines hold CA keys, not host keys
-			if (entry.getKeyEntry() == null || "cert-authority".equals(marker) || !matches(entry, host, port)) { //$NON-NLS-1$
+			if (entry.getKeyEntry() == null || "cert-authority".equals(marker)) { //$NON-NLS-1$
+				continue;
+			}
+			// OpenSSH falls back to the entries without a port; for revoked keys only here (the others are asked about)
+			if (!matches(entry, host, port)
+					&& !("revoked".equals(marker) && port != DEFAULT_PORT && entry.isHostMatch(host, DEFAULT_PORT))) { //$NON-NLS-1$
 				continue;
 			}
 			try {
@@ -116,7 +126,8 @@ public final class HostKeys {
 	}
 
 	/** Appends host:port with the key to known_hosts, creating its directory if needed. */
-	public static void add(Path file, String host, int port, PublicKey key) throws IOException {
+	public static void add(Path file, String hostName, int port, PublicKey key) throws IOException {
+		String host = hostName.toLowerCase(Locale.ROOT);
 		String line = (port == DEFAULT_PORT ? host : "[" + host + "]:" + port) + " " + PublicKeyEntry.toString(key) //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 				+ "\n"; //$NON-NLS-1$
 		Files.createDirectories(file.toAbsolutePath().getParent());

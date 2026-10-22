@@ -66,7 +66,7 @@ Load Presets offers Modern Terminal Defaults (what Restore Defaults gives), Tang
 - Ctrl+Alt+Shift+M (or Open Modern Terminal... in the view toolbar) > Choose terminal: SSH Terminal
   - Host, user, port, an optional key file, timeout and keepalive
 - Saved Sessions (as in PuTTY): type a name and Save, select one and Load, or double-click to connect; Delete removes it and its saved password
-- Start folder: the shell and the Files view start there after login (empty: the home); the shell gets `cd -- '<folder>'; exec "$SHELL" -l` as its command, SSH has no request for the folder
+- Start folder: the shell and the Files view start there after login (empty: the home); SSH has no request for the folder, so the command `sh -c 'cd "$1"; exec "$SHELL" -l' sh '<folder>'` starts the login shell there (any login shell, csh too; a missing folder leaves an error and the home)
 - Edit Session... in the context menu of an SSH terminal: the settings of its saved session, saved for the next connection (the open terminal stays as it is)
 - Authentication, as OpenSSH tries it:
   - Keys: the key file field first, then `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` and `IdentityFile` entries of `~/.ssh/config`; a passphrase is asked when needed
