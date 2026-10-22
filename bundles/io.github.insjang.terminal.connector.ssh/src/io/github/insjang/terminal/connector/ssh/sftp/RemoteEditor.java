@@ -44,6 +44,8 @@ import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorRegistry;
 import org.eclipse.ui.IPartListener2;
+import org.eclipse.ui.IWorkbench;
+import org.eclipse.ui.IWorkbenchListener;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.IWorkbenchPartReference;
@@ -90,10 +92,42 @@ public final class RemoteEditor {
 	// copies of files of a remote account: only the user may enter the folder (POSIX), so they stay private
 	// whatever mode a download gives them
 	private static void createArea() throws IOException {
-		Path area = Files.createDirectories(area());
+		createPrivate(area());
+	}
+
+	private static void createPrivate(Path dir) throws IOException {
+		Path area = Files.createDirectories(dir);
 		if (Files.getFileStore(area).supportsFileAttributeView(PosixFileAttributeView.class)) {
 			Files.setPosixFilePermissions(area, PosixFilePermissions.fromString("rwx------")); //$NON-NLS-1$
 		}
+	}
+
+	private static boolean closing;
+
+	// editors of local copies are closed before the workbench saves its layout: a restart must not restore
+	// an editor on a copy the start deletes, without its connection
+	private static void closeAtShutdown() {
+		if (closing) {
+			return;
+		}
+		closing = true;
+		PlatformUI.getWorkbench().addWorkbenchListener(new IWorkbenchListener() {
+			@Override
+			public boolean preShutdown(IWorkbench workbench, boolean forced) {
+				for (RemoteEditor edit : EDITS.values()) {
+					// a dirty one asks to save (and upload); Cancel keeps Eclipse running
+					if (edit.editor != null && !edit.editor.getSite().getPage().closeEditor(edit.editor, true) && !forced) {
+						return false;
+					}
+				}
+				return true;
+			}
+
+			@Override
+			public void postShutdown(IWorkbench workbench) {
+				// nothing
+			}
+		});
 	}
 
 	/** Deletes the local copies of an earlier run. */
@@ -151,6 +185,7 @@ public final class RemoteEditor {
 			return;
 		}
 		EDITS.put(local, this);
+		closeAtShutdown();
 		// a save leaves the editor clean; the file time tells a save from a revert
 		editor.addPropertyListener((source, id) -> {
 			if (id == IEditorPart.PROP_DIRTY && !editor.isDirty() && localModified() != localSynced) {
@@ -271,8 +306,10 @@ public final class RemoteEditor {
 		EDITS.remove(local);
 		if (Files.exists(local) && localModified() != localSynced) {
 			// moved aside, so opening the file again does not overwrite it
-			Path kept = local.getParent().resolveSibling(local.getParent().getFileName() + "-" + System.currentTimeMillis()); //$NON-NLS-1$
+			// outside the area, which the next start empties
+			Path kept = area().resolveSibling("kept").resolve(local.getParent().getFileName() + "-" + System.currentTimeMillis()); //$NON-NLS-1$ //$NON-NLS-2$
 			try {
+				createPrivate(kept.getParent());
 				Files.move(local.getParent(), kept);
 				kept = kept.resolve(local.getFileName());
 			} catch (IOException e) {

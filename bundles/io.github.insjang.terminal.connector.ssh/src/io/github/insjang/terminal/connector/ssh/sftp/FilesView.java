@@ -196,7 +196,6 @@ public class FilesView extends ViewPart {
 		ImageDescriptor linkOverlay = ResourceLocator
 				.imageDescriptorFromBundle("org.eclipse.ui.ide", "icons/full/ovr16/symlink_ovr.png").orElse(null); //$NON-NLS-1$ //$NON-NLS-2$
 		Image folderLink = linked(resources, images.getImageDescriptor(ISharedImages.IMG_OBJ_FOLDER), linkOverlay);
-		Image fileLink = linked(resources, images.getImageDescriptor(ISharedImages.IMG_OBJ_FILE), linkOverlay);
 		column(FilesMessages.colName, SWT.LEFT, new ColumnLabelProvider() {
 			@Override
 			public String getText(Object o) {
@@ -209,10 +208,12 @@ public class FilesView extends ViewPart {
 				if (isParent(e)) {
 					return images.getImage(ISharedImages.IMG_TOOL_UP);
 				}
-				if (e.link()) {
-					return e.dir() ? folderLink : fileLink;
+				if (e.dir()) {
+					return e.link() ? folderLink : images.getImage(ISharedImages.IMG_OBJ_FOLDER);
 				}
-				return images.getImage(e.dir() ? ISharedImages.IMG_OBJ_FOLDER : ISharedImages.IMG_OBJ_FILE);
+				// files: the icon of the editor for the name, as in the Project Explorer (resources cache them)
+				ImageDescriptor file = PlatformUI.getWorkbench().getEditorRegistry().getImageDescriptor(e.name());
+				return e.link() ? linked(resources, file, linkOverlay) : resources.create(file);
 			}
 		});
 		column(FilesMessages.colSize, SWT.RIGHT, text(e -> e.dir() ? "" : RemoteFiles.formatSize(e.size()))); //$NON-NLS-1$
