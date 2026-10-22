@@ -93,7 +93,6 @@ Window > Show View > Other... > Modern Terminal > Modern Terminal Files.
 ### Follow the shell's folder (OSC 7)
 
 When the remote shell reports its current folder, the Files view follows the terminal as you `cd`.
-Follow Terminal Folder in the view toolbar turns it off and on.
 Nothing is injected into the remote shell: add one of these to the server's shell startup file.
 
 bash (`~/.bashrc`):

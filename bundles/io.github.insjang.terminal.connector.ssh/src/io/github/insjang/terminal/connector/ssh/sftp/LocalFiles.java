@@ -162,10 +162,20 @@ public final class LocalFiles implements FileAccess {
 	 * folder is a folder (opened at its target), anything else (also a broken link) a file.
 	 */
 	private List<Entry> wslLinks(List<String> links) {
-		List<String> resolved = List.of();
-		if (distribution != null && !links.isEmpty()) {
-			String out = output(realpathCommand(distribution, links));
-			resolved = out == null ? List.of() : wslTargets(out, distribution);
+		List<String> resolved = new ArrayList<>();
+		if (distribution != null) {
+			// one wsl.exe per ~30000 characters: the Windows command line ends at 32767
+			for (int from = 0, to; from < links.size(); from = to) {
+				int length = 0;
+				for (to = from; to < links.size() && (to == from || length + links.get(to).length() < 30000); to++) {
+					length += links.get(to).length() + 3;
+				}
+				String out = output(realpathCommand(distribution, links.subList(from, to)));
+				List<String> part = out == null ? List.of() : wslTargets(out, distribution);
+				for (int i = 0; i < to - from; i++) {
+					resolved.add(i < part.size() ? part.get(i) : null);
+				}
+			}
 		}
 		List<Entry> entries = new ArrayList<>();
 		for (int i = 0; i < links.size(); i++) {

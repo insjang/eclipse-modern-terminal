@@ -133,7 +133,7 @@ public class FilesView extends ViewPart {
 	private TableViewer viewer;
 	private final List<Action> selectionActions = new ArrayList<>();
 	private Menu rowMenu;
-	private Action openAction, upAction, homeAction, refreshAction, uploadAction, newFolderAction, followAction;
+	private Action openAction, upAction, homeAction, refreshAction, uploadAction, newFolderAction;
 
 	// the terminal followed, the properties of its tab, and its files once open (UI thread only)
 	private ITerminalViewControl terminal;
@@ -173,7 +173,11 @@ public class FilesView extends ViewPart {
 		pathText = new Combo(browser, SWT.BORDER | SWT.DROP_DOWN);
 		pathText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 		pathText.addListener(SWT.DefaultSelection, e -> go(pathText.getText()));
-		pathText.addListener(SWT.Selection, e -> go(pathText.getText())); // a recent folder from the list
+		pathText.addListener(SWT.Selection, e -> { // a recent folder picked from the open list; arrow keys on the closed box only change the text
+			if (pathText.getListVisible()) {
+				go(pathText.getText());
+			}
+		});
 		// typing: the recent folders that start with the text
 		recentProposals = new SimpleContentProposalProvider();
 		recentProposals.setFiltering(true);
@@ -384,18 +388,6 @@ public class FilesView extends ViewPart {
 				() -> navigate(files.parentOf(cwd)));
 		homeAction = action(FilesMessages.home, images.getImageDescriptor(ISharedImages.IMG_ETOOL_HOME_NAV),
 				() -> navigate(home));
-		followAction = new Action(FilesMessages.followTerminal, IAction.AS_CHECK_BOX) {
-			@Override
-			public void run() {
-				followed = null;
-				if (isChecked() && terminal != null) {
-					followTerminal(terminal.getWorkingDirectory());
-				}
-			}
-		};
-		followAction.setImageDescriptor(images.getImageDescriptor(ISharedImages.IMG_ELCL_SYNCED));
-		followAction.setToolTipText(FilesMessages.followTerminal);
-		followAction.setChecked(true);
 		refreshAction = action(FilesMessages.refresh, ResourceLocator
 				.imageDescriptorFromBundle("org.eclipse.ui", "icons/full/elcl16/refresh_nav.png").orElse(null), //$NON-NLS-1$ //$NON-NLS-2$
 				this::refresh);
@@ -413,7 +405,6 @@ public class FilesView extends ViewPart {
 		toolbar.add(upAction);
 		toolbar.add(homeAction);
 		toolbar.add(refreshAction);
-		toolbar.add(followAction);
 
 		MenuManager menu = new MenuManager();
 		menu.add(openAction);
@@ -479,7 +470,7 @@ public class FilesView extends ViewPart {
 					return;
 				}
 				// onto a folder: into it, else into the folder shown
-				String dir = event.item != null && event.item.getData() instanceof Entry e && e.dir() ? e.path() : cwd;
+				String dir = event.item != null && event.item.getData() instanceof Entry e && e.dir() && !isParent(e) ? e.path() : cwd;
 				upload(paths, dir);
 			}
 		});
@@ -705,7 +696,7 @@ public class FilesView extends ViewPart {
 	}
 
 	private boolean followTerminal(TerminalDirectory dir) {
-		if (dir == null || !followAction.isChecked() || files == null || running.get() > 0
+		if (dir == null || files == null || running.get() > 0
 				|| !RemoteFiles.sameHost(dir.host(), hostNames)) {
 			return false;
 		}

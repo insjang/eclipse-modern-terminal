@@ -93,7 +93,6 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 ### 셸 폴더 따라가기 (OSC 7)
 
 - 원격 셸이 현재 폴더를 알려 주면 `cd` 할 때마다 Files 뷰가 따라감
-- 뷰 툴바의 Follow Terminal Folder로 켜고 끔
 - 원격 셸에 아무것도 자동으로 넣지 않음: 서버의 셸 시작 파일에 아래 중 하나를 추가
 
 bash (`~/.bashrc`):
