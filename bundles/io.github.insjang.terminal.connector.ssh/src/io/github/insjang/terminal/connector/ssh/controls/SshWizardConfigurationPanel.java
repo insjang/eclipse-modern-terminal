@@ -56,7 +56,8 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	private SshSettings sshSettings;
 	private ISettingsPage sshSettingsPage;
 	private Button passwordButton;
-	private List<SshSession> sessions = List.of();
+	// loaded here, not only in doRestoreWidgetValues: that is skipped while the dialog has no settings yet
+	private List<SshSession> sessions = new ArrayList<>(SshSession.load());
 	private Combo sessionCombo;
 	private Button deleteButton;
 
