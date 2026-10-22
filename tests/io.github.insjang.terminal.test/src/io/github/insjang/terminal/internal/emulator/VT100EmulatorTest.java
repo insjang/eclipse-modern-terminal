@@ -396,6 +396,13 @@ public class VT100EmulatorTest {
 				() -> assertEquals(List.of("TITLE1", "TITLE2"), control.getAllTitles()));
 	}
 
+	@Test
+	public void testEscapeInsideOscStartsNewSequence() {
+		// as xterm: ESC not followed by '\' drops the OSC, and "[31m" is a color, not text
+		run("\033]0;t\033[31mRED");
+		assertAll(() -> assertTextEquals("RED"), () -> assertEquals(List.of(), control.getAllTitles()));
+	}
+
 	private static TerminalDirectory dir(String host, String path) {
 		return new TerminalDirectory(host, path);
 	}

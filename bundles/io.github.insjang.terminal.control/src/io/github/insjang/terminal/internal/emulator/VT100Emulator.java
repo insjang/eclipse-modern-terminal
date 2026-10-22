@@ -464,7 +464,9 @@ public class VT100Emulator implements ControlListener {
 				if (character == '\\') {
 					processAnsiOsCommand();
 				} else {
-					Logger.log("Unsupported escape sequence: escape '" + ansiOsCommand + " \\e" + character + "'"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+					// as xterm: the ESC drops the OSC and starts a new sequence with this character
+					ansiState = ANSISTATE_ESCAPE;
+					pushBackChar(character);
 				}
 				break;
 
