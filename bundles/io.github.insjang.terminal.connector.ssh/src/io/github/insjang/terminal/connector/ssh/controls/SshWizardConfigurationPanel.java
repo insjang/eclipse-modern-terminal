@@ -32,6 +32,7 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Label;
 import io.github.insjang.terminal.connector.AbstractSettingsPage;
 import io.github.insjang.terminal.connector.ISettingsPage;
+import io.github.insjang.terminal.connector.ssh.connector.ISshSettings;
 import io.github.insjang.terminal.connector.ssh.connector.SshConnector;
 import io.github.insjang.terminal.connector.ssh.connector.SshPasswords;
 import io.github.insjang.terminal.connector.ssh.connector.SshSession;
@@ -314,6 +315,21 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		}
 	}
 
+	// empty fields for a new session; Save... then names it user@host
+	private void newSession() {
+		sessionCombo.deselectAll();
+		deleteButton.setEnabled(false);
+		sshSettings.setHost(""); //$NON-NLS-1$
+		sshSettings.setPort(Integer.toString(ISshSettings.DEFAULT_SSH_PORT));
+		sshSettings.setUser(getDefaultUser());
+		sshSettings.setKeyFile(""); //$NON-NLS-1$
+		sshSettings.setTimeout("0"); //$NON-NLS-1$
+		sshSettings.setKeepalive("300"); //$NON-NLS-1$
+		sshSettings.setPassword(""); //$NON-NLS-1$
+		sshSettingsPage.loadSettings();
+		passwordButton.setSelection(false);
+	}
+
 	private void deleteSession() {
 		SshSession session = selected();
 		if (session == null) {
@@ -345,7 +361,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 
 	private void createSessionsUI(Composite parent) {
 		Composite panel = new Composite(parent, SWT.NONE);
-		GridLayout layout = new GridLayout(4, false);
+		GridLayout layout = new GridLayout(5, false);
 		layout.marginHeight = 0;
 		layout.marginWidth = 0;
 		panel.setLayout(layout);
@@ -356,6 +372,10 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sessionCombo = new Combo(panel, SWT.READ_ONLY);
 		sessionCombo.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 		sessionCombo.addListener(SWT.Selection, e -> select(selected()));
+		Button newButton = new Button(panel, SWT.PUSH);
+		newButton.setText(Messages.SshWizardConfigurationPanel_new);
+		newButton.setToolTipText(Messages.SshWizardConfigurationPanel_newTooltip);
+		newButton.addListener(SWT.Selection, e -> newSession());
 		Button saveButton = new Button(panel, SWT.PUSH);
 		saveButton.setText(Messages.SshWizardConfigurationPanel_save);
 		saveButton.setToolTipText(Messages.SshWizardConfigurationPanel_saveTooltip);
