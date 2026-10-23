@@ -15,6 +15,7 @@ Require-Bundle: org.eclipse.core.expressions;bundle-version="[3.9.0,4.0.0)",
  org.eclipse.ui.ide;bundle-version="[3.22.0,4.0.0)";resolution:=optional,
  org.eclipse.ui.editors;bundle-version="[3.20.0,4.0.0)";resolution:=optional,
  org.eclipse.text;bundle-version="[3.14.0,4.0.0)";resolution:=optional,
+ org.eclipse.jface.text;bundle-version="[3.24.0,4.0.0)";resolution:=optional,
  org.eclipse.e4.ui.model.workbench;bundle-version="[2.4.0,3.0.0)",
  org.eclipse.e4.ui.workbench;bundle-version="[1.18.0,2.0.0)",
  io.github.insjang.terminal.view.core;bundle-version="[1.0.0,2.0.0)",
@@ -39,7 +40,7 @@ Automatic-Module-Name: io.github.insjang.terminal.view.ui
 Import-Package: io.github.insjang.terminal.connector;version="[1.0.0,2.0.0)",
  io.github.insjang.terminal.connector.provider;version="[1.0.0,2.0.0)",
  io.github.insjang.terminal.control;version="[1.2.0,2.0.0)",
- io.github.insjang.terminal.model;version="[1.0.0,2.0.0)"
+ io.github.insjang.terminal.model;version="[1.2.0,2.0.0)"
 Service-Component: OSGI-INF/io.github.insjang.terminal.view.ui.internal.ConsoleManager.xml,
  OSGI-INF/io.github.insjang.terminal.view.ui.internal.LauncherDelegateManager.xml,
  OSGI-INF/io.github.insjang.terminal.view.ui.internal.TerminalService.xml
