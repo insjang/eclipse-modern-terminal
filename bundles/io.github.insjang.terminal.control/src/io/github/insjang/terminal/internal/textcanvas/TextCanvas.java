@@ -810,6 +810,22 @@ public class TextCanvas extends GridCanvas {
 		fCellCanvasModel.setSelectionAnchor(new Point(0, 0));
 	}
 
+	/** @return the lines as shown, scrollback included: what the selection's lines count */
+	public ITerminalTextDataReadOnly getTerminalText() {
+		return fCellCanvasModel.getTerminalText();
+	}
+
+	/**
+	 * Selects the cells from the start to the end (both included) and scrolls them into view.
+	 */
+	public void selectAndReveal(int startLine, int startColumn, int endLine, int endColumn) {
+		fCellCanvasModel.setSelection(startLine, endLine, startColumn, endColumn);
+		fCellCanvasModel.setSelectionAnchor(new Point(startColumn, startLine));
+		int width = endLine == startLine ? endColumn - startColumn + 1 : 1;
+		revealRect(new Rectangle(startColumn * getCellWidth(), startLine * getCellHeight(), width * getCellWidth(),
+				(endLine - startLine + 1) * getCellHeight()));
+	}
+
 	/**
 	 * @since 4.1
 	 */

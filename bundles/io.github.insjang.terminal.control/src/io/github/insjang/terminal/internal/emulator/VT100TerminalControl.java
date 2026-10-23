@@ -164,6 +164,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private InputStreamReader fInputStreamReader;
 
 	private ICommandInputField fCommandInputField;
+	private TerminalFindBar fFindBar;
 
 	private volatile TerminalState fState;
 
@@ -835,6 +836,16 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		return fCtlText;
 	}
 
+	/** Opens the find bar above the terminal, or puts the focus back in it. */
+	void openFind() {
+		if (fFindBar == null || fFindBar.isDisposed()) {
+			fFindBar = new TerminalFindBar(fWndParent, fCtlText);
+			fFindBar.moveAbove(fCtlText);
+			fWndParent.layout(true);
+		}
+		fFindBar.open();
+	}
+
 	@Override
 	public Control getRootControl() {
 		return fWndParent;
@@ -1041,6 +1052,11 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			}
 			if (editActionAccelerators.isPasteAction(accelerator)) {
 				paste();
+				return;
+			}
+			if ((event.stateMask & SWT.MODIFIER_MASK) == (SWT.CTRL | SWT.SHIFT) && event.keyCode == 'f') {
+				event.doit = false;
+				openFind();
 				return;
 			}
 

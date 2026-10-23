@@ -27,6 +27,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | Ctrl+클릭 | URL과 단순 파일 경로 | 괄호·따옴표·백틱 안 경로, Windows 절대 경로, WSL 경로(`/mnt/c/...`, `/home/...`), 한글 경로도 열기 |
 | 파일 끌어 놓기 | 지원 안 함 | 경로 입력, 셸에 맞게 따옴표 처리 (bash, cmd, PowerShell) |
 | 색 | 글자색을 시스템에서 가져옴: 다크 테마에서 거의 검정 | Tango 기반, Eclipse 테마에 맞춤, Tango Dark·Light·Classic 프리셋 |
+| 찾기 | 없음 | Ctrl+Shift+F: 스크롤 기록 포함, 대소문자 구분, 정규식, 위·아래 |
 | BEL, OSC 9, OSC 777 | 무시 | 탭에 표시, Eclipse가 뒤에 있으면 데스크톱 알림, 소리 없음 |
 | 기본값 | 블록 커서, 1000줄 | 세로 막대 커서, 선택 시 복사, 10000줄 |
 | SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH 방식 known_hosts, 세션 저장 |
@@ -62,6 +63,15 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 - Preferences → Modern Terminal (하위에 Local Terminal)
 - 색, 커서, 선택 시 복사, 버퍼 줄 수, 셸 목록은 Eclipse Terminal 설정과 별개
 - Load Presets: Modern Terminal Defaults (Restore Defaults 값), Tango Dark, Tango Light, Classic Terminal (Eclipse Terminal 색), Eclipse Light, Eclipse Dark
+
+## 찾기
+
+- 터미널에서 Ctrl+Shift+F: 위쪽에 찾기 표시줄 (선택한 글자가 있으면 그 글자로)
+- 입력하면 마지막 일치 항목, Enter는 위쪽 항목, Shift+Enter는 아래쪽 항목, 끝에 닿으면 반대편으로, 찾은 부분을 선택하고 화면에 보이게 스크롤
+- Aa: 대소문자 구분, .*: Java 정규식
+- 다음 줄로 이어진 긴 줄은 한 줄로 검색, 한글·CJK·이모지 같은 넓은 문자도 칸 위치에 맞게 선택
+- Esc로 닫으면 터미널로 포커스 복귀, 다시 Ctrl+Shift+F면 찾기 표시줄로 포커스 이동
+- 새 출력이 오면 전과 같이 끝으로 스크롤: 프로그램이 출력 중일 때 찾은 위치를 보려면 뷰 툴바의 Scroll Lock 켜기
 
 ## 알림
 

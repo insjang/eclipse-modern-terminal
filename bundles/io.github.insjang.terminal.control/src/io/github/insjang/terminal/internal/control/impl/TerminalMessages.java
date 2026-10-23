@@ -62,6 +62,14 @@ public class TerminalMessages extends NLS {
 	public static String BAR_CURSOR;
 	public static String AUTO_COPY_SELECTION;
 	public static String DESKTOP_NOTIFICATIONS;
+	public static String FIND_MESSAGE;
+	public static String FIND_CASE;
+	public static String FIND_REGEX;
+	public static String FIND_PREVIOUS;
+	public static String FIND_NEXT;
+	public static String FIND_NONE;
+	public static String FIND_BAD_REGEX;
+	public static String FIND_COUNT;
 	public static String RESTORE_TERMINALS;
 	public static String BUFFERLINES;
 

@@ -26,6 +26,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Ctrl+click | URLs and plain file paths | also paths in brackets, quotes or backticks, absolute Windows paths, WSL paths (`/mnt/c/...`, `/home/...`), Hangul paths |
 | Drop files | not supported | types their paths, quoted for the shell (bash, cmd, PowerShell) |
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
+| Find | none | Ctrl+Shift+F: the scrollback, match case, regular expressions, up and down |
 | Bell, OSC 9, OSC 777 | ignored | the tab is marked; a desktop notification while Eclipse is in the background; never a sound |
 | Defaults | block cursor, 1000 lines | bar cursor, copy on select, 10000 lines |
 | SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH-style known_hosts, saved sessions |
@@ -61,6 +62,16 @@ Local shells (cmd, PowerShell, Git Bash, WSL distributions, detected on start) a
 Preferences > Modern Terminal (and Local Terminal under it).
 Colors, cursor, copy on select, buffer lines and the shell list are separate from the Eclipse Terminal's.
 Load Presets offers Modern Terminal Defaults (what Restore Defaults gives), Tango Dark, Tango Light, Classic Terminal (the Eclipse Terminal's colors), Eclipse Light and Eclipse Dark.
+
+## Find
+
+Ctrl+Shift+F in a terminal opens a find bar above it (with the selected text, if any).
+
+- Typing finds the last match; Enter goes to the one above, Shift+Enter to the one below, round at the ends; the match is selected and scrolled into view
+- Aa: match case; .*: a Java regular expression
+- A line that ran on to the next one is searched as one; wide characters (Hangul, CJK, emoji) are matched by their cells
+- Esc closes it and the focus goes back to the terminal; Ctrl+Shift+F again puts the focus back in the bar
+- New output scrolls to the end as before: turn on Scroll Lock in the view toolbar to read a match while a program is still writing
 
 ## Notifications
 
