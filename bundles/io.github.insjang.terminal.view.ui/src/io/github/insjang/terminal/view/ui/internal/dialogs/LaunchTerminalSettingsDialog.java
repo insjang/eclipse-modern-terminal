@@ -161,6 +161,8 @@ public class LaunchTerminalSettingsDialog extends TrayDialog {
 	public LaunchTerminalSettingsDialog(Shell shell, long start) {
 		super(shell);
 		this.start = start;
+		// not modal: a host name or password can be copied from an editor while it is open
+		setShellStyle(getShellStyle() & ~SWT.APPLICATION_MODAL | SWT.MODELESS);
 
 		initializeDialogSettings();
 

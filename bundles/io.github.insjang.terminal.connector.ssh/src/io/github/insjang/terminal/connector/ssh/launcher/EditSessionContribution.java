@@ -18,6 +18,7 @@ import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.IMessageProvider;
 import org.eclipse.jface.dialogs.TitleAreaDialog;
 import org.eclipse.swt.custom.CTabItem;
+import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
@@ -77,6 +78,7 @@ public class EditSessionContribution extends CompoundContributionItem {
 
 		EditSessionDialog(Shell shell, Map<String, Object> properties) {
 			super(shell);
+			setShellStyle(getShellStyle() & ~SWT.APPLICATION_MODAL | SWT.MODELESS); // as Launch Terminal: editors stay usable
 			this.properties = properties;
 		}
 
