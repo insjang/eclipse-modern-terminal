@@ -109,6 +109,10 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private int fNormalCursorColumn;
 	private boolean fVT100LineWrapping;
 	private ScrollRegion fScrollRegion = ScrollRegion.FULL_WINDOW;
+	/** the line of the last prompt (OSC 133;A) when it was marked, -1 for none; lines only move up since */
+	private int fPromptLine = -1;
+	/** an output mark (C) came after that prompt and no D yet */
+	private boolean fCommandOpen;
 
 	public VT100EmulatorBackend(ITerminalTextData terminal) {
 		fTerminal = terminal;
@@ -331,24 +335,31 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				// an output mark stays: the command before printed nothing, its output ends here
 				fTerminal.setLineMark(line, ITerminalTextDataReadOnly.MARK_PROMPT
 						| fTerminal.getLineMark(line) & ITerminalTextDataReadOnly.MARK_OUTPUT);
+				fPromptLine = line;
+				fCommandOpen = false;
 				break;
 			case 'C':
 				fTerminal.setLineMark(line, fTerminal.getLineMark(line) | ITerminalTextDataReadOnly.MARK_OUTPUT);
+				fCommandOpen = fPromptLine >= 0;
 				break;
 			case 'D':
-				boolean ran = false;
-				for (int l = line; l >= 0; l--) {
-					int mark = fTerminal.getLineMark(l);
-					// on a prompt line the output mark is the command before's
-					ran |= mark == ITerminalTextDataReadOnly.MARK_OUTPUT;
-					if ((mark & ITerminalTextDataReadOnly.MARK_PROMPT) != 0) {
-						if (ran) {
-							mark &= ~(ITerminalTextDataReadOnly.MARK_FAILED | ITerminalTextDataReadOnly.MARK_SUCCEEDED);
-							fTerminal.setLineMark(l, mark | (exitStatus != 0 ? ITerminalTextDataReadOnly.MARK_FAILED
-									: ITerminalTextDataReadOnly.MARK_SUCCEEDED));
-						}
-						break;
-					}
+				// only once per command (Enter on an empty line runs nothing, a repeated D is ignored)
+				if (!fCommandOpen) {
+					break;
+				}
+				fCommandOpen = false;
+				// the prompt has moved up by the lines dropped from the top since: the first prompt
+				// at or above where it was is it, so the walk is as long as that move (linear in the output)
+				int l = Math.min(fPromptLine, fTerminal.getHeight() - 1);
+				while (l >= 0 && (fTerminal.getLineMark(l) & ITerminalTextDataReadOnly.MARK_PROMPT) == 0) {
+					l--;
+				}
+				fPromptLine = l; // -1 when it has gone: later commands are not walked for
+				if (l >= 0) {
+					int mark = fTerminal.getLineMark(l)
+							& ~(ITerminalTextDataReadOnly.MARK_FAILED | ITerminalTextDataReadOnly.MARK_SUCCEEDED);
+					fTerminal.setLineMark(l, mark | (exitStatus != 0 ? ITerminalTextDataReadOnly.MARK_FAILED
+							: ITerminalTextDataReadOnly.MARK_SUCCEEDED));
 				}
 				break;
 			default:

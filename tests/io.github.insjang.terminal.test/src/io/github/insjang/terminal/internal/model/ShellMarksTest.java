@@ -115,6 +115,19 @@ public class ShellMarksTest {
 	}
 
 	@Test
+	public void testRepeatedMarksAreCheap() {
+		// a full 10000 line scrollback, then a flood of D and of C, newline, D: no walk over the buffer each time
+		data.setMaxHeight(10000);
+		run(A + "$ " + B + "x\r\n" + C + "\r\n".repeat(12000));
+		long start = System.nanoTime();
+		run(D(1).repeat(100000));
+		run((C + "\r\n" + D(1)).repeat(100000));
+		run((A + C + D(1)).repeat(100000));
+		long ms = (System.nanoTime() - start) / 1000000;
+		assertEquals(true, ms < 1000, "took " + ms + " ms");
+	}
+
+	@Test
 	public void testEraseLineKeepsTheMark() {
 		run(A + "$ " + B + "\r\033[2K$ " + B);
 		assertEquals(MARK_PROMPT, data.getLineMark(0));
