@@ -290,6 +290,18 @@ public class TerminalTextDataFastScroll implements ITerminalTextData {
 	}
 
 	@Override
+	public int getLineMark(int line) {
+		validateLineParameter(line);
+		return fData.getLineMark(getPositionOfLine(line));
+	}
+
+	@Override
+	public void setLineMark(int line, int mark) {
+		validateLineParameter(line);
+		fData.setLineMark(getPositionOfLine(line), mark);
+	}
+
+	@Override
 	public boolean isWrappedLine(int line) {
 		validateLineParameter(line);
 		return fData.isWrappedLine(getPositionOfLine(line));

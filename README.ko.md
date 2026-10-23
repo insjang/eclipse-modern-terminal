@@ -27,6 +27,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | Ctrl+클릭 | URL과 단순 파일 경로 | 괄호·따옴표·백틱 안 경로, Windows 절대 경로, WSL 경로(`/mnt/c/...`, `/home/...`), 한글 경로도 열기 |
 | 파일 끌어 놓기 | 지원 안 함 | 경로 입력, 셸에 맞게 따옴표 처리 (bash, cmd, PowerShell) |
 | 색 | 글자색을 시스템에서 가져옴: 다크 테마에서 거의 검정 | Tango 기반, Eclipse 테마에 맞춤, Tango Dark·Light·Classic 프리셋 |
+| 셸 통합 (OSC 133) | 없음 | Ctrl+Up/Down으로 프롬프트 사이 이동, 실패한 명령 표시, 마지막 명령 출력 복사 |
 | 찾기 | 없음 | Ctrl+Shift+F: 스크롤 기록 포함, 대소문자 구분, 정규식, 위·아래 |
 | BEL, OSC 9, OSC 777 | 무시 | 탭에 표시, Eclipse가 뒤에 있으면 데스크톱 알림, 소리 없음 |
 | 기본값 | 블록 커서, 1000줄 | 세로 막대 커서, 선택 시 복사, 10000줄 |
@@ -72,6 +73,45 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 - 다음 줄로 이어진 긴 줄은 한 줄로 검색, 한글·CJK·이모지 같은 넓은 문자도 칸 위치에 맞게 선택
 - Esc로 닫으면 터미널로 포커스 복귀, 다시 Ctrl+Shift+F면 찾기 표시줄로 포커스 이동
 - 새 출력이 오면 전과 같이 끝으로 스크롤: 프로그램이 출력 중일 때 찾은 위치를 보려면 뷰 툴바의 Scroll Lock 켜기
+
+## 셸 통합 (OSC 133)
+
+- 프롬프트를 표시하는 셸 (OSC 133, VS Code·Windows Terminal과 같은 방식)에서 사용 가능
+- Ctrl+Up, Ctrl+Down: 뷰 맨 위 프롬프트의 이전·다음 프롬프트로 이동
+- 실패한 명령 (종료 코드가 0이 아님)의 프롬프트 왼쪽에 빨간 막대
+- 컨텍스트 메뉴의 Copy Output of Last Command: 마지막 명령의 출력을 선택하고 복사
+- 표시는 줄과 함께 스크롤 기록으로 올라가고, 줄이 버퍼에서 빠지면 함께 사라짐
+- 셸에 아무것도 주입하지 않음: 셸 시작 파일에 아래 중 하나 추가 (OSC 7 설정이 있으면 그 뒤에 두어야 먼저 실행되어 종료 코드를 받음)
+
+bash (`~/.bashrc`):
+
+```bash
+# Modern Terminal: mark prompts, commands and their exit status (OSC 133)
+__mt_osc133() {
+	printf '\e]133;D;%s\a\e]133;A\a' "$?"
+}
+PROMPT_COMMAND="__mt_osc133${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+PS1="$PS1"'\[\e]133;B\a\]'
+PS0='\e]133;C\a'
+```
+
+zsh (`~/.zshrc`):
+
+```zsh
+# Modern Terminal: mark prompts, commands and their exit status (OSC 133)
+__mt_osc133_precmd() {
+	printf '\e]133;D;%s\a\e]133;A\a' "$?"
+}
+__mt_osc133_preexec() {
+	printf '\e]133;C\a'
+}
+autoload -Uz add-zsh-hook
+precmd_functions=(__mt_osc133_precmd $precmd_functions) # first, to see the exit status
+add-zsh-hook preexec __mt_osc133_preexec
+PS1="$PS1"$'%{\e]133;B\a%}'
+```
+
+- WezTerm·Windows Terminal의 셸 통합 스크립트를 쓰는 셸은 이미 OSC 133을 보내므로 설정 불필요
 
 ## 알림
 

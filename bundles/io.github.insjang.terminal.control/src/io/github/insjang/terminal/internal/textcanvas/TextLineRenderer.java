@@ -83,6 +83,11 @@ public class TextLineRenderer implements ILinelRenderer {
 				setupGC(gc, segment.getStyle());
 				drawText(gc, x, y, colFirst, segment.getColumn(), segment.getText(), true);
 			}
+			if (colFirst == 0 && (getTerminalText().getLineMark(line) & ITerminalTextDataReadOnly.MARK_FAILED) != 0) {
+				// the prompt of a command that failed (OSC 133;D): a red bar at the left edge
+				gc.setBackground(fStyleMap.getForegroundColor(TerminalStyle.getStyle(TerminalColor.RED, TerminalColor.BLACK)));
+				gc.fillRectangle(x, y, Math.max(2, getCellWidth() / 4), height);
+			}
 			drawCursor(model, gc, line, x, y, colFirst);
 			if (fModel.hasHoverSelection(line)) {
 				if (DEBUG_HOVER) {

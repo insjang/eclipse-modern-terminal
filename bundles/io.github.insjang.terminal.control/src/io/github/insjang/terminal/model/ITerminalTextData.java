@@ -175,4 +175,12 @@ public interface ITerminalTextData extends ITerminalTextDataReadOnly {
 	default void clearWrappedLine(int line) {
 	}
 
+	/**
+	 * Sets the shell integration marks of a line, see {@link #getLineMark(int)}.
+	 * Cleaning the line clears them.
+	 * @since 1.2
+	 */
+	default void setLineMark(int line, int mark) {
+	}
+
 }

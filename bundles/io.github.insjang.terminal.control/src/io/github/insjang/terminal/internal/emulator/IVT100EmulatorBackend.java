@@ -248,6 +248,13 @@ public interface IVT100EmulatorBackend {
 	void processReverseLineFeed();
 
 	/**
+	 * Shell integration (OSC 133): 'A' a prompt starts on the cursor line, 'C' the
+	 * command's output starts there, 'D' the command finished with the exit status
+	 * (marked on its prompt line, if it ran: Enter on an empty line runs nothing).
+	 */
+	void setShellMark(char command, int exitStatus);
+
+	/**
 	 * Replaces characters from the cursor position with space characters.
 	 *
 	 * @param n  number of characters to replace

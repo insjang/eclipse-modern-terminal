@@ -529,6 +529,19 @@ public class VT100Emulator implements ControlListener {
 			} else {
 				Logger.log("Ignoring malformed OSC 7: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
+		} else if (command.startsWith("133;") && command.length() >= 5) { //$NON-NLS-1$
+			// shell integration: A prompt, B command line, C output, D[;status] finished
+			char mark = command.charAt(4);
+			int status = 0;
+			if (mark == 'D' && command.startsWith("133;D;")) { //$NON-NLS-1$
+				String s = command.substring(6).split(";", 2)[0]; //$NON-NLS-1$
+				try {
+					status = Integer.parseInt(s.strip());
+				} catch (NumberFormatException e) {
+					status = 0; // no status given: not a failure
+				}
+			}
+			text.setShellMark(mark, status);
 		} else if (command.startsWith("9;")) { //$NON-NLS-1$
 			// iTerm2's notification; "9;<number>;..." are ConEmu's commands (9;4 progress), not text
 			String message = command.substring(2);

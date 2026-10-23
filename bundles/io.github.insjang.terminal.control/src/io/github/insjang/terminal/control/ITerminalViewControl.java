@@ -89,6 +89,17 @@ public interface ITerminalViewControl {
 
 	String getSelection();
 
+	/**
+	 * Selects the output of the last command (shell integration, OSC 133) and puts
+	 * it on the clipboard.
+	 *
+	 * @return false where the shell has not marked any output
+	 * @since 1.2
+	 */
+	default boolean copyLastCommandOutput() {
+		return false;
+	}
+
 	TerminalState getState();
 
 	Clipboard getClipboard();

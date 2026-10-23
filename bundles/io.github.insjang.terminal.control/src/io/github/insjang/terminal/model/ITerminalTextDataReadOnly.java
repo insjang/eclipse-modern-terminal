@@ -104,4 +104,25 @@ public interface ITerminalTextDataReadOnly {
 		return null;
 	}
 
+	/** Shell integration (OSC 133): a prompt starts on the line. @since 1.2 */
+	int MARK_PROMPT = 1;
+	/** Shell integration (OSC 133): a command's output starts on the line. @since 1.2 */
+	int MARK_OUTPUT = 2;
+	/** On a prompt line: the command entered there failed (exit status not 0). @since 1.2 */
+	int MARK_FAILED = 4;
+	/** On a prompt line: the command entered there succeeded. @since 1.2 */
+	int MARK_SUCCEEDED = 8;
+
+	/**
+	 * The shell integration marks of a line; they move with it into the scrollback
+	 * and go with it.
+	 *
+	 * @param line must be &gt;=0 and &lt; height
+	 * @return the MARK_* bits, 0 for none
+	 * @since 1.2
+	 */
+	default int getLineMark(int line) {
+		return 0;
+	}
+
 }

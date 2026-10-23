@@ -815,6 +815,17 @@ public class TextCanvas extends GridCanvas {
 		return fCellCanvasModel.getTerminalText();
 	}
 
+	/** @return the first line in view */
+	public int getTopLine() {
+		return getCellHeight() > 0 ? getViewRectangle().y / getCellHeight() : 0;
+	}
+
+	/** Scrolls the line to the top of the view, as far as the lines below it allow. */
+	public void scrollToLine(int line) {
+		getVerticalBar().setSelection(line * getCellHeight());
+		scrollY(getVerticalBar());
+	}
+
 	/**
 	 * Selects the cells from the start to the end (both included) and scrolls them into view.
 	 */

@@ -46,6 +46,7 @@ import io.github.insjang.terminal.view.ui.internal.actions.RenameTerminalAction;
 import io.github.insjang.terminal.view.ui.internal.actions.SelectEncodingAction;
 import io.github.insjang.terminal.view.ui.internal.actions.TerminalActionClearAll;
 import io.github.insjang.terminal.view.ui.internal.actions.TerminalActionCopy;
+import io.github.insjang.terminal.view.ui.internal.actions.TerminalActionCopyLastOutput;
 import io.github.insjang.terminal.view.ui.internal.actions.TerminalActionPaste;
 import io.github.insjang.terminal.view.ui.internal.actions.TerminalActionSelectAll;
 import org.eclipse.ui.IWorkbenchActionConstants;
@@ -330,6 +331,14 @@ public class TabFolderMenuHandler extends PlatformObject {
 	protected void doCreateContextMenuActions() {
 		// Create and add the copy action
 		add(new TerminalActionCopy() {
+			@Override
+			protected ITerminalViewControl getTarget() {
+				return getActiveTerminalViewControl();
+			}
+		});
+
+		// the output of the last command, where the shell marks it (OSC 133)
+		add(new TerminalActionCopyLastOutput() {
 			@Override
 			protected ITerminalViewControl getTarget() {
 				return getActiveTerminalViewControl();

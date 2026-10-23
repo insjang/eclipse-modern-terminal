@@ -38,6 +38,8 @@ public class TerminalTextDataStore implements ITerminalTextData {
 	final private BitSet fWrappedLines = new BitSet();
 	/** per line, the clusters on it by first column; sparse, most lines have none */
 	private Map<Integer, String>[] fClusters;
+	/** per line, its shell integration marks */
+	private int[] fMarks = new int[0];
 
 	public TerminalTextDataStore() {
 		fChars = new char[0][];
@@ -74,6 +76,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			fStyle = (TerminalStyle[][]) resizeArray(fStyle, height);
 			fChars = (char[][]) resizeArray(fChars, height);
 			fClusters = (Map<Integer, String>[]) resizeArray(fClusters, height);
+			fMarks = (int[]) resizeArray(fMarks, height);
 		}
 		// clean the new lines
 		if (height > fHeight) {
@@ -264,6 +267,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 				fChars[i] = fChars[i - shift];
 				fStyle[i] = fStyle[i - shift];
 				fClusters[i] = fClusters[i - shift];
+				fMarks[i] = fMarks[i - shift];
 				fWrappedLines.set(i, fWrappedLines.get(i - shift));
 			}
 			// then clean the opened lines
@@ -274,6 +278,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 				fChars[i] = fChars[i - shift];
 				fStyle[i] = fStyle[i - shift];
 				fClusters[i] = fClusters[i - shift];
+				fMarks[i] = fMarks[i - shift];
 				fWrappedLines.set(i, fWrappedLines.get(i - shift));
 			}
 			cleanLines(startLine, Math.min(shift, getHeight() - startLine));
@@ -331,6 +336,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			fChars = new char[n][];
 			fStyle = new TerminalStyle[n][];
 			fClusters = newClusters(n);
+			fMarks = new int[n];
 		}
 		for (int i = 0; i < n; i++) {
 			copyLine(source, i, i);
@@ -366,6 +372,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fChars[destLine] = source.getChars(sourceLine);
 		fStyle[destLine] = source.getStyles(sourceLine);
 		fWrappedLines.set(destLine, source.isWrappedLine(sourceLine));
+		fMarks[destLine] = source.getLineMark(sourceLine);
 		fClusters[destLine] = null;
 		if (fChars[destLine] != null) {
 			for (int col = 0; col < fChars[destLine].length; col++) {
@@ -398,6 +405,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fStyle[line] = styles.clone();
 		fWrappedLines.clear(line);
 		fClusters[line] = null;
+		fMarks[line] = 0;
 	}
 
 	@Override
@@ -416,6 +424,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fStyle[line] = null;
 		fWrappedLines.clear(line);
 		fClusters[line] = null;
+		fMarks[line] = 0;
 	}
 
 	@Override
@@ -436,6 +445,16 @@ public class TerminalTextDataStore implements ITerminalTextData {
 	@Override
 	public void setCursorLine(int line) {
 		fCursorLine = line;
+	}
+
+	@Override
+	public int getLineMark(int line) {
+		return fMarks[line];
+	}
+
+	@Override
+	public void setLineMark(int line, int mark) {
+		fMarks[line] = mark;
 	}
 
 	@Override

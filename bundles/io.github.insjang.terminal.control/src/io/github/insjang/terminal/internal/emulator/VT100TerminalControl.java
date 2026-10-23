@@ -117,7 +117,9 @@ import io.github.insjang.terminal.internal.textcanvas.PipedInputStream;
 import io.github.insjang.terminal.internal.textcanvas.PollingTextCanvasModel;
 import io.github.insjang.terminal.internal.textcanvas.TextCanvas;
 import io.github.insjang.terminal.internal.textcanvas.TextLineRenderer;
+import io.github.insjang.terminal.internal.model.ShellMarks;
 import io.github.insjang.terminal.model.ITerminalTextData;
+import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
 import io.github.insjang.terminal.model.ITerminalTextDataSnapshot;
 import io.github.insjang.terminal.model.TerminalColor;
 import io.github.insjang.terminal.model.TerminalTextDataFactory;
@@ -836,6 +838,39 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		return fCtlText;
 	}
 
+	/**
+	 * Scrolls the prompt before (or after) the one at the top of the view to the top
+	 * (OSC 133 marks); past the last one, to the end.
+	 *
+	 * @return false where there are no prompt marks
+	 */
+	boolean goToPrompt(boolean up) {
+		ITerminalTextDataReadOnly data = fCtlText.getTerminalText();
+		if (ShellMarks.previousPrompt(data, data.getHeight()) < 0) {
+			return false;
+		}
+		int top = fCtlText.getTopLine();
+		int line = up ? ShellMarks.previousPrompt(data, top) : ShellMarks.nextPrompt(data, top);
+		if (line >= 0) {
+			fCtlText.scrollToLine(line);
+		} else if (!up) {
+			fCtlText.scrollToLine(data.getHeight());
+		}
+		return true;
+	}
+
+	@Override
+	public boolean copyLastCommandOutput() {
+		ITerminalTextDataReadOnly data = fCtlText.getTerminalText();
+		int[] lines = ShellMarks.lastOutput(data);
+		if (lines == null) {
+			return false;
+		}
+		fCtlText.selectAndReveal(lines[0], 0, lines[1], data.getWidth() - 1);
+		copy();
+		return true;
+	}
+
 	/** Opens the find bar above the terminal, or puts the focus back in it. */
 	void openFind() {
 		if (fFindBar == null || fFindBar.isDisposed()) {
@@ -1052,6 +1087,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			}
 			if (editActionAccelerators.isPasteAction(accelerator)) {
 				paste();
+				return;
+			}
+			if ((event.stateMask & SWT.MODIFIER_MASK) == SWT.CTRL
+					&& (event.keyCode == SWT.ARROW_UP || event.keyCode == SWT.ARROW_DOWN)
+					&& goToPrompt(event.keyCode == SWT.ARROW_UP)) {
+				event.doit = false;
 				return;
 			}
 			if ((event.stateMask & SWT.MODIFIER_MASK) == (SWT.CTRL | SWT.SHIFT) && event.keyCode == 'f') {

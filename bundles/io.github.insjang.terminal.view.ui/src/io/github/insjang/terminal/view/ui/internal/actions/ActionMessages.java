@@ -31,6 +31,8 @@ public class ActionMessages extends NLS {
 	public static String CUT;
 	public static String PASTE;
 	public static String SELECTALL;
+	public static String COPY_LAST_OUTPUT;
+	public static String COPY_LAST_OUTPUT_TOOLTIP;
 	public static String CLEARALL;
 
 }

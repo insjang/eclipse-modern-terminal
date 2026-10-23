@@ -315,6 +315,11 @@ class TerminalTextDataSnapshot implements ITerminalTextDataSnapshot {
 	}
 
 	@Override
+	public int getLineMark(int line) {
+		return fSnapshot.getLineMark(line);
+	}
+
+	@Override
 	public boolean isWrappedLine(int line) {
 		return fSnapshot.isWrappedLine(line);
 	}

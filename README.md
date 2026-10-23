@@ -26,6 +26,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Ctrl+click | URLs and plain file paths | also paths in brackets, quotes or backticks, absolute Windows paths, WSL paths (`/mnt/c/...`, `/home/...`), Hangul paths |
 | Drop files | not supported | types their paths, quoted for the shell (bash, cmd, PowerShell) |
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
+| Shell integration (OSC 133) | none | Ctrl+Up/Down between prompts, failed commands marked, copy the last command's output |
 | Find | none | Ctrl+Shift+F: the scrollback, match case, regular expressions, up and down |
 | Bell, OSC 9, OSC 777 | ignored | the tab is marked; a desktop notification while Eclipse is in the background; never a sound |
 | Defaults | block cursor, 1000 lines | bar cursor, copy on select, 10000 lines |
@@ -72,6 +73,47 @@ Ctrl+Shift+F in a terminal opens a find bar above it (with the selected text, if
 - A line that ran on to the next one is searched as one; wide characters (Hangul, CJK, emoji) are matched by their cells
 - Esc closes it and the focus goes back to the terminal; Ctrl+Shift+F again puts the focus back in the bar
 - New output scrolls to the end as before: turn on Scroll Lock in the view toolbar to read a match while a program is still writing
+
+## Shell integration (OSC 133)
+
+A shell that marks its prompts (OSC 133, as for VS Code and Windows Terminal) gets:
+
+- Ctrl+Up and Ctrl+Down: the prompt before or after the one at the top of the view
+- A red bar at the left of the prompt of a command that failed (exit status not 0)
+- Copy Output of Last Command in the context menu: selects the output of the last command and copies it
+- The marks scroll with their lines into the scrollback and go when the lines do
+
+Nothing is injected into the shell: add one of these to its startup file (after the OSC 7 lines, if you have them, so that it runs first and sees the exit status).
+
+bash (`~/.bashrc`):
+
+```bash
+# Modern Terminal: mark prompts, commands and their exit status (OSC 133)
+__mt_osc133() {
+	printf '\e]133;D;%s\a\e]133;A\a' "$?"
+}
+PROMPT_COMMAND="__mt_osc133${PROMPT_COMMAND:+;$PROMPT_COMMAND}"
+PS1="$PS1"'\[\e]133;B\a\]'
+PS0='\e]133;C\a'
+```
+
+zsh (`~/.zshrc`):
+
+```zsh
+# Modern Terminal: mark prompts, commands and their exit status (OSC 133)
+__mt_osc133_precmd() {
+	printf '\e]133;D;%s\a\e]133;A\a' "$?"
+}
+__mt_osc133_preexec() {
+	printf '\e]133;C\a'
+}
+autoload -Uz add-zsh-hook
+precmd_functions=(__mt_osc133_precmd $precmd_functions) # first, to see the exit status
+add-zsh-hook preexec __mt_osc133_preexec
+PS1="$PS1"$'%{\e]133;B\a%}'
+```
+
+Shells set up by the shell integration scripts of WezTerm or Windows Terminal already send OSC 133 and need nothing.
 
 ## Notifications
 

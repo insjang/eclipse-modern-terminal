@@ -333,6 +333,17 @@ public class TerminalTextData implements ITerminalTextData {
 	}
 
 	@Override
+	public int getLineMark(int line) {
+		return fData.getLineMark(line);
+	}
+
+	@Override
+	public void setLineMark(int line, int mark) {
+		fData.setLineMark(line, mark);
+		sendLineChangedToSnapshots(line);
+	}
+
+	@Override
 	public boolean isWrappedLine(int line) {
 		return fData.isWrappedLine(line);
 	}

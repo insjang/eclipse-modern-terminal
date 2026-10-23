@@ -254,6 +254,18 @@ public class TerminalTextDataWindow implements ITerminalTextData {
 	}
 
 	@Override
+	public int getLineMark(int line) {
+		return isInWindow(line) ? fData.getLineMark(line - fWindowStartLine) : 0;
+	}
+
+	@Override
+	public void setLineMark(int line, int mark) {
+		if (isInWindow(line)) {
+			fData.setLineMark(line - fWindowStartLine, mark);
+		}
+	}
+
+	@Override
 	public boolean isWrappedLine(int line) {
 		if (isInWindow(line)) {
 			return fData.isWrappedLine(line - fWindowStartLine);

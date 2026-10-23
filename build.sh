@@ -36,7 +36,7 @@ if [ "${1:-}" != "--skip-tests" ]; then
 	javac -encoding UTF-8 --release 21 -nowarn -cp "$CP" -d "$OUT/tests" $(find $T/internal/emulator $T/internal/model $T/model $T/connector -name '*.java') $T/view/ui/tests/DroppedFilesTest.java "$HERE/tools/RunTests.java"
 	# the plugins hold several slf4j bindings (m2e logback cannot start outside Eclipse): pick the simple one, quiet
 	java -Dslf4j.provider=org.slf4j.simple.SimpleServiceProvider -Dorg.slf4j.simpleLogger.defaultLogLevel=error -cp "$OUT/tests:$CP" RunTests $P.emulator.VT100EmulatorBackendTest $P.emulator.VT100EmulatorTest $P.emulator.MouseReportTest \
-		$P.model.CharWidthTest $P.model.TerminalFindTest $P.model.TerminalTextDataStoreTest $P.model.TerminalTextDataTest $P.model.TerminalTextDataWindowTest \
+		$P.model.CharWidthTest $P.model.TerminalFindTest $P.model.ShellMarksTest $P.model.TerminalTextDataStoreTest $P.model.TerminalTextDataTest $P.model.TerminalTextDataWindowTest \
 		$P.model.TerminalTextDataFastScrollTest $P.model.SynchronizedTerminalTextDataTest $P.model.TerminalTextDataSnapshotTest \
 		io.github.insjang.terminal.connector.ssh.HostKeysTest io.github.insjang.terminal.connector.ssh.SshSessionTest io.github.insjang.terminal.connector.ssh.SshAgentClientTest \
 		io.github.insjang.terminal.connector.ssh.RemoteFilesTest io.github.insjang.terminal.connector.ssh.LocalFilesTest \

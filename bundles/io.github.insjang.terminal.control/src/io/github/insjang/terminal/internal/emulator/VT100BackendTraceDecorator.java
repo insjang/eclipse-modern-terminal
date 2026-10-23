@@ -218,6 +218,12 @@ public class VT100BackendTraceDecorator implements IVT100EmulatorBackend {
 	}
 
 	@Override
+	public void setShellMark(char command, int exitStatus) {
+		fWriter.println("setShellMark(" + command + ", " + exitStatus + ')'); //$NON-NLS-1$ //$NON-NLS-2$
+		fBackend.setShellMark(command, exitStatus);
+	}
+
+	@Override
 	public void processReverseLineFeed() {
 		fWriter.println("processReverseLineFeed()"); //$NON-NLS-1$
 		fBackend.processReverseLineFeed();

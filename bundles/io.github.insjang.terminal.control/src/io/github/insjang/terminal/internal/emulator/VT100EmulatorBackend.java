@@ -18,6 +18,7 @@ import java.text.Normalizer;
 
 import io.github.insjang.terminal.internal.model.CharWidth;
 import io.github.insjang.terminal.model.ITerminalTextData;
+import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
 import io.github.insjang.terminal.internal.model.TerminalTextDataStore;
 import io.github.insjang.terminal.model.TerminalStyle;
 
@@ -313,7 +314,46 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	@Override
 	public void eraseLine() {
 		synchronized (fTerminal) {
-			eraseLine(toAbsoluteLine(fCursorLine));
+			// a shell redrawing its prompt line keeps the prompt's mark
+			int line = toAbsoluteLine(fCursorLine);
+			int mark = fTerminal.getLineMark(line);
+			eraseLine(line);
+			fTerminal.setLineMark(line, mark);
+		}
+	}
+
+	@Override
+	public void setShellMark(char command, int exitStatus) {
+		synchronized (fTerminal) {
+			int line = toAbsoluteLine(fCursorLine);
+			switch (command) {
+			case 'A':
+				// an output mark stays: the command before printed nothing, its output ends here
+				fTerminal.setLineMark(line, ITerminalTextDataReadOnly.MARK_PROMPT
+						| fTerminal.getLineMark(line) & ITerminalTextDataReadOnly.MARK_OUTPUT);
+				break;
+			case 'C':
+				fTerminal.setLineMark(line, fTerminal.getLineMark(line) | ITerminalTextDataReadOnly.MARK_OUTPUT);
+				break;
+			case 'D':
+				boolean ran = false;
+				for (int l = line; l >= 0; l--) {
+					int mark = fTerminal.getLineMark(l);
+					// on a prompt line the output mark is the command before's
+					ran |= mark == ITerminalTextDataReadOnly.MARK_OUTPUT;
+					if ((mark & ITerminalTextDataReadOnly.MARK_PROMPT) != 0) {
+						if (ran) {
+							mark &= ~(ITerminalTextDataReadOnly.MARK_FAILED | ITerminalTextDataReadOnly.MARK_SUCCEEDED);
+							fTerminal.setLineMark(l, mark | (exitStatus != 0 ? ITerminalTextDataReadOnly.MARK_FAILED
+									: ITerminalTextDataReadOnly.MARK_SUCCEEDED));
+						}
+						break;
+					}
+				}
+				break;
+			default:
+				break;
+			}
 		}
 	}
 
