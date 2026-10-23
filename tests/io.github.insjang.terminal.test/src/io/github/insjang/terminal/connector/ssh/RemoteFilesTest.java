@@ -10,6 +10,7 @@
 package io.github.insjang.terminal.connector.ssh;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -198,5 +199,16 @@ public class RemoteFilesTest {
 		for (String bad : List.of("", ".", "..", "a/b", "/", "a\0b")) {
 			assertFalse(RemoteFiles.validName(bad), bad);
 		}
+	}
+
+	@Test
+	public void editKeyTellsServersApart() {
+		String a = RemoteEditor.key("me", "10.0.0.5:22", "SHA256:aaa", "/etc/hosts");
+		assertEquals(a, RemoteEditor.key("me", "10.0.0.5:22", "SHA256:aaa", "/etc/hosts")); // stable across connections
+		// the same address behind two jump hosts, two servers: their keys differ
+		assertNotEquals(a, RemoteEditor.key("me", "10.0.0.5:22", "SHA256:bbb", "/etc/hosts"));
+		assertNotEquals(a, RemoteEditor.key("you", "10.0.0.5:22", "SHA256:aaa", "/etc/hosts"));
+		assertNotEquals(a, RemoteEditor.key("me", "10.0.0.5:22", "SHA256:aaa", "/etc/passwd"));
+		assertEquals(16, a.length());
 	}
 }

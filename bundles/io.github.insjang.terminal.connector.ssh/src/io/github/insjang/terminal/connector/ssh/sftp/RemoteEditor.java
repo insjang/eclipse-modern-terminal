@@ -54,6 +54,7 @@ import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.IDE;
 
 import org.apache.sshd.client.session.ClientSessionCreator;
+import org.apache.sshd.common.config.keys.KeyUtils;
 import org.apache.sshd.common.util.net.SshdSocketAddress;
 import io.github.insjang.terminal.view.ui.internal.tabs.LinkPolicy;
 import io.github.insjang.terminal.connector.ssh.activator.UIPlugin;
@@ -161,16 +162,24 @@ public final class RemoteEditor {
 
 	/** Downloads a remote file and opens it in an editor; an editor already open for it is activated. */
 	public static void open(IWorkbenchPage page, RemoteFiles files, Entry entry) {
-		Path local;
+		Path keyed;
 		try {
-			local = area().resolve(key(files.getSession(), entry.path())).resolve(RemoteFiles.localName(entry.name()));
+			keyed = area().resolve(key(files.getSession(), entry.path())).resolve(RemoteFiles.localName(entry.name()));
 		} catch (InvalidPathException e) {
 			// localName makes names Windows accepts: this is not expected, but must not end in the event loop
 			MessageDialog.openError(page.getWorkbenchWindow().getShell(), FilesMessages.errorTitle,
 					entry.path() + ": " + e.getMessage()); //$NON-NLS-1$
 			return;
 		}
-		RemoteEditor open = EDITS.get(local);
+		RemoteEditor open = EDITS.get(keyed);
+		if (open != null && open.session != files.getSession()) {
+			// an editor of another connection (an earlier one, or one the key cannot tell
+			// apart): its saves go there, so this connection gets an editor of its own
+			keyed = keyed.getParent().resolveSibling(keyed.getParent().getFileName() + "-" //$NON-NLS-1$
+					+ Integer.toHexString(System.identityHashCode(files.getSession()))).resolve(keyed.getFileName());
+			open = EDITS.get(keyed);
+		}
+		Path local = keyed;
 		if (open != null && open.editor != null) {
 			page.activate(open.editor);
 			return;
@@ -375,12 +384,20 @@ public final class RemoteEditor {
 	}
 
 	/**
-	 * A folder name for user@host:port and the remote path. The host is the one configured
-	 * (TARGET_SERVER): behind a ProxyJump the socket goes to a local tunnel on a new port each time.
+	 * A folder name for the server and the remote path. The host is the one configured
+	 * (TARGET_SERVER): behind a ProxyJump the socket goes to a local tunnel on a new port
+	 * each time. The server's key tells apart servers with the same address behind
+	 * different jump hosts.
 	 */
 	static String key(ClientSession session, String remote) {
 		SshdSocketAddress target = session.getAttribute(ClientSessionCreator.TARGET_SERVER);
-		String id = session.getUsername() + '@' + (target != null ? target : session.getConnectAddress()) + remote;
+		return key(session.getUsername(), String.valueOf(target != null ? target : session.getConnectAddress()),
+				session.getServerKey() != null ? KeyUtils.getFingerPrint(session.getServerKey()) : "", remote); //$NON-NLS-1$
+	}
+
+	/** @return the folder name for user@host:port, the server key's fingerprint and the remote path */
+	public static String key(String user, String hostPort, String serverKey, String remote) {
+		String id = user + '@' + hostPort + ' ' + serverKey + ' ' + remote;
 		try {
 			byte[] hash = MessageDigest.getInstance("SHA-256").digest(id.getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
 			return HexFormat.of().formatHex(hash, 0, 8);
