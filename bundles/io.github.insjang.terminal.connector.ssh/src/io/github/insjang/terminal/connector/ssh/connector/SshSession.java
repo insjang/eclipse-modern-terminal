@@ -28,10 +28,11 @@ import org.osgi.service.prefs.BackingStoreException;
  * The sessions are one instance preference of the bundle, a line per session.
  */
 public record SshSession(String name, String host, int port, String user, String keyFile, int timeout, int keepalive,
-		String encoding, boolean savePassword, String startFolder) {
-	/** Tab properties: the saved session a terminal was launched from, and the folder to start in. */
+		String encoding, boolean savePassword, String startFolder, String forwards) {
+	/** Tab properties: the saved session a terminal was launched from, the folder to start in, the local forwards. */
 	public static final String PROP_SESSION = "ssh.session"; //$NON-NLS-1$
 	public static final String PROP_START_FOLDER = "ssh.startFolder"; //$NON-NLS-1$
+	public static final String PROP_FORWARDS = "ssh.forwards"; //$NON-NLS-1$
 	private static final String NODE = "io.github.insjang.terminal.connector.ssh"; //$NON-NLS-1$
 	private static final String KEY = "sessions"; //$NON-NLS-1$
 
@@ -45,11 +46,11 @@ public record SshSession(String name, String host, int port, String user, String
 	public static String encode(List<SshSession> sessions) {
 		return sessions.stream().sorted(Comparator.comparing(SshSession::name, String.CASE_INSENSITIVE_ORDER))
 				.map(s -> Arrays.stream(new Object[] { s.name, s.host, s.port, s.user, s.keyFile, s.timeout, s.keepalive,
-						s.encoding, s.savePassword, s.startFolder }).map(SshSession::enc).collect(Collectors.joining(" "))) //$NON-NLS-1$
+						s.encoding, s.savePassword, s.startFolder, s.forwards }).map(SshSession::enc).collect(Collectors.joining(" "))) //$NON-NLS-1$
 				.collect(Collectors.joining("\n")); //$NON-NLS-1$
 	}
 
-	/** The sessions of {@link #encode}; a broken line is skipped. Lines from before Start folder have 9 fields. */
+	/** The sessions of {@link #encode}; a broken line is skipped. Lines from before Start folder have 9 fields, before Forwards 10. */
 	public static List<SshSession> decode(String text) {
 		List<SshSession> sessions = new ArrayList<>();
 		if (text == null) {
@@ -66,7 +67,7 @@ public record SshSession(String name, String host, int port, String user, String
 				}
 				sessions.add(new SshSession(f[0], f[1], Integer.parseInt(f[2]), f[3], nullIfEmpty(f[4]),
 						Integer.parseInt(f[5]), Integer.parseInt(f[6]), nullIfEmpty(f[7]), Boolean.parseBoolean(f[8]),
-						f.length > 9 ? nullIfEmpty(f[9]) : null));
+						f.length > 9 ? nullIfEmpty(f[9]) : null, f.length > 10 ? nullIfEmpty(f[10]) : null));
 			} catch (IllegalArgumentException e) {
 				// a bad escape or number: skip that line
 			}
@@ -103,6 +104,54 @@ public record SshSession(String name, String host, int port, String user, String
 	/** A POSIX sh word: in single quotes, a ' as '\''. */
 	public static String quote(String text) {
 		return '\'' + text.replace("'", "'\\''") + '\''; //$NON-NLS-1$ //$NON-NLS-2$
+	}
+
+	/** A local port forward, as ssh -L port:host:hostport; the local port listens on 127.0.0.1 only. */
+	public record Forward(int localPort, String host, int port) {
+		@Override
+		public String toString() {
+			return localPort + ":" + (host.indexOf(':') >= 0 ? '[' + host + ']' : host) + ':' + port; //$NON-NLS-1$
+		}
+	}
+
+	/**
+	 * The forwards of the Forwards field: port:host:hostport items, separated by spaces or commas; an IPv6
+	 * host in brackets. Empty or null gives none.
+	 * @throws IllegalArgumentException naming the first item that is not one
+	 */
+	public static List<Forward> parseForwards(String text) {
+		List<Forward> forwards = new ArrayList<>();
+		if (text == null) {
+			return forwards;
+		}
+		for (String item : text.trim().split("[\\s,]+")) { //$NON-NLS-1$
+			if (item.isEmpty()) {
+				continue;
+			}
+			int first = item.indexOf(':');
+			int last = item.lastIndexOf(':');
+			String host = first < 0 || last <= first + 1 ? "" : item.substring(first + 1, last); //$NON-NLS-1$
+			if (host.startsWith("[") && host.endsWith("]")) { //$NON-NLS-1$ //$NON-NLS-2$
+				host = host.substring(1, host.length() - 1);
+			}
+			int localPort = first < 0 ? -1 : port(item.substring(0, first));
+			int port = first < 0 ? -1 : port(item.substring(last + 1));
+			if (localPort < 0 || port < 1 || host.isEmpty() || host.contains("[") || host.contains("]") //$NON-NLS-1$ //$NON-NLS-2$
+					|| (host.indexOf(':') >= 0 && !item.contains("["))) { //$NON-NLS-1$
+				throw new IllegalArgumentException(item);
+			}
+			forwards.add(new Forward(localPort, host, port));
+		}
+		return forwards;
+	}
+
+	// 0 to 65535 (0 for the local port: any free one), -1 if not a port
+	private static int port(String text) {
+		if (text.isEmpty() || text.length() > 5 || !text.chars().allMatch(Character::isDigit)) {
+			return -1;
+		}
+		int port = Integer.parseInt(text);
+		return port <= 65535 ? port : -1;
 	}
 
 	/** True if the session logs in as the same user@host:port, so it shares the saved password. */

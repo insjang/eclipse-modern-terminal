@@ -71,6 +71,11 @@ public interface ISshSettings {
 	String getStartFolder();
 
 	/**
+	 * @return The local port forwards (see {@link SshSession#parseForwards}), or <code>null</code> for none.
+	 */
+	String getForwards();
+
+	/**
 	 * Return a human-readable String summarizing all relevant connection data.
 	 * This String can be displayed in the Terminal caption, for instance.
 	 * @return a human-readable String summarizing relevant connection data.

@@ -219,6 +219,7 @@ public class SshConnection extends Thread {
 			if (!isSessionConnected()) {
 				return;
 			}
+			startForwards(session, settings.getForwards());
 			// a start folder: the login shell from an exec channel that changes to it first (SSH has no request for the folder)
 			String startFolder = settings.getStartFolder();
 			PtyCapableChannelSession channel = startFolder == null ? session.createShellChannel()
@@ -278,6 +279,31 @@ public class SshConnection extends Thread {
 			} finally {
 				// when reading is done, we set the state to closed
 				fControl.setState(TerminalState.CLOSED);
+			}
+		}
+	}
+
+	/**
+	 * Opens the local forwards on 127.0.0.1; they close with the session. One that cannot listen (port in
+	 * use) or is not valid is reported in the terminal, the others and the shell still start.
+	 */
+	private void startForwards(ClientSession session, String forwards) {
+		List<SshSession.Forward> list;
+		try {
+			list = SshSession.parseForwards(forwards);
+		} catch (IllegalArgumentException e) {
+			fControl.displayTextInTerminal(NLS.bind(SshMessages.FORWARDS_INVALID, e.getMessage()));
+			return;
+		}
+		for (SshSession.Forward f : list) {
+			try {
+				SshdSocketAddress bound = session.startLocalPortForwarding(
+						new SshdSocketAddress("127.0.0.1", f.localPort()), new SshdSocketAddress(f.host(), f.port())); //$NON-NLS-1$
+				fControl.displayTextInTerminal(NLS.bind(SshMessages.FORWARD_STARTED,
+						new Object[] { Integer.toString(bound.getPort()), f.host(), Integer.toString(f.port()) }));
+			} catch (IOException e) {
+				fControl.displayTextInTerminal(NLS.bind(SshMessages.FORWARD_FAILED, new Object[] {
+						Integer.toString(f.localPort()), f.host(), Integer.toString(f.port()), e.getMessage() }));
 			}
 		}
 	}

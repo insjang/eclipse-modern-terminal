@@ -27,6 +27,7 @@ public class SshSettings implements ISshSettings {
 	protected String fKeepalive;
 	protected String fKeyFile;
 	protected String fStartFolder;
+	protected String fForwards;
 
 	@Override
 	public String getHost() {
@@ -59,6 +60,7 @@ public class SshSettings implements ISshSettings {
 		fKeepalive = store.get("Keepalive", "300");//$NON-NLS-1$ //$NON-NLS-2$
 		fKeyFile = store.get("KeyFile", "");//$NON-NLS-1$ //$NON-NLS-2$
 		fStartFolder = store.get("StartFolder", "");//$NON-NLS-1$ //$NON-NLS-2$
+		fForwards = store.get("Forwards", "");//$NON-NLS-1$ //$NON-NLS-2$
 	}
 
 	@Override
@@ -73,6 +75,7 @@ public class SshSettings implements ISshSettings {
 		store.put("Keepalive", fKeepalive);//$NON-NLS-1$
 		store.put("KeyFile", fKeyFile);//$NON-NLS-1$
 		store.put("StartFolder", fStartFolder);//$NON-NLS-1$
+		store.put("Forwards", fForwards);//$NON-NLS-1$
 	}
 
 	@Override
@@ -151,6 +154,15 @@ public class SshSettings implements ISshSettings {
 
 	public void setStartFolder(String startFolder) {
 		fStartFolder = startFolder;
+	}
+
+	@Override
+	public String getForwards() {
+		return fForwards == null || fForwards.isBlank() ? null : fForwards.trim();
+	}
+
+	public void setForwards(String forwards) {
+		fForwards = forwards;
 	}
 
 	@Override

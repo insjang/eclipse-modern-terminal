@@ -186,6 +186,11 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 			sshSettings.setStartFolder(value);
 		}
 
+		value = (String) data.get(SshSession.PROP_FORWARDS);
+		if (value != null) {
+			sshSettings.setForwards(value);
+		}
+
 		sshSettingsPage.loadSettings();
 	}
 
@@ -262,6 +267,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		data.put(ITerminalsConnectorConstants.PROP_SSH_KEY_FILE, sshSettings.getKeyFile());
 		data.put(ITerminalsConnectorConstants.PROP_ENCODING, getEncoding());
 		data.put(SshSession.PROP_START_FOLDER, sshSettings.getStartFolder());
+		data.put(SshSession.PROP_FORWARDS, sshSettings.getForwards());
 		// the session the fields came from, for Edit Session; none once the login differs
 		if (loaded != null && loaded.sameLogin(fields(loaded.name()))) {
 			data.put(SshSession.PROP_SESSION, loaded.name());
@@ -362,6 +368,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sshSettings.setTimeout(Integer.toString(session.timeout()));
 		sshSettings.setKeepalive(Integer.toString(session.keepalive()));
 		sshSettings.setStartFolder(session.startFolder());
+		sshSettings.setForwards(session.forwards());
 		String password = session.savePassword() ? SshPasswords.get(session.user(), session.host(), session.port()) : null;
 		sshSettings.setPassword(password != null ? password : ""); //$NON-NLS-1$
 		if (session.encoding() != null) {
@@ -381,6 +388,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 		sshSettings.setTimeout("0"); //$NON-NLS-1$
 		sshSettings.setKeepalive("300"); //$NON-NLS-1$
 		sshSettings.setStartFolder(""); //$NON-NLS-1$
+		sshSettings.setForwards(""); //$NON-NLS-1$
 		sshSettings.setPassword(""); //$NON-NLS-1$
 		sshSettingsPage.loadSettings();
 		passwordButton.setSelection(false);
@@ -441,7 +449,7 @@ public class SshWizardConfigurationPanel extends AbstractExtendedConfigurationPa
 	private SshSession fields(String name) {
 		return new SshSession(name, sshSettings.getHost().trim(), sshSettings.getPort(), sshSettings.getUser().trim(),
 				sshSettings.getKeyFile(), sshSettings.getTimeout(), sshSettings.getKeepalive(), getEncoding(),
-				passwordButton.getSelection(), sshSettings.getStartFolder());
+				passwordButton.getSelection(), sshSettings.getStartFolder(), sshSettings.getForwards());
 	}
 
 	private void deleteSession() {

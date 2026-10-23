@@ -17,6 +17,7 @@ package io.github.insjang.terminal.connector.ssh.connector;
 
 import org.eclipse.jface.dialogs.IMessageProvider;
 import org.eclipse.jface.fieldassist.FieldDecorationRegistry;
+import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.ModifyEvent;
 import org.eclipse.swt.events.ModifyListener;
@@ -44,6 +45,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 	private Text fPassword;
 	private Text fKeyFile;
 	private Text fStartFolder;
+	private Text fForwards;
 	private String nameLabel; // a session name row above Host, if set
 	private Text fName;
 
@@ -61,6 +63,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		fTerminalSettings.setKeepalive(fKeepalive.getText());
 		fTerminalSettings.setKeyFile(fKeyFile.getText());
 		fTerminalSettings.setStartFolder(fStartFolder.getText());
+		fTerminalSettings.setForwards(fForwards.getText());
 	}
 
 	@Override
@@ -74,6 +77,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 			fPassword.setText(get(fTerminalSettings.getPassword(), ""));//$NON-NLS-1$
 			fKeyFile.setText(get(fTerminalSettings.getKeyFile(), ""));//$NON-NLS-1$
 			fStartFolder.setText(get(fTerminalSettings.getStartFolder(), ""));//$NON-NLS-1$
+			fForwards.setText(get(fTerminalSettings.getForwards(), ""));//$NON-NLS-1$
 		}
 	}
 
@@ -176,6 +180,17 @@ public class SshSettingsPage extends AbstractSettingsPage {
 			updateControlDecoration(fKeyFile, null, IMessageProvider.NONE);
 		}
 
+		try {
+			SshSession.parseForwards(fForwards.getText());
+			updateControlDecoration(fForwards, null, IMessageProvider.NONE);
+		} catch (IllegalArgumentException e) {
+			String m = NLS.bind(SshMessages.FORWARDS_INVALID, e.getMessage());
+			updateControlDecoration(fForwards, m, IMessageProvider.ERROR);
+			message = m;
+			messageType = IMessageProvider.ERROR;
+			valid = false;
+		}
+
 		setMessage(message, messageType);
 		return valid;
 	}
@@ -218,6 +233,8 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		fKeepalive.setToolTipText(SshMessages.KEEPALIVE_Tooltip);
 		fStartFolder = span(createTextField(composite, SshMessages.START_FOLDER));
 		fStartFolder.setToolTipText(SshMessages.START_FOLDER_Tooltip);
+		fForwards = span(createTextField(composite, SshMessages.FORWARDS));
+		fForwards.setToolTipText(SshMessages.FORWARDS_Tooltip);
 		loadSettings();
 	}
 

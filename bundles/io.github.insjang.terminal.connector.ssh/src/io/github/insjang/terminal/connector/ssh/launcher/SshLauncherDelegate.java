@@ -166,6 +166,7 @@ public class SshLauncherDelegate extends AbstractLauncherDelegate {
 		sshSettings.setUser(user);
 		sshSettings.setKeyFile(keyFile);
 		sshSettings.setStartFolder((String) properties.get(SshSession.PROP_START_FOLDER));
+		sshSettings.setForwards((String) properties.get(SshSession.PROP_FORWARDS));
 
 		// And save the settings to the store
 		sshSettings.save(store);

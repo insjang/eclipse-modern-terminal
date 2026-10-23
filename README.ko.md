@@ -68,6 +68,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
   - 호스트, 사용자, 포트, 키 파일(선택), 타임아웃, keepalive 입력
 - Saved Sessions (PuTTY 방식): 이름 입력 후 Save, 골라서 Load, 더블클릭하면 바로 접속, Delete는 세션과 저장된 비밀번호 삭제
 - Start folder: 로그인 후 셸과 Files 뷰가 그 폴더에서 시작 (비우면 홈), SSH에 작업 폴더 요청이 없어 명령 `sh -c 'cd "$1"; exec "$SHELL" -l' sh '<폴더>'`로 로그인 셸을 그 폴더에서 실행 (csh 등 어떤 로그인 셸도, 없는 폴더면 오류 후 홈)
+- Local forwards: 이 PC의 포트를 서버를 거쳐 전달 (`ssh -L`과 같음), `8080:localhost:80 5433:db:5432`면 여기의 `localhost:8080`이 서버의 80 포트로, `localhost:5433`이 서버에서 본 `db:5432`로 연결됨. 127.0.0.1에서만 열리고, 연결 시 터미널에 목록 표시 (사용 중인 포트는 알리고 나머지는 열림), 터미널을 닫으면 함께 닫힘
 - SSH 터미널 컨텍스트 메뉴의 Edit Session...: 그 탭의 저장 세션 설정을 열어 다음 연결용으로 저장 (열린 터미널은 그대로)
 - 인증: OpenSSH와 같은 순서로 시도
   - 키: 키 파일 칸 먼저, 다음 `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`, `~/.ssh/config`의 `IdentityFile`, 필요하면 암호(passphrase) 입력 창

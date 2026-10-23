@@ -67,6 +67,7 @@ Load Presets offers Modern Terminal Defaults (what Restore Defaults gives), Tang
   - Host, user, port, an optional key file, timeout and keepalive
 - Saved Sessions (as in PuTTY): type a name and Save, select one and Load, or double-click to connect; Delete removes it and its saved password
 - Start folder: the shell and the Files view start there after login (empty: the home); SSH has no request for the folder, so the command `sh -c 'cd "$1"; exec "$SHELL" -l' sh '<folder>'` starts the login shell there (any login shell, csh too; a missing folder leaves an error and the home)
+- Local forwards: ports on this computer passed through the server, as `ssh -L`; `8080:localhost:80 5433:db:5432` makes `localhost:8080` here reach port 80 on the server and `localhost:5433` reach `db:5432` from it. They listen on 127.0.0.1 only, are listed in the terminal when the connection opens (a port in use is reported, the rest still open) and close with the terminal
 - Edit Session... in the context menu of an SSH terminal: the settings of its saved session, saved for the next connection (the open terminal stays as it is)
 - Authentication, as OpenSSH tries it:
   - Keys: the key file field first, then `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` and `IdentityFile` entries of `~/.ssh/config`; a passphrase is asked when needed

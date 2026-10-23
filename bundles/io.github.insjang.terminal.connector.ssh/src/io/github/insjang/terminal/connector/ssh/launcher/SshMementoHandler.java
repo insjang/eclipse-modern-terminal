@@ -52,6 +52,7 @@ public class SshMementoHandler implements IMementoHandler {
 				(String) properties.get(ITerminalsConnectorConstants.PROP_SSH_KEY_FILE));
 		memento.putString(SshSession.PROP_SESSION, (String) properties.get(SshSession.PROP_SESSION));
 		memento.putString(SshSession.PROP_START_FOLDER, (String) properties.get(SshSession.PROP_START_FOLDER));
+		memento.putString(SshSession.PROP_FORWARDS, (String) properties.get(SshSession.PROP_FORWARDS));
 
 		// The password is stored within the Eclipse secure preferences -> no need to store it to the memento
 		//
@@ -103,6 +104,7 @@ public class SshMementoHandler implements IMementoHandler {
 				memento.getString(ITerminalsConnectorConstants.PROP_SSH_KEY_FILE));
 		properties.put(SshSession.PROP_SESSION, memento.getString(SshSession.PROP_SESSION));
 		properties.put(SshSession.PROP_START_FOLDER, memento.getString(SshSession.PROP_START_FOLDER));
+		properties.put(SshSession.PROP_FORWARDS, memento.getString(SshSession.PROP_FORWARDS));
 
 		// The password is in the secure storage, saved for exactly this user@host:port only while
 		// "Save password" is on for it (see SshPasswords)
