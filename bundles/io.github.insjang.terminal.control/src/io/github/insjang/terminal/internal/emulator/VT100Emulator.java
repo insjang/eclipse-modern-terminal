@@ -615,13 +615,14 @@ public class VT100Emulator implements ControlListener {
 	static final int MAX_NOTIFICATION = 256;
 
 	/**
-	 * Notification text as it may be shown: control characters (C0, DEL, C1, bidi overrides) taken
-	 * out, trimmed, cut to {@link #MAX_NOTIFICATION}; null when nothing is left.
+	 * Notification text as it may be shown: control, format (bidi marks and overrides,
+	 * zero-width characters, BOM) and line and paragraph separator characters taken out,
+	 * trimmed, cut to {@link #MAX_NOTIFICATION} code points; null when nothing is left.
 	 */
-	static String notificationText(String s) {
-		String text = s.replaceAll("[\\x00-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]", "").strip(); //$NON-NLS-1$ //$NON-NLS-2$
-		if (text.length() > MAX_NOTIFICATION) {
-			text = text.substring(0, MAX_NOTIFICATION - 1) + '\u2026';
+	public static String notificationText(String s) {
+		String text = s.replaceAll("[\\p{Cc}\\p{Cf}\\p{Zl}\\p{Zp}]", "").strip(); //$NON-NLS-1$ //$NON-NLS-2$
+		if (text.codePointCount(0, text.length()) > MAX_NOTIFICATION) {
+			text = text.substring(0, text.offsetByCodePoints(0, MAX_NOTIFICATION - 1)) + '\u2026';
 		}
 		return text.isEmpty() ? null : text;
 	}

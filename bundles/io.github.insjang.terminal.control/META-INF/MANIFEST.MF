@@ -26,7 +26,7 @@ Export-Package: io.github.insjang.terminal.connector;version="1.0.100";
    io.github.insjang.terminal.model",
  io.github.insjang.terminal.internal.connector;x-internal:=true,
  io.github.insjang.terminal.internal.control.impl;x-internal:=true;x-friends:="io.github.insjang.terminal.view.ui",
- io.github.insjang.terminal.internal.emulator;x-internal:=true,
+ io.github.insjang.terminal.internal.emulator;x-internal:=true;x-friends:="io.github.insjang.terminal.view.ui",
  io.github.insjang.terminal.internal.model;x-internal:=true,
  io.github.insjang.terminal.internal.preferences;x-internal:=true;x-friends:="io.github.insjang.terminal.view.ui",
  io.github.insjang.terminal.internal.textcanvas;x-internal:=true,

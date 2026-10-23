@@ -93,7 +93,7 @@ What the terminal shows comes from programs and servers, so Ctrl+click (on a pat
 
 A shell that marks its prompts (OSC 133, as for VS Code and Windows Terminal) gets:
 
-- Ctrl+Up and Ctrl+Down: the prompt before or after the one at the top of the view
+- Ctrl+Up and Ctrl+Down: the prompt before or after the one at the top of the view; while the screen has prompt marks these keys stay in the terminal, without marks (and on the alternate screen of vim, tmux and the like) they go to the program as before
 - A red bar at the left of the prompt of a command that failed (exit status not 0)
 - Copy Output of Last Command in the context menu: selects the output of the last command and copies it
 - The marks scroll with their lines into the scrollback and go when the lines do
@@ -145,7 +145,7 @@ A bell (BEL), `ESC ] 9 ; text BEL` (iTerm2) or `ESC ] 777 ; notify ; title ; tex
 - The tab gets a marker when it is not the one shown; showing it clears the marker. If the Modern Terminal view itself is hidden, its view tab turns bold
 - While the Eclipse window is not active: a desktop notification (a tray balloon, a toast on Windows), at most one per tab every 5 seconds; clicking it brings the tab up. Off with Preferences > Modern Terminal > Desktop notification
 - No sound, and no setting for one
-- `ESC ] 9 ; <number> ; ...` are ConEmu commands (9;4 is progress) and are ignored; control characters are dropped from the text
+- `ESC ] 9 ; <number> ; ...` are ConEmu commands (9;4 is progress) and are ignored; control, bidi, zero-width and separator characters are dropped from the text and from the tab title shown with it, both cut to 256 characters
 
 
 - Ctrl+Alt+Shift+M (or Open Modern Terminal... in the view toolbar) > Choose terminal: SSH Terminal

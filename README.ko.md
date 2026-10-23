@@ -91,7 +91,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 ## 셸 통합 (OSC 133)
 
 - 프롬프트를 표시하는 셸 (OSC 133, VS Code·Windows Terminal과 같은 방식)에서 사용 가능
-- Ctrl+Up, Ctrl+Down: 뷰 맨 위 프롬프트의 이전·다음 프롬프트로 이동
+- Ctrl+Up, Ctrl+Down: 뷰 맨 위 프롬프트의 이전·다음 프롬프트로 이동, 화면에 프롬프트 표시가 있으면 이 키는 셸로 보내지 않음, 표시가 없거나 vim·tmux 등의 대체 화면에서는 전과 같이 프로그램으로 전달
 - 실패한 명령 (종료 코드가 0이 아님)의 프롬프트 왼쪽에 빨간 막대
 - 컨텍스트 메뉴의 Copy Output of Last Command: 마지막 명령의 출력을 선택하고 복사
 - 표시는 줄과 함께 스크롤 기록으로 올라가고, 줄이 버퍼에서 빠지면 함께 사라짐
@@ -142,7 +142,7 @@ PS1="$PS1"$'%{\e]133;B\a%}'
 - Eclipse 창이 활성이 아닐 때: 데스크톱 알림 (트레이 풍선, Windows에서는 토스트), 탭마다 5초에 한 번까지, 누르면 그 탭으로 이동
   - Preferences → Modern Terminal → Desktop notification으로 끄기
 - 소리는 내지 않음, 소리 설정도 없음
-- `ESC ] 9 ; <숫자> ; ...`는 ConEmu 명령 (9;4는 진행률)이라 무시, 내용의 제어 문자는 제거
+- `ESC ] 9 ; <숫자> ; ...`는 ConEmu 명령 (9;4는 진행률)이라 무시, 내용과 함께 표시하는 탭 제목에서 제어·bidi·폭 0·구분 문자는 제거, 둘 다 256자까지
 
 
 - Ctrl+Alt+Shift+M (또는 뷰 툴바의 Open Modern Terminal...) → Choose terminal: SSH Terminal

@@ -454,10 +454,15 @@ public class VT100EmulatorTest {
 				"\033]777;notify;Claude;Needs input; now\033\\", // body with ';', ST
 				"\033]777;notify;OnlyTitle\007", //
 				"\033]9;\u0001re\bd\u0085\u202e\007", // control and bidi characters dropped
-				"\033]9;" + "x".repeat(1000) + "\007");
+				"\033]9;" + "x".repeat(1000) + "\007",
+				// marks, zero-width and separator characters, a BOM; a cut that would split a surrogate pair
+				"\033]9;a\u200eb\u200fc\u061cd\u200be\u200df\u2028g\u2029h\ufeffi\007",
+				"\033]9;" + "y".repeat(VT100Emulator.MAX_NOTIFICATION - 2) + "\ud83d\ude00\ud83d\ude00\ud83d\ude00\007");
 		assertAll(() -> assertTextEquals("AB"),
 				() -> assertEquals(List.of("null|null", "null|Build done", "Claude|Needs input; now", "OnlyTitle|null",
-						"null|red", "null|" + "x".repeat(VT100Emulator.MAX_NOTIFICATION - 1) + "\u2026"),
+						"null|red", "null|" + "x".repeat(VT100Emulator.MAX_NOTIFICATION - 1) + "\u2026",
+						"null|abcdefghi",
+						"null|" + "y".repeat(VT100Emulator.MAX_NOTIFICATION - 2) + "\ud83d\ude00\u2026"),
 						control.getNotifications()),
 				() -> assertEquals(List.of(), control.getAllTitles()));
 	}

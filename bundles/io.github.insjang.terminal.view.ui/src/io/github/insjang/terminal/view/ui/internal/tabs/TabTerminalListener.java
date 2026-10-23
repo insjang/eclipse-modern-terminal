@@ -30,6 +30,7 @@ import io.github.insjang.terminal.connector.TerminalState;
 import io.github.insjang.terminal.control.ITerminalListener;
 import io.github.insjang.terminal.control.TerminalTitleRequestor;
 import io.github.insjang.terminal.internal.control.impl.TerminalPlugin;
+import io.github.insjang.terminal.internal.emulator.VT100Emulator;
 import io.github.insjang.terminal.internal.preferences.ITerminalConstants;
 import io.github.insjang.terminal.view.core.ITerminalsConnectorConstants;
 import io.github.insjang.terminal.view.ui.internal.Messages;
@@ -268,7 +269,10 @@ public class TabTerminalListener implements ITerminalListener {
 							.getBoolean(ITerminalConstants.PREF_DESKTOP_NOTIFICATIONS)) {
 				lastDesktopNotification = now;
 				Shell shell = item.getParent().getShell();
-				DesktopNotification.show(shell, item.getImage(), title != null ? title : tabItemTitle,
+				// the tab title is the program's too (OSC 0): cleaned as the notification is
+				String tabTitle = VT100Emulator.notificationText(tabItemTitle);
+				DesktopNotification.show(shell, item.getImage(),
+						title != null ? title : tabTitle != null ? tabTitle : view.getTitle(),
 						message != null ? message : Messages.TabTerminalListener_bell, () -> {
 							CTabItem target = getTabItem();
 							shell.setMinimized(false);
