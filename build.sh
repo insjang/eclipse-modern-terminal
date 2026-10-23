@@ -33,14 +33,14 @@ if [ "${1:-}" != "--skip-tests" ]; then
 	T=$HERE/tests/io.github.insjang.terminal.test/src/io/github/insjang/terminal
 	P=io.github.insjang.terminal.internal
 	mkdir -p "$OUT/tests"
-	javac -encoding UTF-8 --release 21 -nowarn -cp "$CP" -d "$OUT/tests" $(find $T/internal/emulator $T/internal/model $T/model $T/connector -name '*.java') $T/view/ui/tests/DroppedFilesTest.java "$HERE/tools/RunTests.java"
+	javac -encoding UTF-8 --release 21 -nowarn -cp "$CP" -d "$OUT/tests" $(find $T/internal/emulator $T/internal/model $T/model $T/connector -name '*.java') $T/view/ui/tests/DroppedFilesTest.java $T/view/ui/tests/LinkPolicyTest.java "$HERE/tools/RunTests.java"
 	# the plugins hold several slf4j bindings (m2e logback cannot start outside Eclipse): pick the simple one, quiet
 	java -Dslf4j.provider=org.slf4j.simple.SimpleServiceProvider -Dorg.slf4j.simpleLogger.defaultLogLevel=error -cp "$OUT/tests:$CP" RunTests $P.emulator.VT100EmulatorBackendTest $P.emulator.VT100EmulatorTest $P.emulator.MouseReportTest \
 		$P.model.CharWidthTest $P.model.TerminalFindTest $P.model.ShellMarksTest $P.model.TerminalTextDataStoreTest $P.model.TerminalTextDataTest $P.model.TerminalTextDataWindowTest \
 		$P.model.TerminalTextDataFastScrollTest $P.model.SynchronizedTerminalTextDataTest $P.model.TerminalTextDataSnapshotTest \
 		io.github.insjang.terminal.connector.ssh.HostKeysTest io.github.insjang.terminal.connector.ssh.SshSessionTest io.github.insjang.terminal.connector.ssh.SshAgentClientTest \
 		io.github.insjang.terminal.connector.ssh.RemoteFilesTest io.github.insjang.terminal.connector.ssh.LocalFilesTest \
-		io.github.insjang.terminal.view.ui.tests.DroppedFilesTest
+		io.github.insjang.terminal.view.ui.tests.DroppedFilesTest io.github.insjang.terminal.view.ui.tests.LinkPolicyTest
 fi
 
 if [ "${1:-}" = site ]; then

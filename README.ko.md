@@ -26,7 +26,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | 명령 입력창 | 한 줄 | 여러 줄 (Shift+Enter), 기록 유지 |
 | 탭 | 뷰마다 한 줄 | 탭을 가장자리로 끌어 화면 분할, 재시작 후 배치 복원 |
 | Ctrl+클릭 | URL과 단순 파일 경로 | 괄호·따옴표·백틱 안 경로, Windows 절대 경로, WSL 경로(`/mnt/c/...`, `/home/...`), 한글 경로도 열기 |
-| 하이퍼링크 (OSC 8) | 무시 | Ctrl+클릭으로 열기: `ls --hyperlink`, gcc 등, http·https·로컬 파일 링크만, 보이는 글자와 다른 곳을 가리키는 링크는 주소를 먼저 보여 줌 |
+| 하이퍼링크 (OSC 8) | 무시 | Ctrl+클릭으로 열기: `ls --hyperlink`, gcc 등, http·https·로컬 파일 링크만, 보이는 글자와 다른 곳을 가리키는 링크는 주소를 먼저 보여 줌, 파일은 Eclipse 에디터로만 열고 시스템 프로그램으로는 열지 않음 |
 | 파일 끌어 놓기 | 지원 안 함 | 경로 입력, 셸에 맞게 따옴표 처리 (bash, cmd, PowerShell) |
 | 색 | 글자색을 시스템에서 가져옴: 다크 테마에서 거의 검정 | Tango 기반, Eclipse 테마에 맞춤, Tango Dark·Light·Classic 프리셋 |
 | 셸 통합 (OSC 133) | 없음 | Ctrl+Up/Down으로 프롬프트 사이 이동, 실패한 명령 표시, 마지막 명령 출력 복사 |

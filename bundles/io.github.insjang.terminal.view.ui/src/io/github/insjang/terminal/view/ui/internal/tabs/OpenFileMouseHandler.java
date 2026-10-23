@@ -46,9 +46,9 @@ import org.eclipse.swt.SWT;
 import io.github.insjang.terminal.connector.Logger;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
 import io.github.insjang.terminal.control.ITerminalViewControl;
-import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.view.ui.internal.Messages;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
+import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IWorkbenchPage;
@@ -112,17 +112,18 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		String hover = terminal.getHoverSelection();
 		// a hyperlink a program put there (OSC 8) wins over the text under the mouse
 		String link = terminalText.getLink(line, column);
-		String textToOpen = link != null ? linkPath(link) : hover;
+		String textToOpen = link != null ? LinkPolicy.target(link, localHostName()) : hover;
+		// a link whose text says something else is shown before it is opened, file links too
+		if (link != null && textToOpen != null && LinkPolicy.confirm(link, textToOpen, hover)
+				&& !MessageDialog.openQuestion(site.getShell(), Messages.OpenLink_title,
+						NLS.bind(Messages.OpenLink_question, textToOpen))) {
+			return;
+		}
 		String lineAndCol = null;
 		if (textToOpen != null && textToOpen.length() > 0) {
 			try {
 				// if the selection looks like a web URL, open using the browser
 				if (textToOpen.startsWith("http://") || textToOpen.startsWith("https://")) { //$NON-NLS-1$//$NON-NLS-2$
-					// a link whose text says something else is shown before it is opened
-					if (link != null && !link.equals(hover) && !MessageDialog.openQuestion(site.getShell(),
-							Messages.OpenLink_title, NLS.bind(Messages.OpenLink_question, link))) {
-						return;
-					}
 					try {
 						PlatformUI.getWorkbench().getBrowserSupport().createBrowser(null).openURL(new URL(textToOpen));
 						return;
@@ -173,7 +174,7 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				if (fileForLocation != null && fileForLocation.exists()) {
 					IEditorPart editor = IDE.openEditor(
 							PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), fileForLocation,
-							true);
+							editorId(IDE.getEditorDescriptor(fileForLocation, true, true)), true);
 					goToLine(lineAndCol, editor);
 					return;
 				}
@@ -182,7 +183,7 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				if (!isNetworkPath(location) && file.exists() && !file.isDirectory()) {
 					try {
 						IEditorPart editor = IDE.openEditor(site.getPage(), file.toURI(),
-								IDE.getEditorDescriptor(file.getName(), true, true).getId(), true);
+								editorId(IDE.getEditorDescriptor(file.getName(), true, true)), true);
 						goToLine(lineAndCol, editor);
 						return;
 					} catch (Exception e) {
@@ -217,7 +218,8 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 
 					try {
 						for (IFile iFile : files) {
-							IEditorPart editor = IDE.openEditor(page, iFile, true);
+							IEditorPart editor = IDE.openEditor(page, iFile,
+									editorId(IDE.getEditorDescriptor(iFile, true, true)), true);
 							goToLine(lineAndCol, editor);
 						}
 					} catch (final PartInitException e) {
@@ -247,33 +249,17 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	 * of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;. Anything else, and
 	 * anything on another platform, is left as it is.
 	 */
-	/**
-	 * What an OSC 8 link opens: a web URL as it is, a file:// URL as the path on this
-	 * computer; null for a file on another host (an SSH server), which cannot be opened here.
-	 */
-	static String linkPath(String link) {
-		if (!link.regionMatches(true, 0, "file://", 0, 7)) { //$NON-NLS-1$
-			return link;
+	// terminal output picks the file: never a program outside Eclipse or an OLE editor for it
+	private static String editorId(IEditorDescriptor descriptor) {
+		return LinkPolicy.editorId(descriptor.getId(), descriptor.isOpenExternal(), descriptor.isOpenInPlace());
+	}
+
+	private static String localHostName() {
+		try {
+			return InetAddress.getLocalHost().getHostName();
+		} catch (UnknownHostException e) {
+			return ""; //$NON-NLS-1$
 		}
-		TerminalDirectory file = TerminalDirectory.parse(link);
-		if (file == null) {
-			return null;
-		}
-		String host = file.host();
-		boolean local = host.isEmpty() || host.equalsIgnoreCase("localhost"); //$NON-NLS-1$
-		if (!local) {
-			try {
-				local = host.equalsIgnoreCase(InetAddress.getLocalHost().getHostName());
-			} catch (UnknownHostException e) {
-				// not this computer then
-			}
-		}
-		if (!local) {
-			return null;
-		}
-		String path = file.path();
-		// file:///C:/a on Windows
-		return path.length() > 3 && path.charAt(0) == '/' && path.charAt(2) == ':' ? path.substring(1) : path;
 	}
 
 	private static String toWindowsPath(String path) {
