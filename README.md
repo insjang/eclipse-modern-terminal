@@ -11,6 +11,10 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 |---|---|
 | ![Claude Code running in Modern Terminal, Korean table aligned](docs/images/claude-code.png) | ![Claude Code and htop split in one view](docs/images/split.png) |
 
+| Find in the scrollback (Ctrl+Shift+F) | Shell integration: failed commands marked | A link whose text says otherwise asks first |
+|---|---|---|
+| ![Find bar over a build log, the second ERROR selected](docs/images/find.png) | ![Prompts of failed commands marked red at the left](docs/images/shell-integration.png) | ![Open Link question showing the real address](docs/images/link-confirm.png) |
+
 ## What it fixes and adds
 
 | | Eclipse Terminal | Modern Terminal |

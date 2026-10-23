@@ -8,6 +8,10 @@
 |---|---|
 | ![Modern Terminal에서 실행한 Claude Code, 한글 표 정렬 정상](docs/images/claude-code.png) | ![한 뷰 안에 Claude Code와 htop을 분할](docs/images/split.png) |
 
+| 스크롤백 찾기 (Ctrl+Shift+F) | 셸 통합: 실패한 명령 표시 | 글자와 다른 링크는 먼저 확인 |
+|---|---|---|
+| ![빌드 로그에서 찾기, 두 번째 ERROR 선택](docs/images/find.png) | ![실패한 명령의 프롬프트 왼쪽에 빨간 표시](docs/images/shell-integration.png) | ![실제 주소를 보여 주는 Open Link 확인 창](docs/images/link-confirm.png) |
+
 Eclipse용 터미널 뷰.
 한글 등 넓은 문자, 전체 화면 프로그램, 최신 키 입력을 제대로 처리: Claude Code, Codex CLI, vim, less, htop이 Windows Terminal과 같이 동작.
 Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 터미널 옆에 설치됨.
