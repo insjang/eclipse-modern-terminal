@@ -119,6 +119,21 @@ public class TerminalFindTest {
 	}
 
 	@Test
+	public void testDeepRegexStops() {
+		// a group alternative over a long logical line recurses past the stack: reported as too slow
+		ITerminalTextData data = TerminalTextDataFactory.makeTerminalTextData();
+		data.setMaxHeight(5000);
+		VT100Emulator emulator = new VT100Emulator(data, new MockTerminalControlForText(), null);
+		emulator.resetState();
+		emulator.setDimensions(5, 80);
+		emulator.setInputStreamReader(new StringReader("ab".repeat(100000)));
+		emulator.processText();
+		Pattern p = TerminalFind.pattern("(a|b)*c", false, true);
+		assertThrows(TerminalFind.TooSlowException.class,
+				() -> TerminalFind.next(data, p, null, true, System.nanoTime() + 5_000_000_000L));
+	}
+
+	@Test
 	public void testRunawayRegexStops() {
 		ITerminalTextData data = terminal(80, "a".repeat(60) + "!");
 		Pattern p = TerminalFind.pattern("(.*a){20}x", false, true); // backtracks for ages

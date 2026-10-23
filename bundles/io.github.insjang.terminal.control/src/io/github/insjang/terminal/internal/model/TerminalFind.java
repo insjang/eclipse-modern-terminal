@@ -183,7 +183,7 @@ public final class TerminalFind {
 		List<Match> found = new ArrayList<>();
 		Matcher m = pattern.matcher(new Timed(logical.text(), deadline, new int[1]));
 		int[][] cells = logical.cells();
-		while (m.find()) {
+		while (find(m)) {
 			if (m.end() > m.start()) {
 				int s = m.start(), e = m.end() - 1;
 				found.add(new Match(cells[0][s], cells[1][s], cells[0][e], cells[2][e]));
@@ -193,6 +193,15 @@ public final class TerminalFind {
 			throw new TooSlowException();
 		}
 		return found;
+	}
+
+	// an expression that recurses too deep (a long run of a group alternative) ends as a slow one does
+	private static boolean find(Matcher m) {
+		try {
+			return m.find();
+		} catch (StackOverflowError e) {
+			throw new TooSlowException();
+		}
 	}
 
 	private static int[][] appendLine(ITerminalTextDataReadOnly data, int line, StringBuilder text, int[][] cells) {

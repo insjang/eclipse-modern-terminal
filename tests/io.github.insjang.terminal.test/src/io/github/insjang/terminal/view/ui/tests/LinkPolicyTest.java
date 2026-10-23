@@ -110,6 +110,8 @@ public class LinkPolicyTest {
 			assertEquals(pdf.toRealPath().toString(), LinkPolicy.systemProgramTarget(real.toString(), true));
 			assertNull(LinkPolicy.systemProgramTarget(pdf.toString(), false)); // not Windows: always inside Eclipse
 			assertNull(LinkPolicy.systemProgramTarget(dir.resolve("missing.pdf").toString(), true));
+			assertNull(LinkPolicy.systemProgramTarget("//server/share/a.pdf", true)); // not even resolved
+			assertNull(LinkPolicy.systemProgramTarget("\\\\server\\share\\a.pdf", true));
 		} finally {
 			try (var files = Files.list(dir)) {
 				for (Path p : files.toList()) {

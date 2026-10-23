@@ -175,7 +175,8 @@ public final class LinkPolicy {
 	 * @return the real path to hand to the system program, or null to open inside Eclipse
 	 */
 	public static String systemProgramTarget(String path, boolean windows) {
-		if (!windows) {
+		// a network path is never touched, not even to resolve it (that would hand over the Windows login)
+		if (!windows || path.startsWith("//") || path.startsWith("\\\\")) { //$NON-NLS-1$ //$NON-NLS-2$
 			return null;
 		}
 		String real;

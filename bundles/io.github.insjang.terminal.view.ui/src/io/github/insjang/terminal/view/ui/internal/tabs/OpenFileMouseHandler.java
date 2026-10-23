@@ -257,11 +257,6 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	}
 
 	/**
-	 * A path as a WSL shell prints it, turned into one Windows can open: /mnt/d/a is D:\a, and the rest
-	 * of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;. Anything else, and
-	 * anything on another platform, is left as it is.
-	 */
-	/**
 	 * Terminal output picks the file: an editor inside Eclipse, the system program only for
 	 * a PDF or an image and only after asking, never anything else outside Eclipse or OLE.
 	 *
@@ -293,6 +288,11 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		}
 	}
 
+	/**
+	 * A path as a WSL shell prints it, turned into one Windows can open: /mnt/d/a is D:\a, and the rest
+	 * of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;. Anything else, and
+	 * anything on another platform, is left as it is.
+	 */
 	private static String toWindowsPath(String path) {
 		if (File.separatorChar != '\\' || !path.startsWith("/")) { //$NON-NLS-1$
 			return path;
