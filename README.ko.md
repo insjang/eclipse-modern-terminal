@@ -58,6 +58,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
   - 이후 Help → Check for Updates로 업데이트
 - 열기: Window → Show View → Other... → Modern Terminal, 또는 Ctrl+Alt+Shift+M
   - Ctrl+Alt+M: 선택한 리소스 위치에서 터미널 열기
+  - 에디터에서 Ctrl+Alt+Enter (또는 컨텍스트 메뉴의 Run Selected Text in Modern Terminal): 선택한 글자를 Modern Terminal에 보이는 터미널에서 실행 (붙여넣은 뒤 Enter)
   - 두 터미널을 함께 설치할 수 있도록 Eclipse Terminal의 단축키(Ctrl+Alt+Shift+T, Ctrl+Alt+T)와 다르게 지정
 - 제거: Help → About Eclipse IDE → Installation Details → Installed Software → Modern Terminal → Uninstall
 

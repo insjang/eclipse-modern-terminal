@@ -322,6 +322,22 @@
       </menuContribution>
             
    </extension>
+   <extension point="org.eclipse.ui.menus">
+      <menuContribution locationURI="popup:org.eclipse.ui.popup.any?after=additions">
+         <command commandId="io.github.insjang.terminal.view.ui.command.runSelection">
+            <visibleWhen checkEnabled="false">
+               <and>
+                  <with variable="activePart">
+                     <instanceof value="org.eclipse.ui.IEditorPart"/>
+                  </with>
+                  <with variable="selection">
+                     <instanceof value="org.eclipse.jface.text.ITextSelection"/>
+                  </with>
+               </and>
+            </visibleWhen>
+         </command>
+      </menuContribution>
+   </extension>
    <extension point="org.eclipse.ui.commands">
       <category
             id="io.github.insjang.terminal.view.ui.commands.category"
@@ -359,6 +375,11 @@
       </command>
       <command
             categoryId="io.github.insjang.terminal.view.ui.commands.category"
+            id="io.github.insjang.terminal.view.ui.command.runSelection"
+            name="%command.runSelection.name">
+      </command>
+      <command
+            categoryId="io.github.insjang.terminal.view.ui.commands.category"
             helpContextId="io.github.insjang.terminal.view.ui.command_NewView"
             id="io.github.insjang.terminal.view.ui.command.newview"
             name="%command.newview.name">
@@ -370,6 +391,11 @@
             contextId="org.eclipse.ui.contexts.window"
             schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
             sequence="CTRL+SHIFT+M3+M"/> <!-- not CTRL+SHIFT+ALT+T: the built-in Terminal has it -->
+      <key
+            commandId="io.github.insjang.terminal.view.ui.command.runSelection"
+            contextId="org.eclipse.ui.textEditorScope"
+            schemeId="org.eclipse.ui.defaultAcceleratorConfiguration"
+            sequence="M1+M3+CR"/>
    </extension>
    <extension point="org.eclipse.ui.handlers">
       <handler
@@ -423,6 +449,11 @@
                   <equals value="io.github.insjang.terminal.view.ui.TerminalsView"/>
                </with>
             </activeWhen>
+      </handler>
+
+      <handler
+            class="io.github.insjang.terminal.view.ui.internal.handler.RunSelectionInTerminalHandler"
+            commandId="io.github.insjang.terminal.view.ui.command.runSelection">
       </handler>
 
       <handler
