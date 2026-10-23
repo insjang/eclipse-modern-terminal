@@ -76,6 +76,8 @@ public class Messages extends NLS {
 	public static String RunSelection_title;
 	public static String OpenLink_title;
 	public static String OpenLink_question;
+	public static String OpenSystem_title;
+	public static String OpenSystem_question;
 	public static String RunSelection_noTerminal;
 
 	public static String NewTerminalViewAction_menu;

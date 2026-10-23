@@ -25,7 +25,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Command input field | one line | several lines (Shift+Enter), history kept |
 | Tabs | one row per view | drag a tab to an edge to split the view; the layout comes back after a restart |
 | Ctrl+click | URLs and plain file paths | also paths in brackets, quotes or backticks, absolute Windows paths, WSL paths (`/mnt/c/...`, `/home/...`), Hangul paths |
-| Hyperlinks (OSC 8) | ignored | Ctrl+click opens them: `ls --hyperlink`, gcc, and others; http, https and local file links only, a link whose text says something else shows where it goes first; files open only in Eclipse editors, never in a system program |
+| Hyperlinks (OSC 8) | ignored | Ctrl+click opens them: `ls --hyperlink`, gcc, and others; http, https and local file links only, a link whose text says something else shows where it goes first (see Ctrl+click) |
 | Drop files | not supported | types their paths, quoted for the shell (bash, cmd, PowerShell) |
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
 | Shell integration (OSC 133) | none | Ctrl+Up/Down between prompts, failed commands marked, copy the last command's output |
@@ -77,6 +77,15 @@ Ctrl+Shift+F in a terminal opens a find bar above it (with the selected text, if
 - A line that ran on to the next one is searched as one; wide characters (Hangul, CJK, emoji) are matched by their cells
 - Esc closes it and the focus goes back to the terminal; Ctrl+Shift+F again puts the focus back in the bar
 - New output scrolls to the end as before: turn on Scroll Lock in the view toolbar to read a match while a program is still writing
+
+## Ctrl+click
+
+What the terminal shows comes from programs and servers, so Ctrl+click (on a path, a URL or an OSC 8 link) never runs anything:
+
+- A file opens in an Eclipse editor (the text editor when Eclipse has none for it), never in a program outside Eclipse or an OLE editor
+- Only a PDF or an image (pdf, png, jpg, jpeg, gif, bmp) may open in the program the system has for it, and only after a question that shows the full path; the name is read as Windows reads it (trailing dots and spaces dropped), and alternate data streams (`a.exe:x.pdf`) and network (UNC) paths are refused
+- A web link opens in the browser; an OSC 8 link whose text is not its address shows the address first, with the host in ASCII (punycode) and unusual characters escaped
+- An OSC 8 file link opens only a file on this computer; one to another host is ignored
 
 ## Shell integration (OSC 133)
 

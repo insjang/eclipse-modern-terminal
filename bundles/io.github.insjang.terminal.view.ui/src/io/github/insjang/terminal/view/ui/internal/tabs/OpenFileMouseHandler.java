@@ -116,14 +116,14 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		// a link whose text says something else is shown before it is opened, file links too
 		if (link != null && textToOpen != null && LinkPolicy.confirm(link, textToOpen, hover)
 				&& !MessageDialog.openQuestion(site.getShell(), Messages.OpenLink_title,
-						NLS.bind(Messages.OpenLink_question, textToOpen))) {
+						NLS.bind(Messages.OpenLink_question, LinkPolicy.display(textToOpen)))) {
 			return;
 		}
 		String lineAndCol = null;
 		if (textToOpen != null && textToOpen.length() > 0) {
 			try {
 				// if the selection looks like a web URL, open using the browser
-				if (textToOpen.startsWith("http://") || textToOpen.startsWith("https://")) { //$NON-NLS-1$//$NON-NLS-2$
+				if (LinkPolicy.isWeb(textToOpen)) {
 					try {
 						PlatformUI.getWorkbench().getBrowserSupport().createBrowser(null).openURL(new URL(textToOpen));
 						return;
@@ -172,9 +172,13 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				IFile fileForLocation = ResourcesPlugin.getWorkspace().getRoot()
 						.getFileForLocation(new Path(location));
 				if (fileForLocation != null && fileForLocation.exists()) {
+					String id = editorId(IDE.getEditorDescriptor(fileForLocation, true, true), location);
+					if (id == null) {
+						return;
+					}
 					IEditorPart editor = IDE.openEditor(
-							PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), fileForLocation,
-							editorId(IDE.getEditorDescriptor(fileForLocation, true, true)), true);
+							PlatformUI.getWorkbench().getActiveWorkbenchWindow().getActivePage(), fileForLocation, id,
+							true);
 					goToLine(lineAndCol, editor);
 					return;
 				}
@@ -182,8 +186,11 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				File file = new File(location);
 				if (!isNetworkPath(location) && file.exists() && !file.isDirectory()) {
 					try {
-						IEditorPart editor = IDE.openEditor(site.getPage(), file.toURI(),
-								editorId(IDE.getEditorDescriptor(file.getName(), true, true)), true);
+						String id = editorId(IDE.getEditorDescriptor(file.getName(), true, true), location);
+						if (id == null) {
+							return;
+						}
+						IEditorPart editor = IDE.openEditor(site.getPage(), file.toURI(), id, true);
 						goToLine(lineAndCol, editor);
 						return;
 					} catch (Exception e) {
@@ -218,8 +225,12 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 
 					try {
 						for (IFile iFile : files) {
-							IEditorPart editor = IDE.openEditor(page, iFile,
-									editorId(IDE.getEditorDescriptor(iFile, true, true)), true);
+							String id = editorId(IDE.getEditorDescriptor(iFile, true, true),
+									iFile.getLocation() != null ? iFile.getLocation().toOSString() : iFile.getName());
+							if (id == null) {
+								return;
+							}
+							IEditorPart editor = IDE.openEditor(page, iFile, id, true);
 							goToLine(lineAndCol, editor);
 						}
 					} catch (final PartInitException e) {
@@ -249,9 +260,20 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	 * of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;. Anything else, and
 	 * anything on another platform, is left as it is.
 	 */
-	// terminal output picks the file: never a program outside Eclipse or an OLE editor for it
-	private static String editorId(IEditorDescriptor descriptor) {
-		return LinkPolicy.editorId(descriptor.getId(), descriptor.isOpenExternal(), descriptor.isOpenInPlace());
+	/**
+	 * Terminal output picks the file: an editor inside Eclipse, the system program only for
+	 * a PDF or an image and only after asking, never anything else outside Eclipse or OLE.
+	 *
+	 * @return the editor id, or null when the user said no
+	 */
+	private String editorId(IEditorDescriptor d, String path) {
+		String id = LinkPolicy.editorId(d != null ? d.getId() : null, d != null && d.isInternal(),
+				d != null && d.isOpenInPlace(), path);
+		if (LinkPolicy.SYSTEM_EDITOR_ID.equals(id) && !MessageDialog.openQuestion(site.getShell(),
+				Messages.OpenSystem_title, NLS.bind(Messages.OpenSystem_question, LinkPolicy.display(path)))) {
+			return null;
+		}
+		return id;
 	}
 
 	private static String localHostName() {

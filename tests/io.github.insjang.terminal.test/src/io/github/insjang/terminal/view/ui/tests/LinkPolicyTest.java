@@ -45,11 +45,56 @@ public class LinkPolicyTest {
 	}
 
 	@Test
+	public void webLinksAskUnlessTheTextIsTheUrl() {
+		// the file name rule is for file links only: these used to open without a question
+		assertTrue(LinkPolicy.confirm("https://evil.example/?u=/https://github.com/login",
+				"https://evil.example/?u=/https://github.com/login", "https://github.com/login"));
+		assertTrue(LinkPolicy.confirm("https://evil.example/x/github.com", "https://evil.example/x/github.com", "github.com"));
+		assertFalse(LinkPolicy.confirm("https://E.com/A", "https://E.com/A", "HTTPS://e.com/A")); // scheme, host in any case
+		assertTrue(LinkPolicy.confirm("https://e.com/A", "https://e.com/A", "https://e.com/a")); // the path is not
+		assertTrue(LinkPolicy.isWeb("HTTPS://e.com"));
+		assertTrue(LinkPolicy.isWeb("Http://e.com"));
+		assertFalse(LinkPolicy.isWeb("file:///tmp"));
+	}
+
+	@Test
+	public void questionsShowTheRealTarget() {
+		// a Cyrillic e in the host, a right-to-left override in the path
+		String shown = LinkPolicy.display("https://\u0435xample.com/\u202ecod.exe");
+		assertTrue(shown.startsWith("https://xn--") && shown.endsWith(".com/%E2%80%AEcod.exe"), shown);
+		assertEquals("https://user@xn--bcher-kva.example:8443/a%20b?q=%ED%95%9C",
+				LinkPolicy.display("https://user@b\u00fccher.example:8443/a b?q=\ud55c"));
+		assertEquals("/tmp/a\\u202Etxt.exe", LinkPolicy.display("/tmp/a\u202etxt.exe"));
+		assertEquals("/tmp/\ud55c\uae00.txt", LinkPolicy.display("/tmp/\ud55c\uae00.txt")); // Hangul stays readable
+	}
+
+	@Test
+	public void theSystemProgramOnlyForDocumentsAndImages() {
+		assertTrue(LinkPolicy.systemProgramAllowed("C:\\Users\\me\\a.PDF"));
+		assertTrue(LinkPolicy.systemProgramAllowed("/home/me/shot.png"));
+		assertTrue(LinkPolicy.systemProgramAllowed("C:\\a.jpeg. . ")); // Windows drops the trailing dots and spaces
+		assertFalse(LinkPolicy.systemProgramAllowed("C:\\a.exe"));
+		assertFalse(LinkPolicy.systemProgramAllowed("C:\\a.pdf.exe"));
+		assertFalse(LinkPolicy.systemProgramAllowed("C:\\a.exe . "));
+		assertFalse(LinkPolicy.systemProgramAllowed("C:\\a.svg"));
+		assertFalse(LinkPolicy.systemProgramAllowed("C:\\a.html"));
+		assertFalse(LinkPolicy.systemProgramAllowed("C:\\a.exe:x.pdf")); // an alternate data stream
+		assertFalse(LinkPolicy.systemProgramAllowed("\\\\server\\share\\a.pdf")); // UNC
+		assertFalse(LinkPolicy.systemProgramAllowed("/tmp/.pdf"));
+	}
+
+	@Test
 	public void neverAProgramOutsideEclipse() {
 		assertEquals("org.eclipse.ui.genericeditor.GenericEditor",
-				LinkPolicy.editorId("org.eclipse.ui.genericeditor.GenericEditor", false, false));
-		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemExternalEditor", true, false));
+				LinkPolicy.editorId("org.eclipse.ui.genericeditor.GenericEditor", true, false));
+		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemExternalEditor", false, false));
 		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemInPlaceEditor", false, true));
+		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("some.external.Program", false, false));
 		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId(null, false, false));
+		// with the path: the system program for a PDF or an image only
+		assertEquals(LinkPolicy.SYSTEM_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemExternalEditor", false, false, "C:\\a.pdf"));
+		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemExternalEditor", false, false, "C:\\a.bat"));
+		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId(null, false, false, "C:\\a.lnk"));
+		assertEquals("pdf.Internal", LinkPolicy.editorId("pdf.Internal", true, false, "C:\\a.pdf"));
 	}
 }

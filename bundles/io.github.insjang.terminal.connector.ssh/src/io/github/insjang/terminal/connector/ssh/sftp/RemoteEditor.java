@@ -43,7 +43,6 @@ import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorPart;
-import org.eclipse.ui.IEditorRegistry;
 import org.eclipse.ui.IPartListener2;
 import org.eclipse.ui.IWorkbench;
 import org.eclipse.ui.IWorkbenchListener;
@@ -52,9 +51,11 @@ import org.eclipse.ui.IWorkbenchPart;
 import org.eclipse.ui.IWorkbenchPartReference;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
-import org.eclipse.ui.editors.text.EditorsUI;
 import org.eclipse.ui.ide.IDE;
 
+import org.apache.sshd.client.session.ClientSessionCreator;
+import org.apache.sshd.common.util.net.SshdSocketAddress;
+import io.github.insjang.terminal.view.ui.internal.tabs.LinkPolicy;
 import io.github.insjang.terminal.connector.ssh.activator.UIPlugin;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
 
@@ -370,16 +371,16 @@ public final class RemoteEditor {
 
 	/** The editor registered for the name if it runs inside Eclipse, else the text editor (never external or OLE). */
 	public static String editorFor(String id, boolean internal, boolean inPlace) {
-		if (id == null || !internal || inPlace || id.equals(IEditorRegistry.SYSTEM_EXTERNAL_EDITOR_ID)
-				|| id.equals(IEditorRegistry.SYSTEM_INPLACE_EDITOR_ID)) {
-			return EditorsUI.DEFAULT_TEXT_EDITOR_ID;
-		}
-		return id;
+		return LinkPolicy.editorId(id, internal, inPlace); // the rule Ctrl+click in the terminal follows
 	}
 
-	/** A folder name for user@host:port and the remote path. */
+	/**
+	 * A folder name for user@host:port and the remote path. The host is the one configured
+	 * (TARGET_SERVER): behind a ProxyJump the socket goes to a local tunnel on a new port each time.
+	 */
 	static String key(ClientSession session, String remote) {
-		String id = session.getUsername() + '@' + session.getConnectAddress() + remote;
+		SshdSocketAddress target = session.getAttribute(ClientSessionCreator.TARGET_SERVER);
+		String id = session.getUsername() + '@' + (target != null ? target : session.getConnectAddress()) + remote;
 		try {
 			byte[] hash = MessageDigest.getInstance("SHA-256").digest(id.getBytes(StandardCharsets.UTF_8)); //$NON-NLS-1$
 			return HexFormat.of().formatHex(hash, 0, 8);
