@@ -176,6 +176,8 @@ A bell (BEL), `ESC ] 9 ; text BEL` (iTerm2) or `ESC ] 777 ; notify ; title ; tex
 
 ## Files view (SFTP)
 
+![An SSH tab and the Files view showing the same server folder](docs/images/files.png)
+
 Window > Show View > Other... > Modern Terminal > Modern Terminal Files.
 
 - Shows the files of the SSH tab selected in Modern Terminal, on the same connection: no second login

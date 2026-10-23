@@ -173,6 +173,8 @@ PS1="$PS1"$'%{\e]133;B\a%}'
 
 ## Files 뷰 (SFTP)
 
+![SSH 탭과 같은 서버 폴더를 보여 주는 Files 뷰](docs/images/files.png)
+
 - Window → Show View → Other... → Modern Terminal → Modern Terminal Files
 - Modern Terminal에서 선택한 SSH 탭의 파일을 같은 연결로 표시: 다시 로그인하지 않음
 - 탐색, Upload... (바탕 화면에서 파일·폴더 끌어 놓기도 가능), Download..., New Folder..., Rename..., Delete
