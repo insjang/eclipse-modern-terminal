@@ -85,12 +85,17 @@ A bell (BEL), `ESC ] 9 ; text BEL` (iTerm2) or `ESC ] 777 ; notify ; title ; tex
 
 - Ctrl+Alt+Shift+M (or Open Modern Terminal... in the view toolbar) > Choose terminal: SSH Terminal
   - Host, user, port, an optional key file, timeout and keepalive
+- `~/.ssh/config` is read as OpenSSH reads it: the host can be a `Host` alias, and its `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump` and `IdentityAgent` are used
+  - The user may be left empty: `User` of the config, else the local login name
+  - Port 22 in the field leaves `Port` of the config in force, as `ssh alias` without `-p`; any other port wins
+  - `ProxyJump` (bastion hosts, also chained): the key of every host on the way is checked against `known_hosts`, as for a direct connection
 - Saved Sessions (as in PuTTY): type a name and Save, select one and Load, or double-click to connect; Delete removes it and its saved password
 - Start folder: the shell and the Files view start there after login (empty: the home); SSH has no request for the folder, so the command `sh -c 'cd "$1"; exec "$SHELL" -l' sh '<folder>'` starts the login shell there (any login shell, csh too; a missing folder leaves an error and the home)
 - Local forwards: ports on this computer passed through the server, as `ssh -L`; `8080:localhost:80 5433:db:5432` makes `localhost:8080` here reach port 80 on the server and `localhost:5433` reach `db:5432` from it. They listen on 127.0.0.1 only, are listed in the terminal when the connection opens (a port in use is reported, the rest still open) and close with the terminal
 - Edit Session... in the context menu of an SSH terminal: the settings of its saved session, saved for the next connection (the open terminal stays as it is)
 - Authentication, as OpenSSH tries it:
-  - Keys: the key file field first, then `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` and `IdentityFile` entries of `~/.ssh/config`; a passphrase is asked when needed
+  - An ssh-agent first: `IdentityAgent` of the config, else `SSH_AUTH_SOCK`, else on Windows the Windows OpenSSH agent (`\\.\pipe\openssh-ssh-agent`); Pageant through `IdentityAgent` with its named pipe (`pageant --openssh-config` writes that line; the older window messages only are not supported); `IdentityAgent none` turns it off. The agent is never forwarded to the server
+  - Keys: the key file field, then `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa` and `IdentityFile` entries of `~/.ssh/config`; a passphrase is asked when needed
   - Password and keyboard-interactive (e.g. one-time codes)
 - Passwords are kept only when "Save password" is checked, and then only in the Eclipse Secure Storage
 - Host keys are checked against `~/.ssh/known_hosts` like OpenSSH:

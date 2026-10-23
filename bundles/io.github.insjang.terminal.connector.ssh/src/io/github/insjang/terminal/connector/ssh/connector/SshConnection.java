@@ -46,7 +46,9 @@ import org.apache.sshd.client.auth.keyboard.UserInteraction;
 import org.apache.sshd.client.channel.PtyCapableChannelSession;
 import org.apache.sshd.client.future.ConnectFuture;
 import org.apache.sshd.client.ClientFactoryManager;
+import org.apache.sshd.client.config.hosts.HostConfigEntry;
 import org.apache.sshd.client.session.ClientSession;
+import org.apache.sshd.client.session.ClientSessionCreator;
 import org.apache.sshd.client.session.ClientSessionImpl;
 import org.apache.sshd.client.session.SessionFactory;
 import org.apache.sshd.common.FactoryManager;
@@ -61,6 +63,7 @@ import org.apache.sshd.common.config.keys.KeyUtils;
 import org.apache.sshd.common.keyprovider.FileKeyPairProvider;
 import org.apache.sshd.common.session.SessionContext;
 import org.apache.sshd.core.CoreModuleProperties;
+import org.eclipse.core.runtime.Platform;
 import org.eclipse.jface.dialogs.IDialogConstants;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.window.Window;
@@ -88,6 +91,8 @@ public class SshConnection extends Thread {
 	private ClientSession fSession;
 	private boolean fDisconnectHasBeenCalled;
 	private volatile boolean fAuthCancelled;
+	// the ssh-agent of this connection (and of its ProxyJump hosts), null for none
+	private volatile String fAgent;
 
 	protected SshConnection(SshConnector conn, ITerminalControl control) {
 		super("SshConnection-" + fgNo++); //$NON-NLS-1$
@@ -112,10 +117,15 @@ public class SshConnection extends Thread {
 				return new KnownTypesFirstSession(client, ioSession);
 			}
 		});
+		// a ProxyJump host is checked as well: its session has the same connection
 		client.setServerKeyVerifier((session, address, key) -> {
 			SshConnection connection = of(session);
-			return connection != null && connection.verifyHostKey(session, key);
+			return connection != null && connection.verifyHostKey(session, address, key);
 		});
+		client.setAgentFactory(SshAgentClient.factory(session -> {
+			SshConnection connection = of(session);
+			return connection != null ? connection.fAgent : null;
+		}));
 		FilePasswordProvider passphrases = new PassphrasePrompt();
 		client.setFilePasswordProvider(passphrases);
 		// looked up on every login, so a key created later is found without a restart
@@ -157,7 +167,10 @@ public class SshConnection extends Thread {
 		@Override
 		protected String resolveAvailableSignaturesProposal(FactoryManager manager) {
 			String proposal = super.resolveAvailableSignaturesProposal(manager);
-			SshdSocketAddress target = target(getConnectAddress());
+			SshdSocketAddress target = getAttribute(ClientSessionCreator.TARGET_SERVER);
+			if (target == null) {
+				target = target(getConnectAddress());
+			}
 			if (target == null) {
 				return proposal;
 			}
@@ -192,7 +205,15 @@ public class SshConnection extends Thread {
 		int port = settings.getPort();
 		try {
 			Duration timeout = settings.getTimeout() > 0 ? Duration.ofSeconds(settings.getTimeout()) : null;
-			ConnectFuture future = UIPlugin.getDefault().getClient().connect(settings.getUser(), host, port,
+			SshClient client = UIPlugin.getDefault().getClient();
+			// as ssh without -p: the default port leaves Port of ~/.ssh/config in force
+			int configPort = port == ISshSettings.DEFAULT_SSH_PORT ? 0 : port;
+			String user = settings.getUser() == null || settings.getUser().isBlank() ? null : settings.getUser().trim();
+			HostConfigEntry entry = client.getHostConfigEntryResolver().resolveEffectiveHost(host, configPort, null,
+					user, null, null);
+			fAgent = SshAgentClient.address(entry != null ? entry.getProperty(HostConfigEntry.IDENTITY_AGENT) : null,
+					System.getenv(), Platform.OS_WIN32.equals(Platform.getOS()));
+			ConnectFuture future = client.connect(user, host, configPort,
 					AttributeRepository.ofKeyValuePair(CONNECTION, this), null);
 			ClientSession session = (timeout != null ? future.verify(timeout) : future.verify()).getSession();
 			synchronized (this) {
@@ -362,6 +383,11 @@ public class SshConnection extends Thread {
 		return display;
 	}
 
+	// the login name: User of ~/.ssh/config when the settings have none
+	private synchronized String user() {
+		return fSession != null ? fSession.getUsername() : fConn.getSshSettings().getUser();
+	}
+
 	private String hostPort() {
 		ISshSettings settings = fConn.getSshSettings();
 		String hostPort = settings.getHost();
@@ -388,14 +414,19 @@ public class SshConnection extends Thread {
 	 * Checks the server key against ~/.ssh/known_hosts (see {@link HostKeys#decide}); asks about a key
 	 * type not known for the host and adds the key if the user agrees.
 	 */
-	/* default */ boolean verifyHostKey(ClientSession session, PublicKey key) {
+	/* default */ boolean verifyHostKey(ClientSession session, SocketAddress address, PublicKey key) {
 		String host = fConn.getSshSettings().getHost();
 		int port = fConn.getSshSettings().getPort();
-		SshdSocketAddress target = target(session.getConnectAddress());
+		// the host as configured (HostName), also behind a ProxyJump, where the socket goes to a local tunnel
+		SshdSocketAddress target = target(address);
+		if (target == null) {
+			target = target(session.getConnectAddress());
+		}
 		if (target != null) {
 			host = target.getHostName();
 			port = target.getPort();
 		}
+		String shown = port == ISshSettings.DEFAULT_SSH_PORT ? host : host + ':' + port;
 		HostKeys.Known known;
 		try {
 			known = HostKeys.load(KNOWN_HOSTS, host, port);
@@ -407,10 +438,10 @@ public class SshConnection extends Thread {
 		case ACCEPT:
 			return true;
 		case REFUSE:
-			warnRefusedKey(known, key);
+			warnRefusedKey(shown, known, key);
 			return false;
 		default:
-			if (!(known.keys().isEmpty() ? acceptUnknownKey(key) : acceptOtherKeyType(known, key))) {
+			if (!(known.keys().isEmpty() ? acceptUnknownKey(shown, key) : acceptOtherKeyType(shown, known, key))) {
 				return false;
 			}
 			try {
@@ -437,22 +468,22 @@ public class SshConnection extends Thread {
 		return result[0];
 	}
 
-	private boolean acceptUnknownKey(PublicKey key) {
+	private boolean acceptUnknownKey(String shown, PublicKey key) {
 		return askYesNo(NLS.bind(SshMessages.SSH_UNKNOWN_HOST,
-				new Object[] { hostPort(), KeyUtils.getKeyType(key), KeyUtils.getFingerPrint(key), KNOWN_HOSTS }));
+				new Object[] { shown, KeyUtils.getKeyType(key), KeyUtils.getFingerPrint(key), KNOWN_HOSTS }));
 	}
 
-	private boolean acceptOtherKeyType(HostKeys.Known known, PublicKey key) {
-		return askYesNo(NLS.bind(SshMessages.SSH_OTHER_KEY_TYPE, new Object[] { hostPort(),
+	private boolean acceptOtherKeyType(String shown, HostKeys.Known known, PublicKey key) {
+		return askYesNo(NLS.bind(SshMessages.SSH_OTHER_KEY_TYPE, new Object[] { shown,
 				String.join(", ", HostKeys.types(known)), KeyUtils.getKeyType(key), KeyUtils.getFingerPrint(key), KNOWN_HOSTS })); //$NON-NLS-1$
 	}
 
-	private void warnRefusedKey(HostKeys.Known known, PublicKey key) {
+	private void warnRefusedKey(String shown, HostKeys.Known known, PublicKey key) {
 		String type = KeyUtils.getKeyType(key);
 		PublicKey expected = known.keys().stream().filter(k -> type.equals(KeyUtils.getKeyType(k))).findFirst().orElse(null);
 		String msg = expected == null // no known key of the type: the server key is @revoked
-				? NLS.bind(SshMessages.SSH_REVOKED_HOST, new Object[] { hostPort(), type, KeyUtils.getFingerPrint(key), KNOWN_HOSTS })
-				: NLS.bind(SshMessages.SSH_CHANGED_HOST, new Object[] { hostPort(), type, KeyUtils.getFingerPrint(expected),
+				? NLS.bind(SshMessages.SSH_REVOKED_HOST, new Object[] { shown, type, KeyUtils.getFingerPrint(key), KNOWN_HOSTS })
+				: NLS.bind(SshMessages.SSH_CHANGED_HOST, new Object[] { shown, type, KeyUtils.getFingerPrint(expected),
 						type, KeyUtils.getFingerPrint(key), KNOWN_HOSTS });
 		showMessage(SWT.ICON_WARNING | SWT.OK, SshMessages.WARNING, msg);
 	}
@@ -462,7 +493,7 @@ public class SshConnection extends Thread {
 		final String[] retval = new String[1];
 		getStandardDisplay().syncExec(() -> {
 			if (!isDisconnected()) {
-				UserValidationDialog uvd = new UserValidationDialog(null, null, fConn.getSshSettings().getUser(), message);
+				UserValidationDialog uvd = new UserValidationDialog(null, null, user(), message);
 				uvd.setUsernameMutable(false);
 				if (uvd.open() == Window.OK) {
 					retval[0] = uvd.getPassword();
@@ -485,7 +516,7 @@ public class SshConnection extends Thread {
 			if (fAuthCancelled) {
 				return null;
 			}
-			String password = promptSecret(NLS.bind(SshMessages.SSH_PASSWORD, fConn.getSshSettings().getUser(), hostPort()));
+			String password = promptSecret(NLS.bind(SshMessages.SSH_PASSWORD, session.getUsername(), hostPort()));
 			fAuthCancelled = password == null;
 			return password;
 		}

@@ -86,12 +86,17 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 
 - Ctrl+Alt+Shift+M (또는 뷰 툴바의 Open Modern Terminal...) → Choose terminal: SSH Terminal
   - 호스트, 사용자, 포트, 키 파일(선택), 타임아웃, keepalive 입력
+- `~/.ssh/config`를 OpenSSH와 같이 읽음: 호스트에 `Host` 별칭 입력 가능, `HostName`, `User`, `Port`, `IdentityFile`, `ProxyJump`, `IdentityAgent` 사용
+  - 사용자는 비워 둘 수 있음: config의 `User`, 없으면 로컬 로그인 이름
+  - 포트 칸이 22면 config의 `Port`가 적용됨 (`-p` 없는 `ssh 별칭`과 같음), 다른 포트는 칸의 값 우선
+  - `ProxyJump` (bastion, 여러 단계도 가능): 거쳐 가는 모든 호스트의 키를 직접 연결과 같이 `known_hosts`로 확인
 - Saved Sessions (PuTTY 방식): 이름 입력 후 Save, 골라서 Load, 더블클릭하면 바로 접속, Delete는 세션과 저장된 비밀번호 삭제
 - Start folder: 로그인 후 셸과 Files 뷰가 그 폴더에서 시작 (비우면 홈), SSH에 작업 폴더 요청이 없어 명령 `sh -c 'cd "$1"; exec "$SHELL" -l' sh '<폴더>'`로 로그인 셸을 그 폴더에서 실행 (csh 등 어떤 로그인 셸도, 없는 폴더면 오류 후 홈)
 - Local forwards: 이 PC의 포트를 서버를 거쳐 전달 (`ssh -L`과 같음), `8080:localhost:80 5433:db:5432`면 여기의 `localhost:8080`이 서버의 80 포트로, `localhost:5433`이 서버에서 본 `db:5432`로 연결됨. 127.0.0.1에서만 열리고, 연결 시 터미널에 목록 표시 (사용 중인 포트는 알리고 나머지는 열림), 터미널을 닫으면 함께 닫힘
 - SSH 터미널 컨텍스트 메뉴의 Edit Session...: 그 탭의 저장 세션 설정을 열어 다음 연결용으로 저장 (열린 터미널은 그대로)
 - 인증: OpenSSH와 같은 순서로 시도
-  - 키: 키 파일 칸 먼저, 다음 `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`, `~/.ssh/config`의 `IdentityFile`, 필요하면 암호(passphrase) 입력 창
+  - ssh-agent 먼저: config의 `IdentityAgent`, 없으면 `SSH_AUTH_SOCK`, 없으면 Windows에서는 Windows OpenSSH 에이전트 (`\\.\pipe\openssh-ssh-agent`), Pageant는 `IdentityAgent`에 그 named pipe 지정 (`pageant --openssh-config`가 그 줄을 만들어 줌, 창 메시지 방식만 있는 예전 Pageant는 미지원), `IdentityAgent none`이면 사용 안 함. 에이전트를 서버로 전달(forwarding)하지 않음
+  - 키: 키 파일 칸, 다음 `~/.ssh/id_ed25519`, `id_ecdsa`, `id_rsa`, `~/.ssh/config`의 `IdentityFile`, 필요하면 암호(passphrase) 입력 창
   - 비밀번호, keyboard-interactive (일회용 코드 등)
 - 비밀번호는 "Save password"를 체크했을 때만 저장, 저장 위치는 Eclipse Secure Storage뿐
 - 호스트 키: OpenSSH와 같이 `~/.ssh/known_hosts`로 확인

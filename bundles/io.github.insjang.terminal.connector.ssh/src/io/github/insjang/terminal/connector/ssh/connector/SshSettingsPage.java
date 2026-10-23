@@ -107,19 +107,7 @@ public class SshSettingsPage extends AbstractSettingsPage {
 		} else {
 			updateControlDecoration(fHostText, null, IMessageProvider.NONE);
 		}
-		if (fUser.getText().trim().length() == 0) {
-			String m = "Please enter a username."; //$NON-NLS-1$
-			int mt = IMessageProvider.INFORMATION;
-			updateControlDecoration(fUser, m, mt);
-			if (mt > messageType) {
-				message = m;
-				messageType = mt;
-			}
-
-			valid = false;
-		} else {
-			updateControlDecoration(fUser, null, IMessageProvider.NONE);
-		}
+		// no user: User of ~/.ssh/config, else the local login name, as OpenSSH
 		try {
 			int p = Integer.parseInt(fPort.getText().trim());
 			if (p <= 0 || p > 65535) {

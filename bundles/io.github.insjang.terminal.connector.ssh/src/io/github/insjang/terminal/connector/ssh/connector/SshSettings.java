@@ -40,11 +40,7 @@ public class SshSettings implements ISshSettings {
 
 	@Override
 	public String getSummary() {
-		String settings = getUser() + '@' + getHost();
-		if (getPort() != ISshSettings.DEFAULT_SSH_PORT) {
-			settings += ":" + getPort(); //$NON-NLS-1$
-		}
-		return settings;
+		return SshSession.defaultName(getUser(), getHost(), getPort()); // no "@" without a user
 	}
 
 	@Override
