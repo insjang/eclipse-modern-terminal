@@ -59,6 +59,7 @@ Local shells (cmd, PowerShell, Git Bash, WSL distributions, detected on start) a
 - Open it: Window > Show View > Other... > Modern Terminal, or Ctrl+Alt+Shift+M
   - Ctrl+Alt+M opens a terminal at the selected resource
   - Ctrl+Alt+Enter in an editor (or Run Selected Text in Modern Terminal in its context menu) runs the selected text in the terminal shown in Modern Terminal: pasted, then Enter
+  - Paste with Shift+Insert or Ctrl+Shift+V. Ctrl+V goes to the program, as in xterm: in bash it inserts the next key as it is, so Ctrl+V and then a paste puts the paste markers in the line (`^[[200~...`)
   - The keys differ from the Eclipse Terminal's (Ctrl+Alt+Shift+T, Ctrl+Alt+T) so that both can be installed
 - Uninstall: Help > About Eclipse IDE > Installation Details > Installed Software > Modern Terminal > Uninstall
 
