@@ -9,8 +9,10 @@
  *******************************************************************************/
 package io.github.insjang.terminal.view.ui.internal.tabs;
 
+import java.io.IOException;
 import java.net.IDN;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
 
@@ -166,13 +168,23 @@ public final class LinkPolicy {
 	}
 
 	/**
-	 * As {@link #editorId(String, boolean, boolean)}, but a PDF or an image (by the
-	 * name as Windows reads it) goes to the system program ({@link #SYSTEM_EDITOR_ID},
-	 * which the caller asks about first) when Eclipse has no editor of its own for it.
+	 * The file the system program may open in place of an Eclipse editor: on Windows only
+	 * (elsewhere xdg-open picks the program by the content, not the name), and only a PDF or
+	 * an image by the name of the file a link, junction or symlink leads to.
+	 *
+	 * @return the real path to hand to the system program, or null to open inside Eclipse
 	 */
-	public static String editorId(String id, boolean internal, boolean inPlace, String path) {
-		String safe = editorId(id, internal, inPlace);
-		return safe.equals(TEXT_EDITOR_ID) && systemProgramAllowed(path) ? SYSTEM_EDITOR_ID : safe;
+	public static String systemProgramTarget(String path, boolean windows) {
+		if (!windows) {
+			return null;
+		}
+		String real;
+		try {
+			real = Path.of(path).toRealPath().toString();
+		} catch (IOException | RuntimeException e) {
+			return null;
+		}
+		return systemProgramAllowed(real) ? real : null;
 	}
 
 	/**

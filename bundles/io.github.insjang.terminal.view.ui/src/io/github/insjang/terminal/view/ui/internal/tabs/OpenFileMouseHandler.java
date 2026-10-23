@@ -43,6 +43,7 @@ import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.window.Window;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.program.Program;
 import io.github.insjang.terminal.connector.Logger;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
 import io.github.insjang.terminal.control.ITerminalViewControl;
@@ -268,12 +269,20 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	 */
 	private String editorId(IEditorDescriptor d, String path) {
 		String id = LinkPolicy.editorId(d != null ? d.getId() : null, d != null && d.isInternal(),
-				d != null && d.isOpenInPlace(), path);
-		if (LinkPolicy.SYSTEM_EDITOR_ID.equals(id) && !MessageDialog.openQuestion(site.getShell(),
-				Messages.OpenSystem_title, NLS.bind(Messages.OpenSystem_question, LinkPolicy.display(path)))) {
-			return null;
+				d != null && d.isOpenInPlace());
+		if (!LinkPolicy.TEXT_EDITOR_ID.equals(id) || d != null && d.isInternal()) {
+			return id; // an editor inside Eclipse
 		}
-		return id;
+		String target = LinkPolicy.systemProgramTarget(path, Platform.OS_WIN32.equals(Platform.getOS()));
+		if (target == null) {
+			return id;
+		}
+		// the real file, what a link leads to: the one checked is the one launched
+		if (MessageDialog.openQuestion(site.getShell(), Messages.OpenSystem_title,
+				NLS.bind(Messages.OpenSystem_question, LinkPolicy.display(target)))) {
+			Program.launch(target);
+		}
+		return null;
 	}
 
 	private static String localHostName() {

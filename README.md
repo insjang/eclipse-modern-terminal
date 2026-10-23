@@ -83,7 +83,9 @@ Ctrl+Shift+F in a terminal opens a find bar above it (with the selected text, if
 What the terminal shows comes from programs and servers, so Ctrl+click (on a path, a URL or an OSC 8 link) never runs anything:
 
 - A file opens in an Eclipse editor (the text editor when Eclipse has none for it), never in a program outside Eclipse or an OLE editor
-- Only a PDF or an image (pdf, png, jpg, jpeg, gif, bmp) may open in the program the system has for it, and only after a question that shows the full path; the name is read as Windows reads it (trailing dots and spaces dropped), and alternate data streams (`a.exe:x.pdf`) and network (UNC) paths are refused
+- On Windows only a PDF or an image (pdf, png, jpg, jpeg, gif, bmp) may open in the program the system has for it, and only after a question that shows the full path
+  - It is judged by the file a symlink or junction leads to, and that file is what is opened; the name is read as Windows reads it (trailing dots and spaces dropped), and alternate data streams (`a.exe:x.pdf`) and network (UNC) paths are refused
+  - On Linux and macOS files always open inside Eclipse (xdg-open picks the program by the content, not the name)
 - A web link opens in the browser; an OSC 8 link whose text is not its address shows the address first, with the host in ASCII (punycode) and unusual characters escaped
 - An OSC 8 file link opens only a file on this computer; one to another host is ignored
 

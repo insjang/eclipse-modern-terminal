@@ -14,6 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 import org.junit.jupiter.api.Test;
 
 import io.github.insjang.terminal.view.ui.internal.tabs.LinkPolicy;
@@ -91,10 +95,28 @@ public class LinkPolicyTest {
 		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemInPlaceEditor", false, true));
 		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("some.external.Program", false, false));
 		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId(null, false, false));
-		// with the path: the system program for a PDF or an image only
-		assertEquals(LinkPolicy.SYSTEM_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemExternalEditor", false, false, "C:\\a.pdf"));
-		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId("org.eclipse.ui.systemExternalEditor", false, false, "C:\\a.bat"));
-		assertEquals(LinkPolicy.TEXT_EDITOR_ID, LinkPolicy.editorId(null, false, false, "C:\\a.lnk"));
-		assertEquals("pdf.Internal", LinkPolicy.editorId("pdf.Internal", true, false, "C:\\a.pdf"));
+	}
+
+	@Test
+	public void theSystemProgramGetsTheRealFile() throws IOException {
+		Path dir = Files.createTempDirectory("linkpolicy");
+		try {
+			Path pdf = Files.writeString(dir.resolve("a.pdf"), "%PDF");
+			Path hta = Files.writeString(dir.resolve("evil.hta"), "<script>");
+			Path disguised = Files.createSymbolicLink(dir.resolve("report.pdf"), hta);
+			Path real = Files.createSymbolicLink(dir.resolve("link.pdf"), pdf);
+			assertEquals(pdf.toRealPath().toString(), LinkPolicy.systemProgramTarget(pdf.toString(), true));
+			assertNull(LinkPolicy.systemProgramTarget(disguised.toString(), true)); // the name says pdf, it leads to .hta
+			assertEquals(pdf.toRealPath().toString(), LinkPolicy.systemProgramTarget(real.toString(), true));
+			assertNull(LinkPolicy.systemProgramTarget(pdf.toString(), false)); // not Windows: always inside Eclipse
+			assertNull(LinkPolicy.systemProgramTarget(dir.resolve("missing.pdf").toString(), true));
+		} finally {
+			try (var files = Files.list(dir)) {
+				for (Path p : files.toList()) {
+					Files.delete(p);
+				}
+			}
+			Files.delete(dir);
+		}
 	}
 }
