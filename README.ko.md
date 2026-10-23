@@ -27,6 +27,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | Ctrl+클릭 | URL과 단순 파일 경로 | 괄호·따옴표·백틱 안 경로, Windows 절대 경로, WSL 경로(`/mnt/c/...`, `/home/...`), 한글 경로도 열기 |
 | 파일 끌어 놓기 | 지원 안 함 | 경로 입력, 셸에 맞게 따옴표 처리 (bash, cmd, PowerShell) |
 | 색 | 글자색을 시스템에서 가져옴: 다크 테마에서 거의 검정 | Tango 기반, Eclipse 테마에 맞춤, Tango Dark·Light·Classic 프리셋 |
+| BEL, OSC 9, OSC 777 | 무시 | 탭에 표시, Eclipse가 뒤에 있으면 데스크톱 알림, 소리 없음 |
 | 기본값 | 블록 커서, 1000줄 | 세로 막대 커서, 선택 시 복사, 10000줄 |
 | SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH 방식 known_hosts, 세션 저장 |
 | SFTP | 없음 | Files 뷰: 탐색, 전송, 원격 파일을 Eclipse에서 편집, 셸 폴더 따라가기 |
@@ -62,7 +63,16 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 - 색, 커서, 선택 시 복사, 버퍼 줄 수, 셸 목록은 Eclipse Terminal 설정과 별개
 - Load Presets: Modern Terminal Defaults (Restore Defaults 값), Tango Dark, Tango Light, Classic Terminal (Eclipse Terminal 색), Eclipse Light, Eclipse Dark
 
-## SSH
+## 알림
+
+- 탭의 프로그램이 보내는 BEL, `ESC ] 9 ; 내용 BEL` (iTerm2), `ESC ] 777 ; notify ; 제목 ; 내용 BEL` (rxvt, VTE) 처리
+  - 예: 알림 채널을 `terminal_bell`로 둔 Claude Code가 입력을 기다릴 때
+- 보이지 않는 탭에 표시, 그 탭을 보면 사라짐, Modern Terminal 뷰 자체가 가려져 있으면 뷰 탭 제목이 굵게 바뀜
+- Eclipse 창이 활성이 아닐 때: 데스크톱 알림 (트레이 풍선, Windows에서는 토스트), 탭마다 5초에 한 번까지, 누르면 그 탭으로 이동
+  - Preferences → Modern Terminal → Desktop notification으로 끄기
+- 소리는 내지 않음, 소리 설정도 없음
+- `ESC ] 9 ; <숫자> ; ...`는 ConEmu 명령 (9;4는 진행률)이라 무시, 내용의 제어 문자는 제거
+
 
 - Ctrl+Alt+Shift+M (또는 뷰 툴바의 Open Modern Terminal...) → Choose terminal: SSH Terminal
   - 호스트, 사용자, 포트, 키 파일(선택), 타임아웃, keepalive 입력

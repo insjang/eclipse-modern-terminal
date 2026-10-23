@@ -513,7 +513,8 @@ public class VT100Emulator implements ControlListener {
 	/**
 	 * This method is called when we have parsed an OS Command escape sequence.
 	 * We support "\e]0;...\u0007", which sets the terminal title, and
-	 * "\e]7;file://host/path\u0007", the shell's working directory.
+	 * "\e]7;file://host/path\u0007", the shell's working directory, and the
+	 * notifications "\e]9;text\u0007" and "\e]777;notify;title;text\u0007".
 	 */
 	private void processAnsiOsCommand() {
 		String command = ansiOsCommand.toString();
@@ -528,9 +529,34 @@ public class VT100Emulator implements ControlListener {
 			} else {
 				Logger.log("Ignoring malformed OSC 7: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
+		} else if (command.startsWith("9;")) { //$NON-NLS-1$
+			// iTerm2's notification; "9;<number>;..." are ConEmu's commands (9;4 progress), not text
+			String message = command.substring(2);
+			if (!message.matches("\\d+(;.*)?")) { //$NON-NLS-1$
+				terminal.showNotification(null, notificationText(message));
+			}
+		} else if (command.startsWith("777;notify;")) { //$NON-NLS-1$
+			// rxvt-unicode / VTE: 777;notify;title;body (the body may hold ';')
+			String[] parts = command.substring(11).split(";", 2); //$NON-NLS-1$
+			terminal.showNotification(notificationText(parts[0]), parts.length > 1 ? notificationText(parts[1]) : null);
 		} else {
 			Logger.log("Ignoring unsupported ANSI OSC sequence: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
+	}
+
+	/** Longest notification title or text passed on, in chars. */
+	static final int MAX_NOTIFICATION = 256;
+
+	/**
+	 * Notification text as it may be shown: control characters (C0, DEL, C1, bidi overrides) taken
+	 * out, trimmed, cut to {@link #MAX_NOTIFICATION}; null when nothing is left.
+	 */
+	static String notificationText(String s) {
+		String text = s.replaceAll("[\\x00-\\x1f\\x7f-\\x9f\\u202a-\\u202e\\u2066-\\u2069]", "").strip(); //$NON-NLS-1$ //$NON-NLS-2$
+		if (text.length() > MAX_NOTIFICATION) {
+			text = text.substring(0, MAX_NOTIFICATION - 1) + '\u2026';
+		}
+		return text.isEmpty() ? null : text;
 	}
 
 	/**
@@ -1492,8 +1518,8 @@ public class VT100Emulator implements ControlListener {
 	 * Process a BEL (Control-G) character.
 	 */
 	private void processBEL() {
-		// TODO
-		//Display.getDefault().beep();
+		// no sound: the view marks the tab and may show a desktop notification
+		terminal.showNotification(null, null);
 	}
 
 	/**

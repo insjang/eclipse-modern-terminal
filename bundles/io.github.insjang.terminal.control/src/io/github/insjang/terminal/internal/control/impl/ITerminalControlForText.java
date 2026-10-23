@@ -46,6 +46,15 @@ public interface ITerminalControlForText {
 	default void setWorkingDirectory(TerminalDirectory dir) {
 	}
 
+	/**
+	 * The program asks for the user's attention (BEL, OSC 9, OSC 777;notify).
+	 *
+	 * @param title the title, or null
+	 * @param message the text, or null for a bell
+	 */
+	default void showNotification(String title, String message) {
+	}
+
 	ITerminalConnector getTerminalConnector();
 
 	OutputStream getOutputStream();

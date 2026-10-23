@@ -1395,6 +1395,15 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	}
 
 	@Override
+	public void showNotification(String title, String message) {
+		try {
+			fTerminalListener.showNotification(title, message);
+		} catch (RuntimeException e) {
+			Logger.logException(e); // must not end the terminal's reader job
+		}
+	}
+
+	@Override
 	public TerminalDirectory getWorkingDirectory() {
 		return fWorkingDirectory;
 	}

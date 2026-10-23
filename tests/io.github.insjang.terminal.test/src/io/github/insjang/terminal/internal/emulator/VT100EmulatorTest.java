@@ -444,6 +444,22 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testNotifications() {
+		run("A\007B", // bell
+				"\033]9;Build done\007", // iTerm2
+				"\033]9;4;1;50\007", "\033]9;12\007", // ConEmu progress and others: no notification
+				"\033]777;notify;Claude;Needs input; now\033\\", // body with ';', ST
+				"\033]777;notify;OnlyTitle\007", //
+				"\033]9;\u0001re\bd\u0085\u202e\007", // control and bidi characters dropped
+				"\033]9;" + "x".repeat(1000) + "\007");
+		assertAll(() -> assertTextEquals("AB"),
+				() -> assertEquals(List.of("null|null", "null|Build done", "Claude|Needs input; now", "OnlyTitle|null",
+						"null|red", "null|" + "x".repeat(VT100Emulator.MAX_NOTIFICATION - 1) + "\u2026"),
+						control.getNotifications()),
+				() -> assertEquals(List.of(), control.getAllTitles()));
+	}
+
+	@Test
 	public void testAlternateScreen() {
 		data.setMaxHeight(1000);
 		run("Hello 1\r\nHello 2");

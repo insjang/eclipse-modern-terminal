@@ -26,6 +26,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Ctrl+click | URLs and plain file paths | also paths in brackets, quotes or backticks, absolute Windows paths, WSL paths (`/mnt/c/...`, `/home/...`), Hangul paths |
 | Drop files | not supported | types their paths, quoted for the shell (bash, cmd, PowerShell) |
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
+| Bell, OSC 9, OSC 777 | ignored | the tab is marked; a desktop notification while Eclipse is in the background; never a sound |
 | Defaults | block cursor, 1000 lines | bar cursor, copy on select, 10000 lines |
 | SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH-style known_hosts, saved sessions |
 | SFTP | none | Files view: browse, transfer, edit remote files in Eclipse, follows the shell's folder; local tabs show local folders |
@@ -61,7 +62,15 @@ Preferences > Modern Terminal (and Local Terminal under it).
 Colors, cursor, copy on select, buffer lines and the shell list are separate from the Eclipse Terminal's.
 Load Presets offers Modern Terminal Defaults (what Restore Defaults gives), Tango Dark, Tango Light, Classic Terminal (the Eclipse Terminal's colors), Eclipse Light and Eclipse Dark.
 
-## SSH
+## Notifications
+
+A bell (BEL), `ESC ] 9 ; text BEL` (iTerm2) or `ESC ] 777 ; notify ; title ; text BEL` (rxvt, VTE) from the program in a tab, for example Claude Code waiting for input with its notification channel set to `terminal_bell`:
+
+- The tab gets a marker when it is not the one shown; showing it clears the marker. If the Modern Terminal view itself is hidden, its view tab turns bold
+- While the Eclipse window is not active: a desktop notification (a tray balloon, a toast on Windows), at most one per tab every 5 seconds; clicking it brings the tab up. Off with Preferences > Modern Terminal > Desktop notification
+- No sound, and no setting for one
+- `ESC ] 9 ; <number> ; ...` are ConEmu commands (9;4 is progress) and are ignored; control characters are dropped from the text
+
 
 - Ctrl+Alt+Shift+M (or Open Modern Terminal... in the view toolbar) > Choose terminal: SSH Terminal
   - Host, user, port, an optional key file, timeout and keepalive

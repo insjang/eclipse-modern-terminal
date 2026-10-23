@@ -39,6 +39,11 @@ public interface ITerminalConstants {
 	public static final String PREF_AUTO_COPY_SELECTION = "TerminalPrefAutoCopySelection"; //$NON-NLS-1$
 	public static final String PREF_RESTORE_TERMINALS = "TerminalPrefRestoreTerminals"; //$NON-NLS-1$
 	/**
+	 * Show a desktop notification for a bell or OSC 9/777 while the Eclipse window
+	 * is not active (the tab is marked either way).
+	 */
+	public static final String PREF_DESKTOP_NOTIFICATIONS = "TerminalPrefDesktopNotifications"; //$NON-NLS-1$
+	/**
 	 * @since 5.0
 	 */
 	public static final String PREF_FONT_DEFINITION = "TerminalFontDefinition"; //$NON-NLS-1$
@@ -47,6 +52,7 @@ public interface ITerminalConstants {
 	public static final boolean DEFAULT_BAR_CURSOR = true;
 	public static final boolean DEFAULT_AUTO_COPY_SELECTION = true;
 	public static final boolean DEFAULT_PREF_RESTORE_TERMINALS = true;
+	public static final boolean DEFAULT_DESKTOP_NOTIFICATIONS = true;
 	/**
 	 * @since 5.0
 	 */

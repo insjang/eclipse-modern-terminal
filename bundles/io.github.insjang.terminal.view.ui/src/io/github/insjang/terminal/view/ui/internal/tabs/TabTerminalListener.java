@@ -16,11 +16,20 @@ import java.util.Map;
 import org.eclipse.core.runtime.Assert;
 import org.eclipse.jface.viewers.ISelectionProvider;
 import org.eclipse.osgi.util.NLS;
+import org.eclipse.jface.fieldassist.FieldDecorationRegistry;
+import org.eclipse.jface.viewers.DecorationOverlayIcon;
+import org.eclipse.jface.viewers.IDecoration;
+import org.eclipse.jface.resource.ImageDescriptor;
 import org.eclipse.swt.custom.CTabItem;
+import org.eclipse.swt.graphics.Image;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Shell;
+import org.eclipse.ui.progress.IWorkbenchSiteProgressService;
 import io.github.insjang.terminal.connector.TerminalState;
 import io.github.insjang.terminal.control.ITerminalListener;
 import io.github.insjang.terminal.control.TerminalTitleRequestor;
+import io.github.insjang.terminal.internal.control.impl.TerminalPlugin;
+import io.github.insjang.terminal.internal.preferences.ITerminalConstants;
 import io.github.insjang.terminal.view.core.ITerminalsConnectorConstants;
 import io.github.insjang.terminal.view.ui.internal.Messages;
 
@@ -34,6 +43,12 @@ public class TabTerminalListener implements ITerminalListener {
 	private CTabItem tabItem;
 	private String tabItemTitle;
 	private TerminalState state;
+	/** Least time between two desktop notifications of one tab. */
+	private static final long NOTIFY_INTERVAL_MS = 5000;
+	private long lastDesktopNotification;
+	// the tab's image while marked, and the marked image (disposed when cleared)
+	private Image unmarkedImage;
+	private Image markedImage;
 
 	/**
 	 * Move a TabTerminalListener instance to another item (for DnD).
@@ -70,6 +85,7 @@ public class TabTerminalListener implements ITerminalListener {
 			tabItem.setData(TAB_TERMINAL_LISTENER, null);
 		}
 		item.setData(TAB_TERMINAL_LISTENER, this);
+		item.addDisposeListener(e -> unmark(null));
 		tabItem = item;
 	}
 
@@ -210,6 +226,89 @@ public class TabTerminalListener implements ITerminalListener {
 	@Override
 	public void setTerminalTitle(final String title, final TerminalTitleRequestor requestor) {
 		updateTitle(title, requestor);
+	}
+
+	/**
+	 * Marks the tab when it is not the one shown, and shows a desktop notification
+	 * while the Eclipse window is not active. Never a sound.
+	 */
+	@Override
+	public void showNotification(String title, String message) {
+		CTabItem first = getTabItem();
+		if (first == null || first.isDisposed()) {
+			return;
+		}
+		first.getDisplay().asyncExec(() -> {
+			CTabItem item = getTabItem();
+			if (item == null || item.isDisposed()) {
+				return;
+			}
+			if (item.getParent().getSelection() != item) {
+				mark(item);
+			}
+			var view = tabFolderManager.getParentView();
+			if (!view.getSite().getPage().isPartVisible(view)) {
+				// the view's own tab title turns bold, as for a console with new output
+				IWorkbenchSiteProgressService progress = view.getSite().getService(IWorkbenchSiteProgressService.class);
+				if (progress != null) {
+					progress.warnOfContentChange();
+				}
+			}
+			long now = System.currentTimeMillis();
+			if (item.getDisplay().getActiveShell() == null && now - lastDesktopNotification >= NOTIFY_INTERVAL_MS
+					&& TerminalPlugin.getDefault().getPreferenceStore()
+							.getBoolean(ITerminalConstants.PREF_DESKTOP_NOTIFICATIONS)) {
+				lastDesktopNotification = now;
+				Shell shell = item.getParent().getShell();
+				DesktopNotification.show(shell, item.getImage(), title != null ? title : tabItemTitle,
+						message != null ? message : Messages.TabTerminalListener_bell, () -> {
+							CTabItem target = getTabItem();
+							shell.setMinimized(false);
+							shell.forceActive();
+							if (target != null && !target.isDisposed()) {
+								view.getSite().getPage().activate(view);
+								tabFolderManager.bringToTop(target);
+							}
+						});
+			}
+		});
+	}
+
+	private void mark(CTabItem item) {
+		if (markedImage != null && item.getImage() == markedImage) {
+			return;
+		}
+		unmark(item);
+		Image base = item.getImage();
+		ImageDescriptor badge = ImageDescriptor.createFromImage(FieldDecorationRegistry.getDefault()
+				.getFieldDecoration(FieldDecorationRegistry.DEC_INFORMATION).getImage());
+		markedImage = base != null ? new DecorationOverlayIcon(base, badge, IDecoration.TOP_RIGHT).createImage()
+				: badge.createImage();
+		unmarkedImage = base;
+		item.setImage(markedImage);
+	}
+
+	private void unmark(CTabItem item) {
+		if (markedImage == null) {
+			return;
+		}
+		if (item != null && !item.isDisposed() && item.getImage() == markedImage) {
+			item.setImage(unmarkedImage);
+		}
+		markedImage.dispose();
+		markedImage = null;
+		unmarkedImage = null;
+	}
+
+	/**
+	 * The tab is shown: its notification marker goes. UI thread.
+	 *
+	 * @param item the tab item
+	 */
+	static void shown(CTabItem item) {
+		if (item != null && !item.isDisposed() && item.getData(TAB_TERMINAL_LISTENER) instanceof TabTerminalListener l) {
+			l.unmark(item);
+		}
 	}
 
 	@Override

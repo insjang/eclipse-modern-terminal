@@ -55,6 +55,17 @@ public class MockTerminalControlForText implements ITerminalControlForText {
 		return Collections.unmodifiableList(directories);
 	}
 
+	private List<String> notifications = new ArrayList<>();
+
+	@Override
+	public void showNotification(String title, String message) {
+		notifications.add(title + "|" + message);
+	}
+
+	public List<String> getNotifications() {
+		return Collections.unmodifiableList(notifications);
+	}
+
 	@Override
 	public ITerminalConnector getTerminalConnector() {
 		return null;

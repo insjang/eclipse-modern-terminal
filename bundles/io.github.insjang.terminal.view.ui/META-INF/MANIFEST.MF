@@ -38,7 +38,7 @@ Export-Package: io.github.insjang.terminal.view.ui;version="1.0.100",
 Automatic-Module-Name: io.github.insjang.terminal.view.ui
 Import-Package: io.github.insjang.terminal.connector;version="[1.0.0,2.0.0)",
  io.github.insjang.terminal.connector.provider;version="[1.0.0,2.0.0)",
- io.github.insjang.terminal.control;version="[1.0.0,2.0.0)",
+ io.github.insjang.terminal.control;version="[1.2.0,2.0.0)",
  io.github.insjang.terminal.model;version="[1.0.0,2.0.0)"
 Service-Component: OSGI-INF/io.github.insjang.terminal.view.ui.internal.ConsoleManager.xml,
  OSGI-INF/io.github.insjang.terminal.view.ui.internal.LauncherDelegateManager.xml,

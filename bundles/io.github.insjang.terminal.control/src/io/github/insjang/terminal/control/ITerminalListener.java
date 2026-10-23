@@ -42,4 +42,15 @@ public interface ITerminalListener {
 	 * @param requestor Item that requests terminal title update.
 	 */
 	void setTerminalTitle(String title, TerminalTitleRequestor requestor);
+
+	/**
+	 * The program running in the terminal asks for the user's attention: a bell
+	 * (BEL), or a notification (OSC 9 or OSC 777;notify). Called outside the UI thread.
+	 *
+	 * @param title the title the program gave, or <code>null</code>
+	 * @param message the text the program gave, or <code>null</code> for a bell
+	 * @since 1.2
+	 */
+	default void showNotification(String title, String message) {
+	}
 }

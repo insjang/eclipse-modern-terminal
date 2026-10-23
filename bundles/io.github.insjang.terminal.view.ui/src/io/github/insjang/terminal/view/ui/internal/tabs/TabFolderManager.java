@@ -664,6 +664,7 @@ public class TabFolderManager extends PlatformObject implements ISelectionProvid
 		// Set the given tab item as selection to its tab folder, which becomes the active one
 		CTabFolder tabFolder = item.getParent();
 		tabFolder.setSelection(item);
+		TabTerminalListener.shown(item);
 		if (getParentView() instanceof TerminalsView view) {
 			view.setActiveTabFolder(tabFolder);
 		}

@@ -12,6 +12,7 @@
 package io.github.insjang.terminal.view.ui.internal.tabs;
 
 import org.eclipse.core.runtime.Assert;
+import org.eclipse.swt.custom.CTabItem;
 import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 
@@ -46,6 +47,9 @@ public class TabFolderSelectionListener implements SelectionListener {
 
 	@Override
 	public void widgetSelected(SelectionEvent e) {
+		if (e.item instanceof CTabItem item) {
+			TabTerminalListener.shown(item);
+		}
 		parentTabFolderManager.fireSelectionChanged();
 	}
 }

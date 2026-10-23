@@ -72,6 +72,7 @@ public class Messages extends NLS {
 	public static String ConsoleManager_e_no_active_page;
 	public static String TabTerminalListener_consoleClosed;
 	public static String TabTerminalListener_consoleConnecting;
+	public static String TabTerminalListener_bell;
 
 	public static String NewTerminalViewAction_menu;
 	public static String NewTerminalViewAction_tooltip;

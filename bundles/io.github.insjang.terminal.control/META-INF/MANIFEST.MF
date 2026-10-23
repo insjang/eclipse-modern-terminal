@@ -18,7 +18,7 @@ Export-Package: io.github.insjang.terminal.connector;version="1.0.100";
    org.eclipse.swt.widgets,
    io.github.insjang.terminal.control",
  io.github.insjang.terminal.connector.provider;version="1.0.100";uses:="io.github.insjang.terminal.connector",
- io.github.insjang.terminal.control;version="1.1.0";
+ io.github.insjang.terminal.control;version="1.2.0";
   uses:="org.eclipse.swt.dnd,
    org.eclipse.swt.graphics,
    org.eclipse.swt.widgets,
