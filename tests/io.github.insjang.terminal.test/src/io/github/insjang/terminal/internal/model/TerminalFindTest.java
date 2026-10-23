@@ -26,6 +26,7 @@ import io.github.insjang.terminal.internal.emulator.MockTerminalControlForText;
 import io.github.insjang.terminal.internal.emulator.VT100Emulator;
 import io.github.insjang.terminal.internal.model.TerminalFind.Match;
 import io.github.insjang.terminal.model.ITerminalTextData;
+import io.github.insjang.terminal.model.ITerminalTextDataSnapshot;
 import io.github.insjang.terminal.model.TerminalTextDataFactory;
 
 public class TerminalFindTest {
@@ -43,6 +44,38 @@ public class TerminalFindTest {
 
 	private static List<Match> find(ITerminalTextData data, String query, boolean caseSensitive, boolean regex) {
 		return TerminalFind.findAll(data, TerminalFind.pattern(query, caseSensitive, regex), 1000);
+	}
+
+	/**
+	 * The canvas's snapshot keeps only the lines in view up to date: a fresh one, as
+	 * TextCanvas.getTerminalText makes, sees the scrollback too.
+	 */
+	@Test
+	public void testScrollbackIsSearchedNotOnlyTheView() {
+		ITerminalTextData data = TerminalTextDataFactory.makeTerminalTextData();
+		data.setMaxHeight(100);
+		ITerminalTextDataSnapshot shown = data.makeSnapshot();
+		VT100Emulator emulator = new VT100Emulator(data, new MockTerminalControlForText(), null);
+		emulator.resetState();
+		emulator.setDimensions(5, 40);
+		StringBuilder text = new StringBuilder("ERROR at the top\r\n");
+		for (int i = 0; i < 50; i++) {
+			text.append("line ").append(i).append("\r\n");
+		}
+		emulator.setInputStreamReader(new StringReader(text.toString()));
+		emulator.processText();
+		shown.updateSnapshot(false);
+		shown.setInterestWindow(shown.getHeight() - 5, 5); // as the canvas does: only the view
+		shown.updateSnapshot(false);
+		emulator.setInputStreamReader(new StringReader("more\r\n"));
+		emulator.processText();
+		shown.updateSnapshot(false);
+		Pattern error = TerminalFind.pattern("ERROR", true, false);
+		assertEquals(List.of(), TerminalFind.findAll(shown, error, 10)); // the bug: the view only
+		ITerminalTextDataSnapshot all = shown.getTerminalTextData().makeSnapshot();
+		all.updateSnapshot(false);
+		all.detach();
+		assertEquals(1, TerminalFind.findAll(all, error, 10).size());
 	}
 
 	@Test
