@@ -12,6 +12,7 @@
 package io.github.insjang.terminal.view.ui.internal.tabs;
 
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.eclipse.core.runtime.Assert;
 import org.eclipse.jface.viewers.ISelectionProvider;
@@ -46,6 +47,8 @@ public class TabTerminalListener implements ITerminalListener {
 	/** Least time between two desktop notifications of one tab. */
 	private static final long NOTIFY_INTERVAL_MS = 5000;
 	private long lastDesktopNotification;
+	// the latest notification not yet handled in the UI thread: a flood of bells posts one runnable
+	private final AtomicReference<String[]> pendingNotification = new AtomicReference<>();
 	// the tab's image while marked, and the marked image (disposed when cleared)
 	private Image unmarkedImage;
 	private Image markedImage;
@@ -233,12 +236,17 @@ public class TabTerminalListener implements ITerminalListener {
 	 * while the Eclipse window is not active. Never a sound.
 	 */
 	@Override
-	public void showNotification(String title, String message) {
+	public void showNotification(String newTitle, String newMessage) {
 		CTabItem first = getTabItem();
 		if (first == null || first.isDisposed()) {
 			return;
 		}
+		if (pendingNotification.getAndSet(new String[] { newTitle, newMessage }) != null) {
+			return; // a runnable is already posted and takes the latest
+		}
 		first.getDisplay().asyncExec(() -> {
+			String[] latest = pendingNotification.getAndSet(null);
+			String title = latest[0], message = latest[1];
 			CTabItem item = getTabItem();
 			if (item == null || item.isDisposed()) {
 				return;
