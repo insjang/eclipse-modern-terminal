@@ -28,6 +28,10 @@ import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles;
 import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
 
 public class RemoteFilesTest {
+	/** JUnit removes it after each test: no temporary folders left behind */
+	@org.junit.jupiter.api.io.TempDir
+	Path tmp;
+
 	@Test
 	public void pathsJoinAndSplit() {
 		assertEquals("/a", RemoteFiles.join("/", "a"));
@@ -125,7 +129,7 @@ public class RemoteFilesTest {
 
 	@Test
 	public void binaryFilesAreToldByANulByte() throws IOException {
-		Path dir = Files.createTempDirectory("binary");
+		Path dir = Files.createTempDirectory(tmp, "binary");
 		try {
 			assertFalse(RemoteEditor.binary(Files.writeString(dir.resolve("t"), "text\n한글")));
 			assertFalse(RemoteEditor.binary(Files.write(dir.resolve("e"), new byte[0])));
@@ -173,7 +177,7 @@ public class RemoteFilesTest {
 
 	@Test
 	public void uploadSizeSkipsLinksInFolders() throws IOException {
-		Path dir = Files.createTempDirectory("mt-upload");
+		Path dir = Files.createTempDirectory(tmp, "mt-upload");
 		try {
 			Path tree = Files.createDirectory(dir.resolve("tree"));
 			Path secrets = Files.createDirectory(dir.resolve("secrets"));

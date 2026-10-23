@@ -32,6 +32,10 @@ import io.github.insjang.terminal.connector.ssh.sftp.RemoteFiles.Entry;
 import io.github.insjang.terminal.view.ui.internal.tabs.ShellPaths;
 
 public class LocalFilesTest {
+	/** JUnit removes it after each test: no temporary folders left behind */
+	@org.junit.jupiter.api.io.TempDir
+	Path tmp;
+
 	@Test
 	public void wslDistributionFromTheLaunch() {
 		assertEquals("Ubuntu", ShellPaths.wslDistribution("C:\\Windows\\System32\\wsl.exe", "--distribution Ubuntu"));
@@ -102,7 +106,7 @@ public class LocalFilesTest {
 
 	@Test
 	public void deleteNeverFollowsLinks() throws IOException {
-		Path root = Files.createTempDirectory("mt-local");
+		Path root = Files.createTempDirectory(tmp, "mt-local");
 		try {
 			Path outside = Files.createDirectories(root.resolve("outside"));
 			Path kept = Files.writeString(outside.resolve("keep.txt"), "keep");

@@ -23,6 +23,10 @@ import org.junit.jupiter.api.Test;
 import io.github.insjang.terminal.view.ui.internal.tabs.LinkPolicy;
 
 public class LinkPolicyTest {
+	/** JUnit removes it after each test: no temporary folders left behind */
+	@org.junit.jupiter.api.io.TempDir
+	Path tmp;
+
 	@Test
 	public void targets() {
 		assertEquals("https://e.com/a", LinkPolicy.target("https://e.com/a", "pc"));
@@ -99,7 +103,7 @@ public class LinkPolicyTest {
 
 	@Test
 	public void theSystemProgramGetsTheRealFile() throws IOException {
-		Path dir = Files.createTempDirectory("linkpolicy");
+		Path dir = Files.createTempDirectory(tmp, "linkpolicy");
 		try {
 			Path pdf = Files.writeString(dir.resolve("a.pdf"), "%PDF");
 			Path hta = Files.writeString(dir.resolve("evil.hta"), "<script>");

@@ -27,6 +27,10 @@ import io.github.insjang.terminal.connector.ssh.connector.HostKeys.Decision;
 import io.github.insjang.terminal.connector.ssh.connector.HostKeys.Known;
 
 public class HostKeysTest {
+	/** JUnit removes it after each test: no temporary folders left behind */
+	@org.junit.jupiter.api.io.TempDir
+	Path tmp;
+
 	private static PublicKey key(String type, int bits) throws Exception {
 		return KeyUtils.generateKeyPair(type, bits).getPublic();
 	}
@@ -69,7 +73,7 @@ public class HostKeysTest {
 
 	@Test
 	public void loadMatchesHostAndPortAndAddAppends() throws Exception {
-		Path dir = Files.createTempDirectory("kh");
+		Path dir = Files.createTempDirectory(tmp, "kh");
 		Path file = dir.resolve("missing/.ssh/known_hosts"); // directory created on add
 		PublicKey rsa = key("ssh-rsa", 2048), ed = key("ssh-ed25519", 256);
 		HostKeys.add(file, "example.org", 2222, rsa);
@@ -84,7 +88,7 @@ public class HostKeysTest {
 
 	@Test
 	public void wildcardsCoverOtherPorts() throws Exception {
-		Path file = Files.createTempDirectory("kh").resolve("known_hosts");
+		Path file = Files.createTempDirectory(tmp, "kh").resolve("known_hosts");
 		PublicKey rsa = key("ssh-rsa", 2048);
 		Files.writeString(file, "@revoked * " + PublicKeyEntry.toString(rsa) + "\n[example.org]:2222 "
 				+ PublicKeyEntry.toString(rsa) + "\n");
@@ -93,7 +97,7 @@ public class HostKeysTest {
 
 	@Test
 	public void revokedWithoutPortCoversOtherPorts() throws Exception {
-		Path file = Files.createTempDirectory("kh").resolve("known_hosts");
+		Path file = Files.createTempDirectory(tmp, "kh").resolve("known_hosts");
 		PublicKey rsa = key("ssh-rsa", 2048);
 		// as OpenSSH: the entry without a port is the fallback; a revoked key there is refused on any port
 		Files.writeString(file, "@revoked example.org " + PublicKeyEntry.toString(rsa) + "\nexample.org "
@@ -105,7 +109,7 @@ public class HostKeysTest {
 
 	@Test
 	public void hostNamesMatchInLowerCase() throws Exception {
-		Path file = Files.createTempDirectory("kh").resolve("known_hosts");
+		Path file = Files.createTempDirectory(tmp, "kh").resolve("known_hosts");
 		PublicKey ed = key("ssh-ed25519", 256);
 		HostKeys.add(file, "LocalHost", 2222, ed);
 		assertEquals("[localhost]:2222", Files.readString(file).split(" ")[0]);
