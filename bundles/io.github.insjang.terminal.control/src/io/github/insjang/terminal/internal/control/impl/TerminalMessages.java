@@ -61,6 +61,7 @@ public class TerminalMessages extends NLS {
 	public static String INVERT_COLORS;
 	public static String BAR_CURSOR;
 	public static String AUTO_COPY_SELECTION;
+	public static String PROGRAM_TITLES;
 	public static String DESKTOP_NOTIFICATIONS;
 	public static String CLIPBOARD_WRITE;
 	public static String CONFIRM_MULTILINE_PASTE;

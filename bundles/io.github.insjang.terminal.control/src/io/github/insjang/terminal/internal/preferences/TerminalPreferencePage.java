@@ -76,6 +76,8 @@ public class TerminalPreferencePage extends FieldEditorPreferencePage implements
 				getFieldEditorParent()));
 		addField(new BooleanFieldEditor(ITerminalConstants.PREF_AUTO_COPY_SELECTION,
 				TerminalMessages.AUTO_COPY_SELECTION, getFieldEditorParent()));
+		addField(new BooleanFieldEditor(ITerminalConstants.PREF_PROGRAM_TITLES, TerminalMessages.PROGRAM_TITLES,
+				getFieldEditorParent()));
 		addField(new BooleanFieldEditor(ITerminalConstants.PREF_DESKTOP_NOTIFICATIONS,
 				TerminalMessages.DESKTOP_NOTIFICATIONS, getFieldEditorParent()));
 		addField(new BooleanFieldEditor(ITerminalConstants.PREF_CLIPBOARD_WRITE, TerminalMessages.CLIPBOARD_WRITE,

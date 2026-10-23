@@ -159,6 +159,12 @@ public class TabTerminalListener implements ITerminalListener {
 				}
 			}
 
+			// the preference: tabs keep their own names, whatever programs set
+			if (requestor == TerminalTitleRequestor.ANSI && !TerminalPlugin.getDefault().getPreferenceStore()
+					.getBoolean(ITerminalConstants.PREF_PROGRAM_TITLES)) {
+				return;
+			}
+
 			// New title must have value.
 			if (title != null) {
 				if (requestor == TerminalTitleRequestor.MENU) {
