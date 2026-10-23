@@ -463,12 +463,25 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
-	public void testPastedLines() {
-		assertEquals(1, VT100TerminalControl.pastedLines("ls -l"));
-		assertEquals(1, VT100TerminalControl.pastedLines("ls -l\n")); // runs it, but one line: not asked
-		assertEquals(2, VT100TerminalControl.pastedLines("cd /\r\nrm -rf x"));
-		assertEquals(3, VT100TerminalControl.pastedLines("a\rb\nc\n\n"));
+	public void testPasteLineBreaks() {
+		assertEquals(0, VT100TerminalControl.lineBreaks("ls -l"));
+		assertEquals(1, VT100TerminalControl.lineBreaks("ls -l\n")); // runs it: asked
+		assertEquals(1, VT100TerminalControl.lineBreaks("rm -rf x\r"));
+		assertEquals(1, VT100TerminalControl.lineBreaks("cd /\r\nrm -rf x"));
+		assertEquals(4, VT100TerminalControl.lineBreaks("a\rb\nc\n\n"));
 	}
+
+	@Test
+	public void testBracketedPasteCannotEndEarly() {
+		String start = "\033[200~", end = "\033[201~";
+		assertEquals(start + "a[201~b" + end, VT100TerminalControl.bracketed("a\033[201~b")); // ESC goes, the rest is text
+		// a marker put together from the pieces left after taking one out
+		assertEquals(start + "[20[201~1~x" + end, VT100TerminalControl.bracketed("\033[20\033[201~1~x"));
+		assertEquals(start + "201~x" + end, VT100TerminalControl.bracketed("\u009b201~x")); // C1 CSI
+		String inner = VT100TerminalControl.bracketed("\033[20\033[201~1~rm -rf x\r");
+		assertEquals(inner.length() - end.length(), inner.indexOf(end)); // the only end marker is the last
+	}
+
 
 	@Test
 	public void testHyperlinks() {

@@ -326,13 +326,13 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	 * paste runs a command at each break: asks first (unless turned off).
 	 */
 	private boolean confirmPaste(String text) {
-		int lines = pastedLines(text);
-		if (fBracketedPaste || lines < 2 || fPreferenceStore == null
+		int breaks = lineBreaks(text);
+		if (fBracketedPaste || breaks == 0 || fPreferenceStore == null
 				|| !fPreferenceStore.getBoolean(ITerminalConstants.PREF_CONFIRM_MULTILINE_PASTE)) {
 			return true;
 		}
 		MessageDialogWithToggle dialog = MessageDialogWithToggle.openOkCancelConfirm(fWndParent.getShell(),
-				TerminalMessages.PASTE_TITLE, NLS.bind(TerminalMessages.PASTE_LINES, lines),
+				TerminalMessages.PASTE_TITLE, NLS.bind(TerminalMessages.PASTE_LINES, breaks),
 				TerminalMessages.PASTE_DONT_ASK, false, null, null);
 		boolean ok = dialog.getReturnCode() == IDialogConstants.OK_ID;
 		if (ok && dialog.getToggleState()) {
@@ -341,9 +341,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		return ok;
 	}
 
-	/** @return the lines of the text, a line break at its end not counted as one more */
-	public static int pastedLines(String text) {
-		return text.split("\r\n|\r|\n").length; //$NON-NLS-1$
+	/**
+	 * @return the line breaks in the text: each runs what is before it where the program
+	 *         has no bracketed paste, one at the end too
+	 */
+	public static int lineBreaks(String text) {
+		return text.split("\r\n|\r|\n", -1).length - 1; //$NON-NLS-1$
 	}
 
 	/**
@@ -624,8 +627,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	 * is taken out of the text itself, or the text could close the bracket early and
 	 * the rest of it would arrive as if it had been typed.
 	 */
-	private static String bracketed(String text) {
-		return PASTE_START + text.replace(PASTE_END, "") + PASTE_END; //$NON-NLS-1$
+	/**
+	 * The text marked as pasted. It cannot end the paste early: every ESC and C1 CSI
+	 * goes, so no end marker can be left over or put together ("ESC[20ESC[201~1~"), as xterm does.
+	 */
+	public static String bracketed(String text) {
+		return PASTE_START + text.replace("\u001b", "").replace("\u009b", "") + PASTE_END; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 
 	/**
