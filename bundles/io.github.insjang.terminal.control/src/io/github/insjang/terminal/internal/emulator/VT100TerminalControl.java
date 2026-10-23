@@ -69,6 +69,8 @@ import org.eclipse.jface.bindings.Binding;
 import org.eclipse.jface.bindings.keys.KeySequence;
 import org.eclipse.jface.bindings.keys.KeyStroke;
 import org.eclipse.jface.bindings.keys.SWTKeySupport;
+import org.eclipse.jface.dialogs.IDialogConstants;
+import org.eclipse.jface.dialogs.MessageDialogWithToggle;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.resource.DataFormatException;
 import org.eclipse.jface.resource.JFaceResources;
@@ -313,7 +315,35 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private void paste(int clipboardType) {
 		TextTransfer textTransfer = TextTransfer.getInstance();
 		String strText = (String) fClipboard.getContents(textTransfer, clipboardType);
+		if (strText != null && !confirmPaste(strText)) {
+			return;
+		}
 		pasteString(strText);
+	}
+
+	/**
+	 * Text with a line break pasted where the program has not asked for bracketed
+	 * paste runs a command at each break: asks first (unless turned off).
+	 */
+	private boolean confirmPaste(String text) {
+		int lines = pastedLines(text);
+		if (fBracketedPaste || lines < 2 || fPreferenceStore == null
+				|| !fPreferenceStore.getBoolean(ITerminalConstants.PREF_CONFIRM_MULTILINE_PASTE)) {
+			return true;
+		}
+		MessageDialogWithToggle dialog = MessageDialogWithToggle.openOkCancelConfirm(fWndParent.getShell(),
+				TerminalMessages.PASTE_TITLE, NLS.bind(TerminalMessages.PASTE_LINES, lines),
+				TerminalMessages.PASTE_DONT_ASK, false, null, null);
+		boolean ok = dialog.getReturnCode() == IDialogConstants.OK_ID;
+		if (ok && dialog.getToggleState()) {
+			fPreferenceStore.setValue(ITerminalConstants.PREF_CONFIRM_MULTILINE_PASTE, false);
+		}
+		return ok;
+	}
+
+	/** @return the lines of the text, a line break at its end not counted as one more */
+	public static int pastedLines(String text) {
+		return text.split("\r\n|\r|\n").length; //$NON-NLS-1$
 	}
 
 	/**

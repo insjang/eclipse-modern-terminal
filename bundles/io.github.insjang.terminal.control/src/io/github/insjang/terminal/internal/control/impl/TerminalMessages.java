@@ -63,6 +63,10 @@ public class TerminalMessages extends NLS {
 	public static String AUTO_COPY_SELECTION;
 	public static String DESKTOP_NOTIFICATIONS;
 	public static String CLIPBOARD_WRITE;
+	public static String CONFIRM_MULTILINE_PASTE;
+	public static String PASTE_TITLE;
+	public static String PASTE_LINES;
+	public static String PASTE_DONT_ASK;
 	public static String FIND_MESSAGE;
 	public static String FIND_CASE;
 	public static String FIND_REGEX;

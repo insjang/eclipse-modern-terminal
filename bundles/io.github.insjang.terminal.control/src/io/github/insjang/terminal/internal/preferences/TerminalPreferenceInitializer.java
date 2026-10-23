@@ -46,6 +46,8 @@ public class TerminalPreferenceInitializer extends AbstractPreferenceInitializer
 		defaultPrefs.putBoolean(ITerminalConstants.PREF_DESKTOP_NOTIFICATIONS,
 				ITerminalConstants.DEFAULT_DESKTOP_NOTIFICATIONS);
 		defaultPrefs.putBoolean(ITerminalConstants.PREF_CLIPBOARD_WRITE, ITerminalConstants.DEFAULT_CLIPBOARD_WRITE);
+		defaultPrefs.putBoolean(ITerminalConstants.PREF_CONFIRM_MULTILINE_PASTE,
+				ITerminalConstants.DEFAULT_CONFIRM_MULTILINE_PASTE);
 		defaultPrefs.putInt(ITerminalConstants.PREF_BUFFERLINES, ITerminalConstants.DEFAULT_BUFFERLINES);
 		defaultPrefs.putBoolean(ITerminalConstants.PREF_RESTORE_TERMINALS, ITerminalConstants.DEFAULT_PREF_RESTORE_TERMINALS);
 		defaultPrefs.put(ITerminalConstants.PREF_FONT_DEFINITION, ITerminalConstants.DEFAULT_FONT_DEFINITION);

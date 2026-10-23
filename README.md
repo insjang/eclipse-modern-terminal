@@ -21,6 +21,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Mouse | ignored by programs | reported to programs that ask (click, wheel, drag; SGR mode) |
 | DEC modes, bracketed paste, hidden cursor, faint text | partly | supported |
 | Shift+Enter | runs the line | a new line in Claude Code, Codex and the like, as on the web |
+| Paste of several lines | runs each line at once | asks first where the shell has not turned on bracketed paste (a preference) |
 | Command input field | one line | several lines (Shift+Enter), history kept |
 | Tabs | one row per view | drag a tab to an edge to split the view; the layout comes back after a restart |
 | Ctrl+click | URLs and plain file paths | also paths in brackets, quotes or backticks, absolute Windows paths, WSL paths (`/mnt/c/...`, `/home/...`), Hangul paths |

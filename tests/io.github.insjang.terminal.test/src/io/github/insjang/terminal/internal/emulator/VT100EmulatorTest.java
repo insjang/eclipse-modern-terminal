@@ -462,6 +462,14 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testPastedLines() {
+		assertEquals(1, VT100TerminalControl.pastedLines("ls -l"));
+		assertEquals(1, VT100TerminalControl.pastedLines("ls -l\n")); // runs it, but one line: not asked
+		assertEquals(2, VT100TerminalControl.pastedLines("cd /\r\nrm -rf x"));
+		assertEquals(3, VT100TerminalControl.pastedLines("a\rb\nc\n\n"));
+	}
+
+	@Test
 	public void testClipboard() {
 		String big = "\ud55c".repeat(200000); // 600 KB of UTF-8, past the limit of other OSCs
 		String bigBase64 = Base64.getEncoder().encodeToString(big.getBytes(StandardCharsets.UTF_8));

@@ -45,6 +45,8 @@ public interface ITerminalConstants {
 	public static final String PREF_DESKTOP_NOTIFICATIONS = "TerminalPrefDesktopNotifications"; //$NON-NLS-1$
 	/** Programs may put text on the clipboard (OSC 52); they can never read it. */
 	public static final String PREF_CLIPBOARD_WRITE = "TerminalPrefClipboardWrite"; //$NON-NLS-1$
+	/** Ask before pasting text with line breaks where the program has no bracketed paste. */
+	public static final String PREF_CONFIRM_MULTILINE_PASTE = "TerminalPrefConfirmMultilinePaste"; //$NON-NLS-1$
 	/**
 	 * @since 5.0
 	 */
@@ -56,6 +58,7 @@ public interface ITerminalConstants {
 	public static final boolean DEFAULT_PREF_RESTORE_TERMINALS = true;
 	public static final boolean DEFAULT_DESKTOP_NOTIFICATIONS = true;
 	public static final boolean DEFAULT_CLIPBOARD_WRITE = true;
+	public static final boolean DEFAULT_CONFIRM_MULTILINE_PASTE = true;
 	/**
 	 * @since 5.0
 	 */
