@@ -254,6 +254,18 @@ public class TerminalTextDataWindow implements ITerminalTextData {
 	}
 
 	@Override
+	public String getLink(int line, int column) {
+		return isInWindow(line) ? fData.getLink(line - fWindowStartLine, column) : null;
+	}
+
+	@Override
+	public void setLink(int line, int column, String uri) {
+		if (isInWindow(line)) {
+			fData.setLink(line - fWindowStartLine, column, uri);
+		}
+	}
+
+	@Override
 	public int getLineMark(int line) {
 		return isInWindow(line) ? fData.getLineMark(line - fWindowStartLine) : 0;
 	}

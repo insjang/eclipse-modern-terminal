@@ -315,6 +315,11 @@ class TerminalTextDataSnapshot implements ITerminalTextDataSnapshot {
 	}
 
 	@Override
+	public String getLink(int line, int column) {
+		return fSnapshot.getLink(line, column);
+	}
+
+	@Override
 	public int getLineMark(int line) {
 		return fSnapshot.getLineMark(line);
 	}

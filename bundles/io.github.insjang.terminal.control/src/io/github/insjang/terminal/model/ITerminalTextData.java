@@ -183,4 +183,11 @@ public interface ITerminalTextData extends ITerminalTextDataReadOnly {
 	default void setLineMark(int line, int mark) {
 	}
 
+	/**
+	 * Puts a hyperlink on a cell, see {@link #getLink(int, int)}.
+	 * @since 1.2
+	 */
+	default void setLink(int line, int column, String uri) {
+	}
+
 }

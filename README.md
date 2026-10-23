@@ -25,6 +25,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Command input field | one line | several lines (Shift+Enter), history kept |
 | Tabs | one row per view | drag a tab to an edge to split the view; the layout comes back after a restart |
 | Ctrl+click | URLs and plain file paths | also paths in brackets, quotes or backticks, absolute Windows paths, WSL paths (`/mnt/c/...`, `/home/...`), Hangul paths |
+| Hyperlinks (OSC 8) | ignored | Ctrl+click opens them: `ls --hyperlink`, gcc, and others; http, https and local file links only, a link whose text says something else is shown first |
 | Drop files | not supported | types their paths, quoted for the shell (bash, cmd, PowerShell) |
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
 | Shell integration (OSC 133) | none | Ctrl+Up/Down between prompts, failed commands marked, copy the last command's output |

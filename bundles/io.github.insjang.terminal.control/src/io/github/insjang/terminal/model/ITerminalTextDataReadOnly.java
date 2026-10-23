@@ -125,4 +125,14 @@ public interface ITerminalTextDataReadOnly {
 		return 0;
 	}
 
+	/**
+	 * The hyperlink (OSC 8) a program put on a cell; writing the cell again ends it.
+	 *
+	 * @return the URI, or null
+	 * @since 1.2
+	 */
+	default String getLink(int line, int column) {
+		return null;
+	}
+
 }

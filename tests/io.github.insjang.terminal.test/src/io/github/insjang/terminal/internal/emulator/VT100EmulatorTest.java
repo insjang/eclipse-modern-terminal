@@ -11,6 +11,7 @@ package io.github.insjang.terminal.internal.emulator;
 
 import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -467,6 +468,23 @@ public class VT100EmulatorTest {
 		assertEquals(1, VT100TerminalControl.pastedLines("ls -l\n")); // runs it, but one line: not asked
 		assertEquals(2, VT100TerminalControl.pastedLines("cd /\r\nrm -rf x"));
 		assertEquals(3, VT100TerminalControl.pastedLines("a\rb\nc\n\n"));
+	}
+
+	@Test
+	public void testHyperlinks() {
+		run("a\033]8;id=1;https://example.com/x\033\\link\033]8;;\033\\b ", // ST
+				"\033]8;;file://host/tmp/\ud55c\007\ud55c\033]8;;\007 ", // a wide character: both cells
+				"\033]8;;javascript:alert(1)\007js\033]8;;\007");
+		assertAll(() -> assertTextEquals("alinkb \ud55c  js"), // the filler cell reads as a space here
+				() -> assertNull(data.getLink(0, 0)), //
+				() -> assertEquals("https://example.com/x", data.getLink(0, 1)),
+				() -> assertEquals("https://example.com/x", data.getLink(0, 4)), //
+				() -> assertNull(data.getLink(0, 5)),
+				() -> assertEquals("file://host/tmp/\ud55c", data.getLink(0, 7)),
+				() -> assertEquals("file://host/tmp/\ud55c", data.getLink(0, 8)), //
+				() -> assertNull(data.getLink(0, 10))); // not a scheme that is opened
+		run("\rXY"); // written over: the link goes
+		assertAll(() -> assertNull(data.getLink(0, 1)), () -> assertEquals("https://example.com/x", data.getLink(0, 2)));
 	}
 
 	@Test

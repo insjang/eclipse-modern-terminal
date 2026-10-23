@@ -224,6 +224,12 @@ public class VT100BackendTraceDecorator implements IVT100EmulatorBackend {
 	}
 
 	@Override
+	public void setLink(String uri) {
+		fWriter.println("setLink(" + uri + ')'); //$NON-NLS-1$
+		fBackend.setLink(uri);
+	}
+
+	@Override
 	public void processReverseLineFeed() {
 		fWriter.println("processReverseLineFeed()"); //$NON-NLS-1$
 		fBackend.processReverseLineFeed();

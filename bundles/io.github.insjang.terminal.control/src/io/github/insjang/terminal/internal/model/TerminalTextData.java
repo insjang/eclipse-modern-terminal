@@ -333,6 +333,17 @@ public class TerminalTextData implements ITerminalTextData {
 	}
 
 	@Override
+	public String getLink(int line, int column) {
+		return fData.getLink(line, column);
+	}
+
+	@Override
+	public void setLink(int line, int column, String uri) {
+		fData.setLink(line, column, uri);
+		sendLineChangedToSnapshots(line);
+	}
+
+	@Override
 	public int getLineMark(int line) {
 		return fData.getLineMark(line);
 	}

@@ -38,6 +38,8 @@ public class TerminalTextDataStore implements ITerminalTextData {
 	final private BitSet fWrappedLines = new BitSet();
 	/** per line, the clusters on it by first column; sparse, most lines have none */
 	private Map<Integer, String>[] fClusters;
+	/** per line, the hyperlinks of its cells by column; sparse, most lines have none */
+	private Map<Integer, String>[] fLinks = newClusters(0);
 	/** per line, its shell integration marks */
 	private int[] fMarks = new int[0];
 
@@ -77,6 +79,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			fChars = (char[][]) resizeArray(fChars, height);
 			fClusters = (Map<Integer, String>[]) resizeArray(fClusters, height);
 			fMarks = (int[]) resizeArray(fMarks, height);
+			fLinks = (Map<Integer, String>[]) resizeArray(fLinks, height);
 		}
 		// clean the new lines
 		if (height > fHeight) {
@@ -203,6 +206,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fChars[line][column] = c;
 		fStyle[line][column] = style;
 		forgetClusters(line, column, 1);
+		forgetLinks(line, column, 1);
 	}
 
 	@Override
@@ -222,6 +226,30 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			fStyle[line][column + i] = style;
 		}
 		forgetClusters(line, column, len);
+		forgetLinks(line, column, len);
+	}
+
+	private void forgetLinks(int line, int column, int len) {
+		Map<Integer, String> links = fLinks[line];
+		if (links != null && !links.isEmpty()) {
+			for (int col = column; col < column + len; col++) {
+				links.remove(col);
+			}
+		}
+	}
+
+	@Override
+	public String getLink(int line, int column) {
+		Map<Integer, String> links = fLinks[line];
+		return links == null ? null : links.get(column);
+	}
+
+	@Override
+	public void setLink(int line, int column, String uri) {
+		if (fLinks[line] == null) {
+			fLinks[line] = new HashMap<>();
+		}
+		fLinks[line].put(column, uri);
 	}
 
 	/** Writing a cell ends any cluster that had it, whether as its first cell or its second. */
@@ -268,6 +296,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 				fStyle[i] = fStyle[i - shift];
 				fClusters[i] = fClusters[i - shift];
 				fMarks[i] = fMarks[i - shift];
+				fLinks[i] = fLinks[i - shift];
 				fWrappedLines.set(i, fWrappedLines.get(i - shift));
 			}
 			// then clean the opened lines
@@ -279,6 +308,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 				fStyle[i] = fStyle[i - shift];
 				fClusters[i] = fClusters[i - shift];
 				fMarks[i] = fMarks[i - shift];
+				fLinks[i] = fLinks[i - shift];
 				fWrappedLines.set(i, fWrappedLines.get(i - shift));
 			}
 			cleanLines(startLine, Math.min(shift, getHeight() - startLine));
@@ -337,6 +367,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			fStyle = new TerminalStyle[n][];
 			fClusters = newClusters(n);
 			fMarks = new int[n];
+			fLinks = newClusters(n);
 		}
 		for (int i = 0; i < n; i++) {
 			copyLine(source, i, i);
@@ -374,11 +405,16 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fWrappedLines.set(destLine, source.isWrappedLine(sourceLine));
 		fMarks[destLine] = source.getLineMark(sourceLine);
 		fClusters[destLine] = null;
+		fLinks[destLine] = null;
 		if (fChars[destLine] != null) {
 			for (int col = 0; col < fChars[destLine].length; col++) {
 				String cluster = source.getCluster(sourceLine, col);
 				if (cluster != null) {
 					setCluster(destLine, col, cluster);
+				}
+				String link = source.getLink(sourceLine, col);
+				if (link != null) {
+					setLink(destLine, col, link);
 				}
 			}
 		}
@@ -406,6 +442,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fWrappedLines.clear(line);
 		fClusters[line] = null;
 		fMarks[line] = 0;
+		fLinks[line] = null;
 	}
 
 	@Override
@@ -425,6 +462,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fWrappedLines.clear(line);
 		fClusters[line] = null;
 		fMarks[line] = 0;
+		fLinks[line] = null;
 	}
 
 	@Override

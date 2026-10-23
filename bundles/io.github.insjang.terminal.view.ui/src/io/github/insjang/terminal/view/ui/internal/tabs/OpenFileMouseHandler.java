@@ -11,7 +11,9 @@
 package io.github.insjang.terminal.view.ui.internal.tabs;
 
 import java.io.File;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
+import java.net.UnknownHostException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
@@ -36,12 +38,16 @@ import org.eclipse.e4.ui.model.application.ui.basic.MPart;
 import org.eclipse.e4.ui.model.application.ui.basic.MPartStack;
 import org.eclipse.e4.ui.workbench.modeling.EModelService;
 import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.window.Window;
+import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
 import io.github.insjang.terminal.connector.Logger;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
 import io.github.insjang.terminal.control.ITerminalViewControl;
+import io.github.insjang.terminal.control.TerminalDirectory;
+import io.github.insjang.terminal.view.ui.internal.Messages;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorPart;
@@ -103,12 +109,20 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 			// Only handle Ctrl-click
 			return;
 		}
-		String textToOpen = terminal.getHoverSelection();
+		String hover = terminal.getHoverSelection();
+		// a hyperlink a program put there (OSC 8) wins over the text under the mouse
+		String link = terminalText.getLink(line, column);
+		String textToOpen = link != null ? linkPath(link) : hover;
 		String lineAndCol = null;
-		if (textToOpen.length() > 0) {
+		if (textToOpen != null && textToOpen.length() > 0) {
 			try {
 				// if the selection looks like a web URL, open using the browser
 				if (textToOpen.startsWith("http://") || textToOpen.startsWith("https://")) { //$NON-NLS-1$//$NON-NLS-2$
+					// a link whose text says something else is shown before it is opened
+					if (link != null && !link.equals(hover) && !MessageDialog.openQuestion(site.getShell(),
+							Messages.OpenLink_title, NLS.bind(Messages.OpenLink_question, link))) {
+						return;
+					}
 					try {
 						PlatformUI.getWorkbench().getBrowserSupport().createBrowser(null).openURL(new URL(textToOpen));
 						return;
@@ -124,13 +138,15 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				selectEditorStack();
 
 				// extract the path from file:// URLs
-				if (textToOpen.startsWith("file://")) { //$NON-NLS-1$
+				if (link == null && textToOpen.startsWith("file://")) { //$NON-NLS-1$
 					textToOpen = textToOpen.substring(7);
 				}
 				// a path in a sentence comes with what is around it: (a.txt), `a.txt`, a.txt,
-				textToOpen = SURROUNDING.matcher(textToOpen).replaceAll(""); //$NON-NLS-1$
+				if (link == null) {
+					textToOpen = SURROUNDING.matcher(textToOpen).replaceAll(""); //$NON-NLS-1$
+				}
 				// remove optional position info name:[row[:col]]
-				{
+				if (link == null) {
 					int startOfRowCol = textToOpen.indexOf(':');
 					if (startOfRowCol == 1 && textToOpen.length() > 2) {
 						// assume this is the device separator on Windows
@@ -231,6 +247,35 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	 * of the Linux file system is under \\wsl.localhost\&lt;distribution&gt;. Anything else, and
 	 * anything on another platform, is left as it is.
 	 */
+	/**
+	 * What an OSC 8 link opens: a web URL as it is, a file:// URL as the path on this
+	 * computer; null for a file on another host (an SSH server), which cannot be opened here.
+	 */
+	static String linkPath(String link) {
+		if (!link.regionMatches(true, 0, "file://", 0, 7)) { //$NON-NLS-1$
+			return link;
+		}
+		TerminalDirectory file = TerminalDirectory.parse(link);
+		if (file == null) {
+			return null;
+		}
+		String host = file.host();
+		boolean local = host.isEmpty() || host.equalsIgnoreCase("localhost"); //$NON-NLS-1$
+		if (!local) {
+			try {
+				local = host.equalsIgnoreCase(InetAddress.getLocalHost().getHostName());
+			} catch (UnknownHostException e) {
+				// not this computer then
+			}
+		}
+		if (!local) {
+			return null;
+		}
+		String path = file.path();
+		// file:///C:/a on Windows
+		return path.length() > 3 && path.charAt(0) == '/' && path.charAt(2) == ':' ? path.substring(1) : path;
+	}
+
 	private static String toWindowsPath(String path) {
 		if (File.separatorChar != '\\' || !path.startsWith("/")) { //$NON-NLS-1$
 			return path;

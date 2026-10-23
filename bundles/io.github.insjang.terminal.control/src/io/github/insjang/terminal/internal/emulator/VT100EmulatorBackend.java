@@ -113,6 +113,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private int fPromptLine = -1;
 	/** an output mark (C) came after that prompt and no D yet */
 	private boolean fCommandOpen;
+	/** the hyperlink (OSC 8) the text written now gets, or null */
+	private String fLink;
 
 	public VT100EmulatorBackend(ITerminalTextData terminal) {
 		fTerminal = terminal;
@@ -324,6 +326,11 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			eraseLine(line);
 			fTerminal.setLineMark(line, mark);
 		}
+	}
+
+	@Override
+	public void setLink(String uri) {
+		fLink = uri;
 	}
 
 	@Override
@@ -548,6 +555,11 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 					}
 					col = fCursorColumn + width;
 					i += charsUsed;
+				}
+				if (fLink != null) {
+					for (int c = fCursorColumn; c < col; c++) {
+						fTerminal.setLink(line, c, fLink);
+					}
 				}
 				// wrap needed?
 				if (col == fColumns) {

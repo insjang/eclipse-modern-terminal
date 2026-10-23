@@ -149,6 +149,16 @@ public class SynchronizedTerminalTextData implements ITerminalTextData {
 	}
 
 	@Override
+	synchronized public String getLink(int line, int column) {
+		return fData.getLink(line, column);
+	}
+
+	@Override
+	synchronized public void setLink(int line, int column, String uri) {
+		fData.setLink(line, column, uri);
+	}
+
+	@Override
 	synchronized public int getLineMark(int line) {
 		return fData.getLineMark(line);
 	}

@@ -290,6 +290,18 @@ public class TerminalTextDataFastScroll implements ITerminalTextData {
 	}
 
 	@Override
+	public String getLink(int line, int column) {
+		validateLineParameter(line);
+		return fData.getLink(getPositionOfLine(line), column);
+	}
+
+	@Override
+	public void setLink(int line, int column, String uri) {
+		validateLineParameter(line);
+		fData.setLink(getPositionOfLine(line), column, uri);
+	}
+
+	@Override
 	public int getLineMark(int line) {
 		validateLineParameter(line);
 		return fData.getLineMark(getPositionOfLine(line));

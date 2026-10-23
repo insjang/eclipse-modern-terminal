@@ -43,6 +43,7 @@ import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.Locale;
 
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.swt.events.ControlEvent;
@@ -510,6 +511,7 @@ public class VT100Emulator implements ControlListener {
 		text.setScrollRegion(-1, -1);
 		text.setInsertMode(false);
 		terminal.enableApplicationCursorKeys(false);
+		text.setLink(null);
 	}
 
 	/**
@@ -531,6 +533,8 @@ public class VT100Emulator implements ControlListener {
 			} else {
 				Logger.log("Ignoring malformed OSC 7: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
+		} else if (command.startsWith("8;")) { //$NON-NLS-1$
+			text.setLink(linkTarget(command));
 		} else if (command.startsWith("52;")) { //$NON-NLS-1$
 			processClipboard(command);
 		} else if (command.startsWith("133;") && command.length() >= 5) { //$NON-NLS-1$
@@ -590,6 +594,21 @@ public class VT100Emulator implements ControlListener {
 		} catch (IllegalArgumentException e) {
 			Logger.log("Ignoring OSC 52 that is not base64"); //$NON-NLS-1$
 		}
+	}
+
+	/** Longest hyperlink target kept, in chars. */
+	static final int MAX_LINK = 2048;
+
+	/**
+	 * OSC 8: "8;params;uri" starts a hyperlink, "8;;" ends it. Only http, https and
+	 * file links are kept (a click opens them); anything else ends the link.
+	 */
+	static String linkTarget(String command) {
+		int semicolon = command.indexOf(';', 2);
+		String uri = semicolon < 0 ? "" : command.substring(semicolon + 1); //$NON-NLS-1$
+		String lower = uri.toLowerCase(Locale.ROOT);
+		boolean allowed = lower.startsWith("http://") || lower.startsWith("https://") || lower.startsWith("file://"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+		return allowed && uri.length() <= MAX_LINK && uri.chars().noneMatch(c -> c < 0x20 || c == 0x7f) ? uri : null;
 	}
 
 	/** Longest notification title or text passed on, in chars. */

@@ -254,6 +254,9 @@ public interface IVT100EmulatorBackend {
 	 */
 	void setShellMark(char command, int exitStatus);
 
+	/** The text written from now on links to the URI (OSC 8); null ends the link. */
+	void setLink(String uri);
+
 	/**
 	 * Replaces characters from the cursor position with space characters.
 	 *
