@@ -9,7 +9,6 @@
  *******************************************************************************/
 package io.github.insjang.terminal.internal.emulator;
 
-import java.util.List;
 import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
@@ -34,6 +33,8 @@ import io.github.insjang.terminal.internal.textcanvas.TextCanvas;
 class TerminalFindBar extends Composite {
 	/** Most matches counted; a search for one letter in a full buffer stops there. */
 	private static final int MAX_MATCHES = 10000;
+	/** Longest a search or a count may take, in ns. */
+	private static final long TIME_LIMIT = 500_000_000L;
 	private final TextCanvas canvas;
 	private final Text query;
 	private final Button caseSensitive;
@@ -129,36 +130,30 @@ class TerminalFindBar extends Composite {
 			layout();
 			return;
 		}
-		List<Match> matches = TerminalFind.findAll(canvas.getTerminalText(), pattern, MAX_MATCHES);
-		int index = -1;
-		if (!matches.isEmpty()) {
-			if (current == null) {
-				index = matches.size() - 1;
-			} else if (up) {
-				for (int i = matches.size() - 1; i >= 0 && index < 0; i--) {
-					if (matches.get(i).startsBefore(current.startLine(), current.startColumn())) {
-						index = i;
-					}
-				}
-				index = index < 0 ? matches.size() - 1 : index;
-			} else {
-				for (int i = 0; i < matches.size() && index < 0; i++) {
-					if (current.startsBefore(matches.get(i).startLine(), matches.get(i).startColumn())) {
-						index = i;
-					}
-				}
-				index = index < 0 ? 0 : index;
-			}
+		// the text is the program's and the expression the user's: neither may hang the UI
+		Match found;
+		try {
+			found = TerminalFind.next(canvas.getTerminalText(), pattern, current, up, System.nanoTime() + TIME_LIMIT);
+		} catch (TerminalFind.TooSlowException e) {
+			status.setText(TerminalMessages.FIND_TOO_SLOW);
+			layout();
+			return;
 		}
-		if (index < 0) {
+		if (found == null) {
 			current = null;
 			canvas.clearSelection();
 			status.setText(TerminalMessages.FIND_NONE);
 		} else {
-			current = matches.get(index);
+			current = found;
 			canvas.selectAndReveal(current.startLine(), current.startColumn(), current.endLine(), current.endColumn());
-			status.setText(NLS.bind(TerminalMessages.FIND_COUNT, index + 1,
-					matches.size() + (matches.size() == MAX_MATCHES ? "+" : ""))); //$NON-NLS-1$ //$NON-NLS-2$
+			try {
+				int[] count = TerminalFind.count(canvas.getTerminalText(), pattern, current, MAX_MATCHES,
+						System.nanoTime() + TIME_LIMIT);
+				status.setText(count[0] > MAX_MATCHES ? NLS.bind(TerminalMessages.FIND_MANY, MAX_MATCHES)
+						: NLS.bind(TerminalMessages.FIND_COUNT, count[1] + 1, count[0]));
+			} catch (TerminalFind.TooSlowException e) {
+				status.setText(""); //$NON-NLS-1$ // found, but too slow to count
+			}
 		}
 		layout();
 	}

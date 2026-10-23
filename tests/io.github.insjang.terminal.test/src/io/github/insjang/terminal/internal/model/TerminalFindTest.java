@@ -10,10 +10,14 @@
 package io.github.insjang.terminal.internal.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.StringReader;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.regex.PatternSyntaxException;
 
 import org.junit.jupiter.api.Test;
@@ -78,5 +82,49 @@ public class TerminalFindTest {
 	public void testLimit() {
 		ITerminalTextData data = terminal(40, "aaaa");
 		assertEquals(2, TerminalFind.findAll(data, TerminalFind.pattern("a", false, false), 2).size());
+	}
+
+	@Test
+	public void testNextGoesRoundFromWhereItIs() {
+		ITerminalTextData data = terminal(40, "a1\r\nxx\r\na2 a3\r\n\ud55ca4");
+		Pattern p = TerminalFind.pattern("a\\d", false, true);
+		long t = Long.MAX_VALUE;
+		Match a1 = new Match(0, 0, 0, 1), a2 = new Match(2, 0, 2, 1), a3 = new Match(2, 3, 2, 4), a4 = new Match(3, 2, 3, 3);
+		assertEquals(a4, TerminalFind.next(data, p, null, true, t)); // from the bottom: the last one
+		assertEquals(a1, TerminalFind.next(data, p, null, false, t));
+		assertEquals(a3, TerminalFind.next(data, p, a4, true, t));
+		assertEquals(a2, TerminalFind.next(data, p, a3, true, t)); // on the same line
+		assertEquals(a4, TerminalFind.next(data, p, a1, true, t)); // round at the top
+		assertEquals(a1, TerminalFind.next(data, p, a4, false, t)); // round at the bottom
+		assertEquals(a3, TerminalFind.next(data, p, a2, false, t));
+		Match only = new Match(1, 0, 1, 1);
+		assertEquals(only, TerminalFind.next(data, TerminalFind.pattern("xx", false, false), only, true, t)); // itself
+		assertNull(TerminalFind.next(data, TerminalFind.pattern("zz", false, false), null, true, t));
+		assertArrayEquals(new int[] { 4, 2 }, TerminalFind.count(data, p, a3, 100, t));
+	}
+
+	@Test
+	public void testPastTheCapTheLastMatchIsStillFound() {
+		// more matches than any cap: the last one is found from the bottom, not the 10000th from the top
+		ITerminalTextData data = TerminalTextDataFactory.makeTerminalTextData();
+		data.setMaxHeight(20000);
+		VT100Emulator emulator = new VT100Emulator(data, new MockTerminalControlForText(), null);
+		emulator.resetState();
+		emulator.setDimensions(5, 40);
+		emulator.setInputStreamReader(new StringReader("a\r\n".repeat(15000) + "last a"));
+		emulator.processText();
+		Pattern p = TerminalFind.pattern("a", false, false);
+		assertEquals(data.getHeight() - 1, TerminalFind.next(data, p, null, true, Long.MAX_VALUE).startLine());
+		assertEquals(10001, TerminalFind.count(data, p, null, 10000, Long.MAX_VALUE)[0]); // stops past the cap
+	}
+
+	@Test
+	public void testRunawayRegexStops() {
+		ITerminalTextData data = terminal(80, "a".repeat(60) + "!");
+		Pattern p = TerminalFind.pattern("(.*a){20}x", false, true); // backtracks for ages
+		long start = System.nanoTime();
+		assertThrows(TerminalFind.TooSlowException.class,
+				() -> TerminalFind.next(data, p, null, true, System.nanoTime() + 200_000_000L));
+		assertTrue((System.nanoTime() - start) / 1000000 < 2000);
 	}
 }

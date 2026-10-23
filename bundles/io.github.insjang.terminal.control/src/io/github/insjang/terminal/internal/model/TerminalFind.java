@@ -44,30 +44,155 @@ public final class TerminalFind {
 		return Pattern.compile(regex ? query : Pattern.quote(query), flags);
 	}
 
+	/** A search ran past its time: a regular expression that backtracks without end. */
+	public static final class TooSlowException extends RuntimeException {
+		private static final long serialVersionUID = 1L;
+
+		TooSlowException() {
+			super(null, null, false, false);
+		}
+	}
+
+	/** The text of one logical line (rows that ran on joined) with the cells of its chars. */
+	private record Logical(CharSequence text, int[][] cells, int first, int last) {
+	}
+
+	// the text a matcher reads, looking at the clock every few thousand chars
+	private record Timed(CharSequence text, long deadline, int[] reads) implements CharSequence {
+		@Override
+		public char charAt(int index) {
+			if ((++reads[0] & 0xfff) == 0 && System.nanoTime() > deadline) {
+				throw new TooSlowException();
+			}
+			return text.charAt(index);
+		}
+
+		@Override
+		public int length() {
+			return text.length();
+		}
+
+		@Override
+		public CharSequence subSequence(int start, int end) {
+			return new Timed(text.subSequence(start, end), deadline, reads);
+		}
+
+		@Override
+		public String toString() {
+			return text.toString();
+		}
+	}
+
 	/**
 	 * @return the matches in line order, at most <code>limit</code>; empty matches are skipped
 	 */
 	public static List<Match> findAll(ITerminalTextDataReadOnly data, Pattern pattern, int limit) {
 		List<Match> matches = new ArrayList<>();
-		StringBuilder text = new StringBuilder();
-		// per char of text: its line, its first cell and its last cell
-		int[][] cells = new int[3][256];
-		int height = data.getHeight();
-		int line = 0;
-		while (line < height && matches.size() < limit) {
-			text.setLength(0);
-			do {
-				cells = appendLine(data, line, text, cells);
-			} while (data.isWrappedLine(line++) && line < height);
-			Matcher m = pattern.matcher(text);
-			while (m.find() && matches.size() < limit) {
-				if (m.end() > m.start()) {
-					int s = m.start(), e = m.end() - 1;
-					matches.add(new Match(cells[0][s], cells[1][s], cells[0][e], cells[2][e]));
+		for (int line = 0; line < data.getHeight() && matches.size() < limit; line = logical(data, line).last() + 1) {
+			for (Match m : matches(logical(data, line), pattern, Long.MAX_VALUE)) {
+				if (matches.size() < limit) {
+					matches.add(m);
 				}
 			}
 		}
 		return matches;
+	}
+
+	/**
+	 * The match above <code>from</code> (<code>up</code>) or below it, going round at the
+	 * top and the bottom; with no <code>from</code>, the last one (up) or the first. Reads
+	 * from there on, never more of the buffer than it needs.
+	 *
+	 * @throws TooSlowException past the deadline (System.nanoTime)
+	 * @return the match, or null where there is none
+	 */
+	public static Match next(ITerminalTextDataReadOnly data, Pattern pattern, Match from, boolean up, long deadline) {
+		int height = data.getHeight();
+		if (height == 0) {
+			return null;
+		}
+		int start = from != null ? logicalStart(data, Math.min(from.startLine(), height - 1))
+				: up ? logicalStart(data, height - 1) : 0;
+		int line = start;
+		// the line of from twice: its matches on the near side first, at the end the ones beyond it
+		for (int visit = 0;; visit++) {
+			Logical logical = logical(data, line);
+			List<Match> matches = matches(logical, pattern, deadline);
+			boolean first = visit == 0, last = visit > 0 && line == start;
+			Match found = null;
+			for (Match m : matches) {
+				boolean before = from != null && m.startsBefore(from.startLine(), from.startColumn());
+				boolean after = from != null && from.startsBefore(m.startLine(), m.startColumn());
+				// first visit: the near side of from; last (round again): the far side, from itself too
+				boolean ok = from == null || !first && !last || (first ? (up ? before : after) : (up ? !before : !after));
+				if (ok && (up || found == null)) {
+					found = m; // up: the last one that will do, down: the first
+				}
+			}
+			if (found != null || last || from == null && visit > 0 && line == start) {
+				return found;
+			}
+			if (up) {
+				line = logical.first() == 0 ? logicalStart(data, height - 1) : logicalStart(data, logical.first() - 1);
+			} else {
+				line = logical.last() + 1 >= height ? 0 : logical.last() + 1;
+			}
+			if (from == null && line == start) {
+				return null; // round once without a match
+			}
+		}
+	}
+
+	/**
+	 * @return the number of matches (counting stops past <code>limit</code>) and how many
+	 *         of them start before <code>at</code>
+	 * @throws TooSlowException past the deadline
+	 */
+	public static int[] count(ITerminalTextDataReadOnly data, Pattern pattern, Match at, int limit, long deadline) {
+		int total = 0, before = 0;
+		for (int line = 0; line < data.getHeight() && total <= limit; line = logical(data, line).last() + 1) {
+			for (Match m : matches(logical(data, line), pattern, deadline)) {
+				total++;
+				if (at != null && m.startsBefore(at.startLine(), at.startColumn())) {
+					before++;
+				}
+			}
+		}
+		return new int[] { total, before };
+	}
+
+	private static int logicalStart(ITerminalTextDataReadOnly data, int line) {
+		while (line > 0 && data.isWrappedLine(line - 1)) {
+			line--;
+		}
+		return line;
+	}
+
+	private static Logical logical(ITerminalTextDataReadOnly data, int first) {
+		StringBuilder text = new StringBuilder();
+		// per char of text: its line, its first cell and its last cell
+		int[][] cells = new int[3][256];
+		int line = first;
+		do {
+			cells = appendLine(data, line, text, cells);
+		} while (data.isWrappedLine(line) && line + 1 < data.getHeight() && ++line > 0);
+		return new Logical(text, cells, first, line);
+	}
+
+	private static List<Match> matches(Logical logical, Pattern pattern, long deadline) {
+		List<Match> found = new ArrayList<>();
+		Matcher m = pattern.matcher(new Timed(logical.text(), deadline, new int[1]));
+		int[][] cells = logical.cells();
+		while (m.find()) {
+			if (m.end() > m.start()) {
+				int s = m.start(), e = m.end() - 1;
+				found.add(new Match(cells[0][s], cells[1][s], cells[0][e], cells[2][e]));
+			}
+		}
+		if (System.nanoTime() > deadline) {
+			throw new TooSlowException();
+		}
+		return found;
 	}
 
 	private static int[][] appendLine(ITerminalTextDataReadOnly data, int line, StringBuilder text, int[][] cells) {

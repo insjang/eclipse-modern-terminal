@@ -74,6 +74,8 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 - 터미널에서 Ctrl+Shift+F: 위쪽에 찾기 표시줄 (선택한 글자가 있으면 그 글자로)
 - 입력하면 마지막 일치 항목, Enter는 위쪽 항목, Shift+Enter는 아래쪽 항목, 끝에 닿으면 반대편으로, 찾은 부분을 선택하고 화면에 보이게 스크롤
 - Aa: 대소문자 구분, .*: Java 정규식
+- 개수는 "n of m" 또는 "more than 10000 matches"로 표시, 개수 상한과 관계없이 위·아래 이동은 모든 일치 항목에 도달
+- 검색은 0.5초가 지나면 멈춤 ("The regular expression takes too long"), 끝없이 되돌아가는 정규식도 Eclipse를 멈추게 하지 못함
 - 다음 줄로 이어진 긴 줄은 한 줄로 검색, 한글·CJK·이모지 같은 넓은 문자도 칸 위치에 맞게 선택
 - Esc로 닫으면 터미널로 포커스 복귀, 다시 Ctrl+Shift+F면 찾기 표시줄로 포커스 이동
 - 새 출력이 오면 전과 같이 끝으로 스크롤: 프로그램이 출력 중일 때 찾은 위치를 보려면 뷰 툴바의 Scroll Lock 켜기

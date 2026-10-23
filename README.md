@@ -74,6 +74,8 @@ Ctrl+Shift+F in a terminal opens a find bar above it (with the selected text, if
 
 - Typing finds the last match; Enter goes to the one above, Shift+Enter to the one below, round at the ends; the match is selected and scrolled into view
 - Aa: match case; .*: a Java regular expression
+- The count shows "n of m", or "more than 10000 matches"; going up or down always reaches every match, the count limit or not
+- A search stops after half a second ("The regular expression takes too long"), so a regular expression that backtracks without end cannot hang Eclipse
 - A line that ran on to the next one is searched as one; wide characters (Hangul, CJK, emoji) are matched by their cells
 - Esc closes it and the focus goes back to the terminal; Ctrl+Shift+F again puts the focus back in the bar
 - New output scrolls to the end as before: turn on Scroll Lock in the view toolbar to read a match while a program is still writing
