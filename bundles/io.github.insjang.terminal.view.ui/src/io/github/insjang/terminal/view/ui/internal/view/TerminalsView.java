@@ -721,6 +721,7 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 		doConfigureTabFolderControl(folder);
 		tabFolders.add(folder);
 		folder.addDisposeListener(e -> tabFolders.remove(folder));
+		styleTabFolders();
 		if (tabFolderManager != null) {
 			tabFolderManager.addTabFolder(folder);
 		}
@@ -1028,10 +1029,16 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 				if (selection != null) {
 					tabFolderManager.bringToTop(selection);
 				}
+			}
+			// a click in the view makes it the active part too, and it may have been active already
+			if (folder != null) {
+				viewActive = getSite().getPage().getActivePart() == this || viewActive;
 				styleTabFolders();
 			}
 		};
 		getSite().getPage().addPartListener(activeListener);
+		viewActive = getSite().getPage().getActivePart() == this;
+		styleTabFolders();
 		parent.getDisplay().addFilter(SWT.FocusIn, activationFilter);
 		parent.getDisplay().addFilter(SWT.MouseDown, activationFilter);
 
