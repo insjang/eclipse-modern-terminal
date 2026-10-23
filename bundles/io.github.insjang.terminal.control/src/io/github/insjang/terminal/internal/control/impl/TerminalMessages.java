@@ -77,6 +77,7 @@ public class TerminalMessages extends NLS {
 	public static String FIND_COUNT;
 	public static String FIND_MANY;
 	public static String FIND_TOO_SLOW;
+	public static String FIND_CLOSE;
 	public static String RESTORE_TERMINALS;
 	public static String BUFFERLINES;
 

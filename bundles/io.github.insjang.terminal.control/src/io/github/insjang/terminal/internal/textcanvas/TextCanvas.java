@@ -50,6 +50,7 @@ import org.eclipse.swt.widgets.Composite;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
 import io.github.insjang.terminal.internal.model.CharWidth;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
+import io.github.insjang.terminal.model.ITerminalTextDataSnapshot;
 import io.github.insjang.terminal.model.TerminalColor;
 
 /**
@@ -810,9 +811,18 @@ public class TextCanvas extends GridCanvas {
 		fCellCanvasModel.setSelectionAnchor(new Point(0, 0));
 	}
 
-	/** @return the lines as shown, scrollback included: what the selection's lines count */
+	/**
+	 * @return a copy of all the lines, scrollback included, numbered as the selection's. Not the
+	 *         canvas's own snapshot: that one keeps only the lines in view up to date.
+	 */
 	public ITerminalTextDataReadOnly getTerminalText() {
-		return fCellCanvasModel.getTerminalText();
+		if (!(fCellCanvasModel.getTerminalText() instanceof ITerminalTextDataSnapshot shown)) {
+			return fCellCanvasModel.getTerminalText();
+		}
+		ITerminalTextDataSnapshot all = shown.getTerminalTextData().makeSnapshot();
+		all.updateSnapshot(false);
+		all.detach(); // a copy now, no longer kept up to date
+		return all;
 	}
 
 	/** @return the first line in view */

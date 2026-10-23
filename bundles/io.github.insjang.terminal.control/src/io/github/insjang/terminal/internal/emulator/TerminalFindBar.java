@@ -25,6 +25,7 @@ import io.github.insjang.terminal.internal.control.impl.TerminalMessages;
 import io.github.insjang.terminal.internal.model.TerminalFind;
 import io.github.insjang.terminal.internal.model.TerminalFind.Match;
 import io.github.insjang.terminal.internal.textcanvas.TextCanvas;
+import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
 
 /**
  * The find bar above the terminal (Ctrl+Shift+F): searches the scrollback,
@@ -45,7 +46,7 @@ class TerminalFindBar extends Composite {
 	TerminalFindBar(Composite parent, TextCanvas canvas) {
 		super(parent, SWT.NONE);
 		this.canvas = canvas;
-		GridLayout layout = new GridLayout(6, false);
+		GridLayout layout = new GridLayout(7, false);
 		layout.marginHeight = 2;
 		layout.marginWidth = 4;
 		setLayout(layout);
@@ -62,6 +63,10 @@ class TerminalFindBar extends Composite {
 		push("↓", TerminalMessages.FIND_NEXT, false); //$NON-NLS-1$
 		status = new Label(this, SWT.NONE);
 		status.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, false, false));
+		Button close = new Button(this, SWT.PUSH);
+		close.setText("×"); //$NON-NLS-1$
+		close.setToolTipText(TerminalMessages.FIND_CLOSE);
+		close.addListener(SWT.Selection, e -> close());
 
 		query.addModifyListener(e -> {
 			current = null; // from the bottom again
@@ -72,6 +77,13 @@ class TerminalFindBar extends Composite {
 				e.doit = false;
 				find((e.stateMask & SWT.SHIFT) == 0);
 			} else if (e.detail == SWT.TRAVERSE_ESCAPE) {
+				e.doit = false;
+				close();
+			}
+		});
+		// Esc does not always come as a traverse (the Windows search field takes it to clear the text)
+		query.addListener(SWT.KeyDown, e -> {
+			if (e.keyCode == SWT.ESC && !isDisposed()) {
 				e.doit = false;
 				close();
 			}
@@ -132,8 +144,9 @@ class TerminalFindBar extends Composite {
 		}
 		// the text is the program's and the expression the user's: neither may hang the UI
 		Match found;
+		ITerminalTextDataReadOnly lines = canvas.getTerminalText();
 		try {
-			found = TerminalFind.next(canvas.getTerminalText(), pattern, current, up, System.nanoTime() + TIME_LIMIT);
+			found = TerminalFind.next(lines, pattern, current, up, System.nanoTime() + TIME_LIMIT);
 		} catch (TerminalFind.TooSlowException e) {
 			status.setText(TerminalMessages.FIND_TOO_SLOW);
 			layout();
@@ -147,7 +160,7 @@ class TerminalFindBar extends Composite {
 			current = found;
 			canvas.selectAndReveal(current.startLine(), current.startColumn(), current.endLine(), current.endColumn());
 			try {
-				int[] count = TerminalFind.count(canvas.getTerminalText(), pattern, current, MAX_MATCHES,
+				int[] count = TerminalFind.count(lines, pattern, current, MAX_MATCHES,
 						System.nanoTime() + TIME_LIMIT);
 				status.setText(count[0] > MAX_MATCHES ? NLS.bind(TerminalMessages.FIND_MANY, MAX_MATCHES)
 						: NLS.bind(TerminalMessages.FIND_COUNT, count[1] + 1, count[0]));
