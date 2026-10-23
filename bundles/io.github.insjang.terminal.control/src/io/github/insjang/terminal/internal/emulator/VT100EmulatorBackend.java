@@ -16,6 +16,13 @@ package io.github.insjang.terminal.internal.emulator;
 
 import java.text.Normalizer;
 
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import io.github.insjang.terminal.internal.model.CharWidth;
 import io.github.insjang.terminal.model.ITerminalTextData;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
@@ -115,6 +122,12 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private boolean fCommandOpen;
 	/** the hyperlink (OSC 8) the text written now gets, or null */
 	private String fLink;
+	/** Most different hyperlinks held at once: each is kept once, the cells share it. */
+	public static final int MAX_LINKS = 1000;
+	// the links in use, each once; a link not in it is never put on a cell
+	private final Map<String, String> fLinks = new HashMap<>();
+	// when the links no cell has were last let go: a walk over the buffer, at most twice a second
+	private long fLinksDropped = Long.MIN_VALUE / 2;
 
 	public VT100EmulatorBackend(ITerminalTextData terminal) {
 		fTerminal = terminal;
@@ -328,9 +341,46 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		}
 	}
 
+	/**
+	 * The link the text written from now on gets. A program can only make the buffer
+	 * hold {@link #MAX_LINKS} different ones: past that, the ones no cell has any more
+	 * are let go (looked for at most twice a second), and while it is still full new
+	 * links are left off.
+	 */
 	@Override
 	public void setLink(String uri) {
-		fLink = uri;
+		synchronized (fTerminal) {
+			if (uri == null) {
+				fLink = null;
+				return;
+			}
+			String known = fLinks.get(uri);
+			if (known == null && fLinks.size() >= MAX_LINKS && System.nanoTime() - fLinksDropped > 500_000_000L) {
+				fLinksDropped = System.nanoTime();
+				dropUnusedLinks();
+			}
+			if (known == null && fLinks.size() < MAX_LINKS) {
+				fLinks.put(uri, uri);
+				known = uri;
+			}
+			fLink = known;
+		}
+	}
+
+	private void dropUnusedLinks() {
+		Set<String> used = Collections.newSetFromMap(new IdentityHashMap<>());
+		for (ITerminalTextData data : fNormalScreen != null ? List.of(fTerminal, fNormalScreen) : List.of(fTerminal)) {
+			for (int line = 0; line < data.getHeight(); line++) {
+				char[] chars = data.getChars(line);
+				for (int col = 0; chars != null && col < chars.length; col++) {
+					String link = data.getLink(line, col);
+					if (link != null) {
+						used.add(link);
+					}
+				}
+			}
+		}
+		fLinks.values().removeIf(link -> !used.contains(link));
 	}
 
 	@Override

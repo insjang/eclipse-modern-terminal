@@ -506,6 +506,40 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testHyperlinksBounded() {
+		// a different link on every cell: the buffer holds at most MAX_LINKS of them, each once
+		data.setMaxHeight(100);
+		emulator.setDimensions(10, 40);
+		StringBuilder out = new StringBuilder();
+		for (int i = 0; i < 1200; i++) {
+			out.append("\033]8;;https://x/").append(i).append("\007z");
+		}
+		run(out.toString(), "\033]8;;\007");
+		java.util.Set<String> held = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+		for (int line = 0; line < data.getHeight(); line++) {
+			for (int col = 0; col < data.getWidth(); col++) {
+				if (data.getLink(line, col) != null) {
+					held.add(data.getLink(line, col));
+				}
+			}
+		}
+		assertEquals(VT100EmulatorBackend.MAX_LINKS, held.size());
+		assertNull(data.getLink(1100 / 40, 1100 % 40)); // past the limit while all are still on cells: no link
+		// the same link again is the same string
+		run("\033]8;;https://x/0\007ab\033]8;;\007");
+		assertEquals(true, data.getLink(30, 0) == data.getLink(30, 1));
+		// once the cells that had them are gone, new links are taken again (looked for twice a second)
+		run("\r\n".repeat(200));
+		try {
+			Thread.sleep(600);
+		} catch (InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+		run("\033]8;;https://new/\007n\033]8;;\007");
+		assertEquals("https://new/", data.getLink(data.getCursorLine(), data.getCursorColumn() - 1));
+	}
+
+	@Test
 	public void testClipboard() {
 		String big = "\ud55c".repeat(200000); // 600 KB of UTF-8, past the limit of other OSCs
 		String bigBase64 = Base64.getEncoder().encodeToString(big.getBytes(StandardCharsets.UTF_8));
