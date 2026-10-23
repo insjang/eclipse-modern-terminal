@@ -77,6 +77,8 @@ import io.github.insjang.terminal.view.ui.internal.tabs.TabFolderToolbarHandler;
 import org.eclipse.ui.IMemento;
 import org.eclipse.ui.ISources;
 import org.eclipse.ui.IViewSite;
+import org.eclipse.ui.IWorkbenchPartReference;
+import org.eclipse.ui.IPartListener2;
 import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.commands.ICommandService;
@@ -102,6 +104,38 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 	private final List<CTabFolder> tabFolders = new ArrayList<>();
 	// Makes the tab folder holding the focused terminal the active one
 	private Listener activationFilter;
+	/** WidgetElement.CSS_CLASS_NAME_KEY of the Eclipse CSS engine, and the classes of a view's tab stack */
+	private static final String CSS_CLASS = "org.eclipse.e4.ui.css.CssClassName", STACK = "MPartStack", //$NON-NLS-1$ //$NON-NLS-2$
+			ACTIVE_STACK = "MPartStack active"; //$NON-NLS-1$
+	private boolean viewActive;
+	private final IPartListener2 activeListener = new IPartListener2() {
+		@Override
+		public void partActivated(IWorkbenchPartReference ref) {
+			if (ref.getPart(false) == TerminalsView.this) {
+				viewActive = true;
+				styleTabFolders();
+			}
+		}
+
+		@Override
+		public void partDeactivated(IWorkbenchPartReference ref) {
+			if (ref.getPart(false) == TerminalsView.this) {
+				viewActive = false;
+				styleTabFolders();
+			}
+		}
+	};
+
+	/** As Eclipse marks the active view's tabs: the folder in use, while the view is active. */
+	private void styleTabFolders() {
+		for (CTabFolder folder : tabFolders) {
+			String style = viewActive && folder == tabFolderControl ? ACTIVE_STACK : STACK;
+			if (!folder.isDisposed() && !style.equals(folder.getData(CSS_CLASS))) {
+				folder.setData(CSS_CLASS, style);
+				folder.reskin(SWT.NONE);
+			}
+		}
+	}
 	// Frame shown over the drop target while a terminal tab is dragged: four thin bars
 	private final List<Control> dropFeedback = new ArrayList<>();
 	// Reference to the tab folder manager
@@ -923,6 +957,7 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 
 	@Override
 	public void dispose() {
+		getSite().getPage().removePartListener(activeListener);
 		if (activationFilter != null) {
 			Display.getCurrent().removeFilter(SWT.FocusIn, activationFilter);
 			Display.getCurrent().removeFilter(SWT.MouseDown, activationFilter);
@@ -993,8 +1028,10 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 				if (selection != null) {
 					tabFolderManager.bringToTop(selection);
 				}
+				styleTabFolders();
 			}
 		};
+		getSite().getPage().addPartListener(activeListener);
 		parent.getDisplay().addFilter(SWT.FocusIn, activationFilter);
 		parent.getDisplay().addFilter(SWT.MouseDown, activationFilter);
 
@@ -1116,9 +1153,9 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 							JFaceResources.getColorRegistry().get("org.eclipse.ui.workbench.ACTIVE_TAB_BG_END") //$NON-NLS-1$
 					}, new int[] { 100 }, true);
 		}
-		// Apply the tab folder selection foreground color
-		tabFolder.setSelectionForeground(
-				JFaceResources.getColorRegistry().get("org.eclipse.ui.workbench.ACTIVE_TAB_TEXT_COLOR")); //$NON-NLS-1$
+		// the theme draws the tabs as those of a view: the selected one filled and underlined
+		tabFolder.setData(CSS_CLASS, STACK);
+		tabFolder.reskin(SWT.NONE);
 
 		// Attach the mouse listener
 		tabFolder.addMouseListener(new MouseAdapter() {
