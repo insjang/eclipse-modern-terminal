@@ -770,6 +770,11 @@ public class TextCanvas extends GridCanvas {
 		return c == '\000' && !Character.isSurrogate(before) && CharWidth.of(before) == 2;
 	}
 
+	/** @return the default background of the cells, what the terminal is drawn on */
+	public Color getDefaultBackgroundColor() {
+		return fCellRenderer.getDefaultBackgroundColor();
+	}
+
 	@Override
 	protected Color getTerminalBackgroundColor(Device device) {
 		return fCellRenderer.getDefaultBackgroundColor();

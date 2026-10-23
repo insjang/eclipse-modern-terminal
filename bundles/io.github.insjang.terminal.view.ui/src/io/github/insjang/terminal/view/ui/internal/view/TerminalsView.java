@@ -134,6 +134,32 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 				folder.setData(CSS_CLASS, style);
 				folder.reskin(SWT.NONE);
 			}
+			if (fillSelectedTab(folder)) {
+				folder.redraw();
+			}
+		}
+	}
+
+	/**
+	 * The selected tab in the terminal's own background, as an editor tab is in the editor's: the theme
+	 * fills it with its tab colour, a grey box over a black terminal.
+	 */
+	private static boolean fillSelectedTab(CTabFolder folder) {
+		CTabItem item = folder.isDisposed() ? null : folder.getSelection();
+		if (item == null || !(item.getData() instanceof ITerminalViewControl terminal) || terminal.getBackgroundColor() == null) {
+			return false;
+		}
+		Object renderer = folder.getRenderer();
+		try { // the theme's renderer (CTabRendering), not a dependency of this bundle
+			java.lang.reflect.Field fill = renderer.getClass().getDeclaredField("selectedTabFillColors"); //$NON-NLS-1$
+			fill.setAccessible(true);
+			if (fill.get(renderer) instanceof Color[] colors && colors.length == 1 && terminal.getBackgroundColor().equals(colors[0])) {
+				return false;
+			}
+			renderer.getClass().getMethod("setSelectedTabFill", Color.class).invoke(renderer, terminal.getBackgroundColor()); //$NON-NLS-1$
+			return true;
+		} catch (ReflectiveOperationException | RuntimeException e) {
+			return false; // another renderer: the theme's fill stays
 		}
 	}
 	// Frame shown over the drop target while a terminal tab is dragged: four thin bars
@@ -1163,6 +1189,16 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 		// the theme draws the tabs as those of a view: the selected one filled and underlined
 		tabFolder.setData(CSS_CLASS, STACK);
 		tabFolder.reskin(SWT.NONE);
+		// the theme puts its own fill back whenever it styles the folder (a skin, a selection): checked as it paints
+		tabFolder.addListener(SWT.Paint, e -> {
+			if (fillSelectedTab(tabFolder)) {
+				tabFolder.getDisplay().asyncExec(() -> {
+					if (!tabFolder.isDisposed()) {
+						tabFolder.redraw();
+					}
+				});
+			}
+		});
 
 		// Attach the mouse listener
 		tabFolder.addMouseListener(new MouseAdapter() {

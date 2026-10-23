@@ -1041,6 +1041,11 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		return fMsg;
 	}
 
+	@Override
+	public Color getBackgroundColor() {
+		return fCtlText != null && !fCtlText.isDisposed() ? fCtlText.getDefaultBackgroundColor() : null;
+	}
+
 	protected TextCanvas getCtlText() {
 		return fCtlText;
 	}

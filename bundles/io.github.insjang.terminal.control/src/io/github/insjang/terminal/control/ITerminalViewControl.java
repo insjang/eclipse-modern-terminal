@@ -96,6 +96,14 @@ public interface ITerminalViewControl {
 	 * @return false where the shell has not marked any output
 	 * @since 1.2
 	 */
+	/**
+	 * @return the background the terminal is drawn on, or <code>null</code>
+	 * @since 1.2
+	 */
+	default org.eclipse.swt.graphics.Color getBackgroundColor() {
+		return null;
+	}
+
 	default boolean copyLastCommandOutput() {
 		return false;
 	}
