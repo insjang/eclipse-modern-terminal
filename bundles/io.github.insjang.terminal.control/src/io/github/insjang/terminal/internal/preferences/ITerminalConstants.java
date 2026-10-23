@@ -43,6 +43,8 @@ public interface ITerminalConstants {
 	 * is not active (the tab is marked either way).
 	 */
 	public static final String PREF_DESKTOP_NOTIFICATIONS = "TerminalPrefDesktopNotifications"; //$NON-NLS-1$
+	/** Close a tab when its shell exits (Ctrl+D, exit, logout) after it was connected. */
+	public static final String PREF_CLOSE_ON_EXIT = "TerminalPrefCloseOnExit"; //$NON-NLS-1$
 	/** Tab names follow the title a program sets (OSC 0/2), such as bash's user@host: folder. */
 	public static final String PREF_PROGRAM_TITLES = "TerminalPrefProgramTitles"; //$NON-NLS-1$
 	/** Programs may put text on the clipboard (OSC 52); they can never read it. */
@@ -60,6 +62,7 @@ public interface ITerminalConstants {
 	public static final boolean DEFAULT_PREF_RESTORE_TERMINALS = true;
 	public static final boolean DEFAULT_DESKTOP_NOTIFICATIONS = true;
 	public static final boolean DEFAULT_PROGRAM_TITLES = true;
+	public static final boolean DEFAULT_CLOSE_ON_EXIT = true;
 	public static final boolean DEFAULT_CLIPBOARD_WRITE = true;
 	public static final boolean DEFAULT_CONFIRM_MULTILINE_PASTE = true;
 	/**

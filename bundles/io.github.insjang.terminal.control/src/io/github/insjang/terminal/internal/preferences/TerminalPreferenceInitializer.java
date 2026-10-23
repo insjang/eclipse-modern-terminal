@@ -43,6 +43,7 @@ public class TerminalPreferenceInitializer extends AbstractPreferenceInitializer
 		defaultPrefs.putBoolean(ITerminalConstants.PREF_BAR_CURSOR, ITerminalConstants.DEFAULT_BAR_CURSOR);
 		defaultPrefs.putBoolean(ITerminalConstants.PREF_AUTO_COPY_SELECTION,
 				ITerminalConstants.DEFAULT_AUTO_COPY_SELECTION);
+		defaultPrefs.putBoolean(ITerminalConstants.PREF_CLOSE_ON_EXIT, ITerminalConstants.DEFAULT_CLOSE_ON_EXIT);
 		defaultPrefs.putBoolean(ITerminalConstants.PREF_PROGRAM_TITLES, ITerminalConstants.DEFAULT_PROGRAM_TITLES);
 		defaultPrefs.putBoolean(ITerminalConstants.PREF_DESKTOP_NOTIFICATIONS,
 				ITerminalConstants.DEFAULT_DESKTOP_NOTIFICATIONS);

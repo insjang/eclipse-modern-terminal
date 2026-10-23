@@ -44,6 +44,7 @@ public class TabTerminalListener implements ITerminalListener {
 	/* default */ final TabFolderManager tabFolderManager;
 	private CTabItem tabItem;
 	private String tabItemTitle;
+	private volatile boolean wasConnected;
 	private TerminalState state;
 	/** Least time between two desktop notifications of one tab. */
 	private static final long NOTIFY_INTERVAL_MS = 5000;
@@ -105,6 +106,9 @@ public class TabTerminalListener implements ITerminalListener {
 	@Override
 	public void setState(final TerminalState state) {
 		this.state = state;
+		if (TerminalState.CONNECTED.equals(state)) {
+			wasConnected = true;
+		}
 		updateTitle(null, TerminalTitleRequestor.OTHER);
 
 		// The tab item must have been not yet disposed
@@ -115,6 +119,15 @@ public class TabTerminalListener implements ITerminalListener {
 
 		// Run asynchronously in the display thread
 		item.getDisplay().asyncExec(() -> {
+			// the shell ended (Ctrl+D, exit): the tab goes; a connection that never came up stays, to show why
+			if (TerminalState.CLOSED.equals(state) && wasConnected && !item.isDisposed() && TerminalPlugin.getDefault()
+					.getPreferenceStore().getBoolean(ITerminalConstants.PREF_CLOSE_ON_EXIT)) {
+				item.dispose();
+				return;
+			}
+			if (item.isDisposed()) {
+				return;
+			}
 			// Turn off the command field (if necessary)
 			TabCommandFieldHandler handler = tabFolderManager.getTabCommandFieldHandler(item);
 			if (TerminalState.CLOSED.equals(state) && handler != null && handler.hasCommandInputField()) {
