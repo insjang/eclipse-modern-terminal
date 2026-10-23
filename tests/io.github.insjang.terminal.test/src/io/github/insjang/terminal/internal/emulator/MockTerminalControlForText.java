@@ -55,6 +55,17 @@ public class MockTerminalControlForText implements ITerminalControlForText {
 		return Collections.unmodifiableList(directories);
 	}
 
+	private List<String> clipboard = new ArrayList<>();
+
+	@Override
+	public void setClipboardText(String text) {
+		clipboard.add(text);
+	}
+
+	public List<String> getClipboard() {
+		return Collections.unmodifiableList(clipboard);
+	}
+
 	private List<String> notifications = new ArrayList<>();
 
 	@Override

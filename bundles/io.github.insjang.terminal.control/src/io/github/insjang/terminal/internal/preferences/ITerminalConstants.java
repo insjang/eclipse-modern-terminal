@@ -43,6 +43,8 @@ public interface ITerminalConstants {
 	 * is not active (the tab is marked either way).
 	 */
 	public static final String PREF_DESKTOP_NOTIFICATIONS = "TerminalPrefDesktopNotifications"; //$NON-NLS-1$
+	/** Programs may put text on the clipboard (OSC 52); they can never read it. */
+	public static final String PREF_CLIPBOARD_WRITE = "TerminalPrefClipboardWrite"; //$NON-NLS-1$
 	/**
 	 * @since 5.0
 	 */
@@ -53,6 +55,7 @@ public interface ITerminalConstants {
 	public static final boolean DEFAULT_AUTO_COPY_SELECTION = true;
 	public static final boolean DEFAULT_PREF_RESTORE_TERMINALS = true;
 	public static final boolean DEFAULT_DESKTOP_NOTIFICATIONS = true;
+	public static final boolean DEFAULT_CLIPBOARD_WRITE = true;
 	/**
 	 * @since 5.0
 	 */

@@ -17,7 +17,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.io.Reader;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.StringJoiner;
 
@@ -457,6 +459,21 @@ public class VT100EmulatorTest {
 						"null|red", "null|" + "x".repeat(VT100Emulator.MAX_NOTIFICATION - 1) + "\u2026"),
 						control.getNotifications()),
 				() -> assertEquals(List.of(), control.getAllTitles()));
+	}
+
+	@Test
+	public void testClipboard() {
+		String big = "\ud55c".repeat(200000); // 600 KB of UTF-8, past the limit of other OSCs
+		String bigBase64 = Base64.getEncoder().encodeToString(big.getBytes(StandardCharsets.UTF_8));
+		run("\033]52;c;" + Base64.getEncoder().encodeToString("hi \ud55c\uae00\n".getBytes(StandardCharsets.UTF_8)) + "\007",
+				"\033]52;c;?\007", // a read: never answered
+				"\033]52;;aGk=\033\\", // no target, ST
+				"\033]52;c;!!!\007", "\033]52;c;\007", // not base64, empty
+				"\033]52;c;" + bigBase64 + "\007", //
+				"\033]52;c;" + "A".repeat(VT100Emulator.MAX_CLIPBOARD_OSC + 4) + "\007", // too long
+				"OK");
+		assertAll(() -> assertTextEquals("OK"),
+				() -> assertEquals(List.of("hi \ud55c\uae00\n", "hi", big), control.getClipboard()));
 	}
 
 	@Test

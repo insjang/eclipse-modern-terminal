@@ -54,6 +54,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 import org.eclipse.core.commands.ExecutionException;
@@ -167,6 +168,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	private ICommandInputField fCommandInputField;
 	private TerminalFindBar fFindBar;
+	// OSC 52 text not yet on the clipboard: a flood posts one UI runnable at a time
+	private final AtomicReference<String> fPendingClipboard = new AtomicReference<>();
 
 	private volatile TerminalState fState;
 
@@ -1449,6 +1452,23 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 				Logger.logException(e); // a listener must not end the terminal's reader job
 			}
 		}
+	}
+
+	@Override
+	public void setClipboardText(String text) {
+		if (fPreferenceStore == null || !fPreferenceStore.getBoolean(ITerminalConstants.PREF_CLIPBOARD_WRITE)
+				|| fDisplay == null || fDisplay.isDisposed()) {
+			return;
+		}
+		if (fPendingClipboard.getAndSet(text) != null) {
+			return;
+		}
+		fDisplay.asyncExec(() -> {
+			String latest = fPendingClipboard.getAndSet(null);
+			if (latest != null && fClipboard != null && !fClipboard.isDisposed()) {
+				fClipboard.setContents(new Object[] { latest }, new Transfer[] { TextTransfer.getInstance() });
+			}
+		});
 	}
 
 	@Override

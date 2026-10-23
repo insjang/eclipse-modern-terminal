@@ -55,6 +55,14 @@ public interface ITerminalControlForText {
 	default void showNotification(String title, String message) {
 	}
 
+	/**
+	 * The program puts text on the clipboard (OSC 52). Called outside the UI thread.
+	 *
+	 * @param text the text, never empty
+	 */
+	default void setClipboardText(String text) {
+	}
+
 	ITerminalConnector getTerminalConnector();
 
 	OutputStream getOutputStream();

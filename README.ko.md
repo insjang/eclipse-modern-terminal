@@ -29,6 +29,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | 색 | 글자색을 시스템에서 가져옴: 다크 테마에서 거의 검정 | Tango 기반, Eclipse 테마에 맞춤, Tango Dark·Light·Classic 프리셋 |
 | 셸 통합 (OSC 133) | 없음 | Ctrl+Up/Down으로 프롬프트 사이 이동, 실패한 명령 표시, 마지막 명령 출력 복사 |
 | 찾기 | 없음 | Ctrl+Shift+F: 스크롤 기록 포함, 대소문자 구분, 정규식, 위·아래 |
+| OSC 52 | 무시 | 프로그램이 로컬 클립보드로 복사 (SSH 너머 vim, tmux 포함), 클립보드 읽기는 허용 안 함 |
 | BEL, OSC 9, OSC 777 | 무시 | 탭에 표시, Eclipse가 뒤에 있으면 데스크톱 알림, 소리 없음 |
 | 기본값 | 블록 커서, 1000줄 | 세로 막대 커서, 선택 시 복사, 10000줄 |
 | SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH 방식 known_hosts, 세션 저장 |
@@ -112,6 +113,13 @@ PS1="$PS1"$'%{\e]133;B\a%}'
 ```
 
 - WezTerm·Windows Terminal의 셸 통합 스크립트를 쓰는 셸은 이미 OSC 133을 보내므로 설정 불필요
+
+## 프로그램의 클립보드 복사 (OSC 52)
+
+- vim (OSC 52 플러그인), tmux (`set -g set-clipboard on`) 등의 프로그램이 `ESC ] 52 ; c ; <base64> BEL`로 이 PC의 클립보드에 복사, SSH로 접속한 서버에서도 동작
+- 약 768 KB까지, 더 길면 무시
+- 쓰기만 가능: 클립보드 읽기 요청 (`?`)에는 응답하지 않음
+- Preferences → Modern Terminal → Programs may copy text to the clipboard로 끄기
 
 ## 알림
 

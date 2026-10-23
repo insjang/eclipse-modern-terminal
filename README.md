@@ -28,6 +28,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Colors | text color from the system: near black on the dark theme | Tango based, matched to the Eclipse theme; Tango Dark/Light and Classic presets |
 | Shell integration (OSC 133) | none | Ctrl+Up/Down between prompts, failed commands marked, copy the last command's output |
 | Find | none | Ctrl+Shift+F: the scrollback, match case, regular expressions, up and down |
+| OSC 52 | ignored | programs copy to the local clipboard, also over SSH (vim, tmux); reading it is never allowed |
 | Bell, OSC 9, OSC 777 | ignored | the tab is marked; a desktop notification while Eclipse is in the background; never a sound |
 | Defaults | block cursor, 1000 lines | bar cursor, copy on select, 10000 lines |
 | SSH | JSch 0.1.55 | Apache MINA SSHD, OpenSSH-style known_hosts, saved sessions |
@@ -114,6 +115,14 @@ PS1="$PS1"$'%{\e]133;B\a%}'
 ```
 
 Shells set up by the shell integration scripts of WezTerm or Windows Terminal already send OSC 133 and need nothing.
+
+## Clipboard from programs (OSC 52)
+
+vim (with an OSC 52 plugin), tmux (`set -g set-clipboard on`) and other programs copy to the clipboard of this computer with `ESC ] 52 ; c ; <base64> BEL`, also from a server over SSH.
+
+- Up to about 768 KB of text; longer is ignored
+- Programs can only write: a request to read the clipboard (`?`) is never answered
+- Off with Preferences > Modern Terminal > Programs may copy text to the clipboard
 
 ## Notifications
 

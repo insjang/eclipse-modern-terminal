@@ -40,7 +40,9 @@ import static io.github.insjang.terminal.model.TerminalColor.YELLOW;
 
 import java.io.IOException;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Base64;
 
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.swt.events.ControlEvent;
@@ -454,7 +456,7 @@ public class VT100Emulator implements ControlListener {
 					processAnsiOsCommand();
 				} else if (character == '\u001b') {
 					ansiState = ANSISTATE_EXPECTING_OS_COMMAND_END;
-				} else if (ansiOsCommand.length() <= MAX_OS_COMMAND) {
+				} else if (ansiOsCommand.length() <= osCommandLimit()) {
 					ansiOsCommand.append(character);
 				}
 				break;
@@ -518,7 +520,7 @@ public class VT100Emulator implements ControlListener {
 	 */
 	private void processAnsiOsCommand() {
 		String command = ansiOsCommand.toString();
-		if (command.length() > MAX_OS_COMMAND) {
+		if (command.length() > osCommandLimit()) {
 			Logger.log("Ignoring too long ANSI OSC sequence"); //$NON-NLS-1$
 		} else if (command.startsWith("0;")) { //$NON-NLS-1$
 			terminal.setTerminalTitle(command.substring(2), TerminalTitleRequestor.ANSI);
@@ -529,6 +531,8 @@ public class VT100Emulator implements ControlListener {
 			} else {
 				Logger.log("Ignoring malformed OSC 7: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
 			}
+		} else if (command.startsWith("52;")) { //$NON-NLS-1$
+			processClipboard(command);
 		} else if (command.startsWith("133;") && command.length() >= 5) { //$NON-NLS-1$
 			// shell integration: A prompt, B command line, C output, D[;status] finished
 			char mark = command.charAt(4);
@@ -554,6 +558,37 @@ public class VT100Emulator implements ControlListener {
 			terminal.showNotification(notificationText(parts[0]), parts.length > 1 ? notificationText(parts[1]) : null);
 		} else {
 			Logger.log("Ignoring unsupported ANSI OSC sequence: '" + command + "'"); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+	}
+
+	/** Longest OSC 52 (clipboard text in base64), in chars: about 768 KB of text. */
+	static final int MAX_CLIPBOARD_OSC = 1 << 20;
+
+	// an OSC 52 carries the clipboard text and may be long, the others may not
+	private int osCommandLimit() {
+		StringBuffer c = ansiOsCommand;
+		return c.length() >= 3 && c.charAt(0) == '5' && c.charAt(1) == '2' && c.charAt(2) == ';' ? MAX_CLIPBOARD_OSC
+				: MAX_OS_COMMAND;
+	}
+
+	/**
+	 * OSC 52: "52;targets;base64" sets the clipboard. A program may not read it:
+	 * "?" is ignored, as is text that is not base64.
+	 */
+	private void processClipboard(String command) {
+		int semicolon = command.indexOf(';', 3);
+		String data = semicolon < 0 ? "" : command.substring(semicolon + 1); //$NON-NLS-1$
+		if (data.isEmpty() || data.equals("?")) { //$NON-NLS-1$
+			Logger.log("Ignoring OSC 52 without text (reading the clipboard is not allowed)"); //$NON-NLS-1$
+			return;
+		}
+		try {
+			byte[] bytes = Base64.getMimeDecoder().decode(data);
+			if (bytes.length > 0) {
+				terminal.setClipboardText(new String(bytes, StandardCharsets.UTF_8));
+			}
+		} catch (IllegalArgumentException e) {
+			Logger.log("Ignoring OSC 52 that is not base64"); //$NON-NLS-1$
 		}
 	}
 
