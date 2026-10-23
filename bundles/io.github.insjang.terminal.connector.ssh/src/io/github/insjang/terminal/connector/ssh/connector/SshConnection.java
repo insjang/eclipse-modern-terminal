@@ -230,6 +230,10 @@ public class SshConnection extends Thread {
 			}
 			session.setUserInteraction(new Prompts());
 			String password = settings.getPassword();
+			if (password == null || password.isEmpty()) {
+				// a restored tab: the one saved for exactly this user@host:port, if "Save password" is on for it
+				password = SshPasswords.get(settings.getUser(), host, port);
+			}
 			if (password != null && !password.isEmpty()) {
 				session.addPasswordIdentity(password);
 			}

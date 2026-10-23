@@ -14,8 +14,6 @@ package io.github.insjang.terminal.connector.ssh.launcher;
 import java.util.Map;
 
 import org.eclipse.core.runtime.Assert;
-import io.github.insjang.terminal.connector.ssh.connector.ISshSettings;
-import io.github.insjang.terminal.connector.ssh.connector.SshPasswords;
 import io.github.insjang.terminal.connector.ssh.connector.SshSession;
 import io.github.insjang.terminal.view.core.ITerminalsConnectorConstants;
 import io.github.insjang.terminal.view.ui.IMementoHandler;
@@ -106,12 +104,9 @@ public class SshMementoHandler implements IMementoHandler {
 		properties.put(SshSession.PROP_START_FOLDER, memento.getString(SshSession.PROP_START_FOLDER));
 		properties.put(SshSession.PROP_FORWARDS, memento.getString(SshSession.PROP_FORWARDS));
 
-		// The password is in the secure storage, saved for exactly this user@host:port only while
-		// "Save password" is on for it (see SshPasswords)
-		Integer port = memento.getInteger(ITerminalsConnectorConstants.PROP_IP_PORT);
-		String password = SshPasswords.get(memento.getString(ITerminalsConnectorConstants.PROP_SSH_USER),
-				memento.getString(ITerminalsConnectorConstants.PROP_IP_HOST),
-				port != null ? port.intValue() : ISshSettings.DEFAULT_SSH_PORT);
+		// The saved password is not read here: this runs while the view is created, and the first
+		// read of the secure storage after a start may show a dialog, whose event loop opens the
+		// other restored tabs too early and loses them. SshConnection reads it (SshPasswords).
 
 		// Example of restoring the password from an 3DES encrypted string. Do not remove!
 		/*
@@ -135,7 +130,6 @@ public class SshMementoHandler implements IMementoHandler {
 		}
 		*/
 
-		properties.put(ITerminalsConnectorConstants.PROP_SSH_PASSWORD, password);
 	}
 
 }
