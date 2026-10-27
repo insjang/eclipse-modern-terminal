@@ -61,6 +61,7 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
 import org.eclipse.swt.widgets.Sash;
 import org.eclipse.swt.widgets.Widget;
@@ -104,6 +105,11 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 	private final List<CTabFolder> tabFolders = new ArrayList<>();
 	// Makes the tab folder holding the focused terminal the active one
 	private Listener activationFilter;
+	// Ctrl+Tab: the tabs, the last used first, and the position in it while Ctrl is held (-1 when not cycling)
+	private final List<CTabItem> recentTabs = new ArrayList<>();
+	private int recentCycle = -1;
+	private int recentTime;
+	private Listener recentFilter;
 	/** WidgetElement.CSS_CLASS_NAME_KEY of the Eclipse CSS engine, and the classes of a view's tab stack */
 	private static final String CSS_CLASS = "org.eclipse.e4.ui.css.CssClassName", STACK = "MPartStack", //$NON-NLS-1$ //$NON-NLS-2$
 			ACTIVE_STACK = "MPartStack active"; //$NON-NLS-1$
@@ -758,6 +764,56 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 	/**
 	 * Returns the tab folder of this view containing the given widget, or <code>null</code>.
 	 */
+	/** Puts the tab first in the list of the last used tabs. */
+	private void useTab(CTabItem item) {
+		if (item != null && !item.isDisposed()) {
+			recentTabs.remove(item);
+			recentTabs.add(0, item);
+		}
+	}
+
+	/**
+	 * Ctrl+Tab in a terminal of this view goes to the tab used before, like Ctrl+F6 between editors: pressing Tab again
+	 * while Ctrl is held goes further back, Shift goes forward, and releasing Ctrl keeps the tab reached.
+	 */
+	private void cycleRecentTabs(Event event) {
+		if (event.type == SWT.KeyUp) {
+			if (recentCycle >= 0 && event.keyCode == SWT.CTRL) {
+				CTabItem reached = recentCycle < recentTabs.size() ? recentTabs.get(recentCycle) : null;
+				recentCycle = -1;
+				useTab(reached);
+			}
+			return;
+		}
+		// GTK may drop Ctrl from the state of the key after the focus moved to another terminal: a Tab soon after
+		// the last one, before Ctrl is released, still goes on
+		boolean held = (event.stateMask & SWT.MODIFIER_MASK & ~SWT.SHIFT) == SWT.CTRL
+				|| recentCycle >= 0 && (event.stateMask & SWT.MODIFIER_MASK & ~SWT.SHIFT) == 0 && event.time - recentTime < 1500;
+		if (event.keyCode != SWT.TAB || !held || findTabFolder(event.widget) == null) {
+			return;
+		}
+		recentTime = event.time;
+		if (event.type == SWT.Traverse) {
+			event.doit = false; // no focus traversal: the key comes as a KeyDown
+			return;
+		}
+		event.doit = false;
+		event.type = SWT.None; // the terminal does not get the key
+		recentTabs.removeIf(CTabItem::isDisposed);
+		Arrays.stream(getTabItems()).filter(i -> !recentTabs.contains(i)).forEach(recentTabs::add);
+		if (recentCycle < 0) {
+			useTab(tabFolderControl != null && !tabFolderControl.isDisposed() ? tabFolderControl.getSelection() : null);
+			recentCycle = 0;
+		}
+		int n = recentTabs.size();
+		if (n < 2 || tabFolderManager == null) {
+			return;
+		}
+		recentCycle = (recentCycle + ((event.stateMask & SWT.SHIFT) != 0 ? n - 1 : 1)) % n;
+		tabFolderManager.bringToTop(recentTabs.get(recentCycle));
+		setFocus();
+	}
+
 	private CTabFolder findTabFolder(Widget widget) {
 		for (Control c = widget instanceof Control control ? control : null; c != null; c = c.getParent()) {
 			if (c instanceof CTabFolder folder && tabFolders.contains(folder)) {
@@ -990,6 +1046,12 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 			Display.getCurrent().removeFilter(SWT.MouseDown, activationFilter);
 			activationFilter = null;
 		}
+		if (recentFilter != null) {
+			Display.getCurrent().removeFilter(SWT.Traverse, recentFilter);
+			Display.getCurrent().removeFilter(SWT.KeyDown, recentFilter);
+			Display.getCurrent().removeFilter(SWT.KeyUp, recentFilter);
+			recentFilter = null;
+		}
 		hideDropFeedback();
 		// Dispose the tab folder manager
 		if (tabFolderManager != null) {
@@ -1049,6 +1111,9 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 		// The tab folder of the focused or clicked terminal is the active one
 		activationFilter = event -> {
 			CTabFolder folder = findTabFolder(event.widget);
+			if (folder != null && event.type == SWT.FocusIn && recentCycle < 0) {
+				useTab(folder.getSelection());
+			}
 			if (folder != null && folder != tabFolderControl && tabFolderManager != null) {
 				tabFolderControl = folder;
 				CTabItem selection = folder.getSelection();
@@ -1067,6 +1132,10 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 		styleTabFolders();
 		parent.getDisplay().addFilter(SWT.FocusIn, activationFilter);
 		parent.getDisplay().addFilter(SWT.MouseDown, activationFilter);
+		recentFilter = this::cycleRecentTabs;
+		parent.getDisplay().addFilter(SWT.Traverse, recentFilter);
+		parent.getDisplay().addFilter(SWT.KeyDown, recentFilter);
+		parent.getDisplay().addFilter(SWT.KeyUp, recentFilter);
 
 		// Create the tab folder manager
 		tabFolderManager = doCreateTabFolderManager(this);

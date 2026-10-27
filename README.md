@@ -1,15 +1,20 @@
 # Modern Terminal for Eclipse
 
-A terminal view for Eclipse that gets wide characters, full-screen programs and modern key handling right, so that Claude Code, Codex CLI, vim, less and htop work as they do in Windows Terminal.
+**Run Claude Code inside Eclipse.**
+Modern Terminal is a terminal view that gets wide characters, full-screen programs and modern key handling right, so that Claude Code, Codex CLI, vim, less and htop work as they do in Windows Terminal: beside your editor, and a Ctrl+click on a path in Claude's answer opens the file.
 It is a fork of the Eclipse Terminal and installs beside it as its own view, **Modern Terminal**.
 
 [한국어 README](README.ko.md)
 
-![Modern Terminal split three ways beside the Markdown Viewer: Claude Code, htop and a shell](docs/images/overview-en.png)
+![Claude Code in Modern Terminal beside the Java editor, asking before it edits OrderService.java](docs/images/claude-hero.png)
 
-| Claude Code with Korean text | Claude Code above, htop below |
+| Claude Code answering in Korean, the columns in line | Ctrl+click on a .md path in Claude's answer opens the Markdown Viewer |
 |---|---|
-| ![Claude Code running in Modern Terminal, Korean table aligned](docs/images/claude-code.png) | ![Claude Code and htop split in one view](docs/images/split.png) |
+| ![Claude Code's Korean summary of Modern Terminal, Korean text aligned](docs/images/claude-ko.png) | ![The design note Claude Code named, open in the Markdown Viewer beside it](docs/images/claude-mdviewer.png) |
+
+| Four SSH sessions in one view split 2x2, Claude Code on one server | Saved SSH sessions |
+|---|---|
+| ![Four SSH tabs split two by two: a log, vmstat, git log and Claude Code](docs/images/ssh-split.png) | ![The SSH settings dialog with saved sessions over the Files view](docs/images/ssh-dialog.png) |
 
 | Find in the scrollback (Ctrl+Shift+F) | Shell integration: failed commands marked | A link whose text says otherwise asks first |
 |---|---|---|
@@ -27,7 +32,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Shift+Enter | runs the line | a new line in Claude Code, Codex and the like, as on the web |
 | Paste with a line break | runs it at once | asks first where the shell has not turned on bracketed paste, a single line ending in a line break too (a preference); bracketed paste cannot be ended early by the text |
 | Command input field | one line | several lines (Shift+Enter), history kept |
-| Tabs | one row per view | drag a tab to an edge to split the view; the layout comes back after a restart |
+| Tabs | one row per view | drag a tab to an edge to split the view; the layout comes back after a restart; Ctrl+Tab goes to the tab used before, across the split, like Ctrl+F6 between editors (hold Ctrl and press Tab again to go further back) |
 | Ctrl+click | URLs and plain file paths | also paths in brackets, quotes or backticks, absolute Windows paths, WSL paths (`/mnt/c/...`, `/home/...`), Hangul paths |
 | Hyperlinks (OSC 8) | ignored | Ctrl+click opens them: `ls --hyperlink`, gcc, and others; http, https and local file links only, up to 2048 characters and 1000 different links in the buffer at once; a link whose text says something else shows where it goes first (see Ctrl+click) |
 | Drop files | not supported | types their paths, quoted for the shell (bash, cmd, PowerShell) |
@@ -154,6 +159,7 @@ A bell (BEL), `ESC ] 9 ; text BEL` (iTerm2) or `ESC ] 777 ; notify ; title ; tex
 - No sound, and no setting for one
 - `ESC ] 9 ; <number> ; ...` are ConEmu commands (9;4 is progress) and are ignored; control, bidi, zero-width and separator characters are dropped from the text and from the tab title shown with it, both cut to 256 characters
 
+## SSH
 
 - Ctrl+Alt+Shift+M (or Open Modern Terminal... in the view toolbar) > Choose terminal: SSH Terminal
   - Host, user, port, an optional key file, timeout and keepalive
@@ -181,6 +187,7 @@ A bell (BEL), `ESC ] 9 ; text BEL` (iTerm2) or `ESC ] 777 ; notify ; title ; tex
 Window > Show View > Other... > Modern Terminal > Modern Terminal Files.
 
 - Shows the files of the SSH tab selected in Modern Terminal, on the same connection: no second login
+- The path box at the top: type a folder and Enter, or pick one of the recent folders from its list (a click goes there at once)
 - Browse, Upload... (or drop files and folders from the desktop), Download..., New Folder..., Rename..., Delete
 - Double-click a file to open it in the Eclipse editor; saving uploads it
   - If the file has changed on the server since it was opened, you are asked before it is overwritten

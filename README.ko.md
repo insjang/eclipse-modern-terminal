@@ -1,20 +1,25 @@
 # Modern Terminal for Eclipse
 
+**Eclipse 안에서 Claude Code를 실행.**
+Modern Terminal은 한글 등 넓은 문자, 전체 화면 프로그램, 최신 키 입력을 제대로 처리하는 Eclipse 터미널 뷰.
+Claude Code, Codex CLI, vim, less, htop이 Windows Terminal과 같이 편집기 옆에서 동작하고, Claude 답의 경로를 Ctrl+클릭하면 그 파일이 열림.
+Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 터미널 옆에 설치됨.
+
 [English README](README.md)
 
-![Markdown Viewer 옆에 Modern Terminal을 세 칸으로 분할: Claude Code, htop, 셸](docs/images/overview.png)
+![Java 편집기 옆 Modern Terminal의 Claude Code, OrderService.java 수정 전 확인](docs/images/claude-hero.png)
 
-| 한글을 출력하는 Claude Code | 위 Claude Code, 아래 htop |
+| 한글로 답하는 Claude Code, 표 열 정렬 정상 | Claude 답의 .md 경로를 Ctrl+클릭해 Markdown Viewer로 열기 |
 |---|---|
-| ![Modern Terminal에서 실행한 Claude Code, 한글 표 정렬 정상](docs/images/claude-code.png) | ![한 뷰 안에 Claude Code와 htop을 분할](docs/images/split.png) |
+| ![Modern Terminal을 한글로 요약한 Claude Code 답, 한글 정렬 정상](docs/images/claude-ko.png) | ![Claude Code가 말한 설계 문서를 옆의 Markdown Viewer로 연 화면](docs/images/claude-mdviewer.png) |
+
+| 한 뷰를 2x2로 분할한 SSH 세션 4개, 한 서버에서 Claude Code | 저장된 SSH 세션 |
+|---|---|
+| ![SSH 탭 4개를 2x2로 분할: 로그, vmstat, git log, Claude Code](docs/images/ssh-split.png) | ![Files 뷰 위에 띄운 저장된 세션의 SSH 설정 창](docs/images/ssh-dialog.png) |
 
 | 스크롤백 찾기 (Ctrl+Shift+F) | 셸 통합: 실패한 명령 표시 | 글자와 다른 링크는 먼저 확인 |
 |---|---|---|
 | ![빌드 로그에서 찾기, 두 번째 ERROR 선택](docs/images/find.png) | ![실패한 명령의 프롬프트 왼쪽에 빨간 표시](docs/images/shell-integration.png) | ![실제 주소를 보여 주는 Open Link 확인 창](docs/images/link-confirm.png) |
-
-Eclipse용 터미널 뷰.
-한글 등 넓은 문자, 전체 화면 프로그램, 최신 키 입력을 제대로 처리: Claude Code, Codex CLI, vim, less, htop이 Windows Terminal과 같이 동작.
-Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 터미널 옆에 설치됨.
 
 ## 개선·추가 내용
 
@@ -28,7 +33,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | Shift+Enter | 바로 실행 | Claude Code·Codex 등에서 줄바꿈 (웹과 같은 습관) |
 | 줄바꿈이 든 붙여넣기 | 바로 실행 | 셸이 브래킷 붙여넣기를 켜지 않았으면 먼저 확인, 끝에 줄바꿈 하나만 있는 한 줄도 (설정으로 끄기), 붙여넣은 글자가 브래킷 붙여넣기를 일찍 끝낼 수 없음 |
 | 명령 입력창 | 한 줄 | 여러 줄 (Shift+Enter), 기록 유지 |
-| 탭 | 뷰마다 한 줄 | 탭을 가장자리로 끌어 화면 분할, 재시작 후 배치 복원 |
+| 탭 | 뷰마다 한 줄 | 탭을 가장자리로 끌어 화면 분할, 재시작 후 배치 복원, Ctrl+Tab으로 직전에 쓴 탭으로 이동 (분할 칸 포함, 편집기의 Ctrl+F6처럼 Ctrl을 누른 채 Tab을 더 누르면 더 이전 탭) |
 | Ctrl+클릭 | URL과 단순 파일 경로 | 괄호·따옴표·백틱 안 경로, Windows 절대 경로, WSL 경로(`/mnt/c/...`, `/home/...`), 한글 경로도 열기 |
 | 하이퍼링크 (OSC 8) | 무시 | Ctrl+클릭으로 열기: `ls --hyperlink`, gcc 등, http·https·로컬 파일 링크만, 2048자 이하, 버퍼에 동시에 다른 링크 1000개까지, 보이는 글자와 다른 곳을 가리키는 링크는 주소를 먼저 보여 줌 (Ctrl+클릭 절 참고) |
 | 파일 끌어 놓기 | 지원 안 함 | 경로 입력, 셸에 맞게 따옴표 처리 (bash, cmd, PowerShell) |
@@ -151,6 +156,7 @@ PS1="$PS1"$'%{\e]133;B\a%}'
 - 소리는 내지 않음, 소리 설정도 없음
 - `ESC ] 9 ; <숫자> ; ...`는 ConEmu 명령 (9;4는 진행률)이라 무시, 내용과 함께 표시하는 탭 제목에서 제어·bidi·폭 0·구분 문자는 제거, 둘 다 256자까지
 
+## SSH
 
 - Ctrl+Alt+Shift+M (또는 뷰 툴바의 Open Modern Terminal...) → Choose terminal: SSH Terminal
   - 호스트, 사용자, 포트, 키 파일(선택), 타임아웃, keepalive 입력
@@ -177,6 +183,7 @@ PS1="$PS1"$'%{\e]133;B\a%}'
 
 - Window → Show View → Other... → Modern Terminal → Modern Terminal Files
 - Modern Terminal에서 선택한 SSH 탭의 파일을 같은 연결로 표시: 다시 로그인하지 않음
+- 위쪽 경로 칸: 폴더를 입력하고 Enter, 또는 목록에서 최근 폴더 선택 (클릭하면 바로 이동)
 - 탐색, Upload... (바탕 화면에서 파일·폴더 끌어 놓기도 가능), Download..., New Folder..., Rename..., Delete
 - 파일을 더블클릭하면 Eclipse 편집기로 열림, 저장하면 업로드
   - 연 뒤에 서버에서 파일이 바뀌었으면 덮어쓰기 전에 확인

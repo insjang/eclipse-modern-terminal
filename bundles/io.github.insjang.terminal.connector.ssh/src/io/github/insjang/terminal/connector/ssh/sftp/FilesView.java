@@ -174,8 +174,17 @@ public class FilesView extends ViewPart {
 		pathText = new Combo(browser, SWT.BORDER | SWT.DROP_DOWN);
 		pathText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 		pathText.addListener(SWT.DefaultSelection, e -> go(pathText.getText()));
-		pathText.addListener(SWT.Selection, e -> { // a recent folder picked from the open list; arrow keys on the closed box only change the text
-			if (pathText.getListVisible()) {
+		// a recent folder clicked in the list goes there at once; arrow keys only change the text, Enter goes.
+		// On Windows the list is already closed when the click's Selection comes, so the key's time tells them apart.
+		int[] arrowTime = { 0 };
+		pathText.addListener(SWT.KeyDown, e -> {
+			if (e.keyCode == SWT.ARROW_UP || e.keyCode == SWT.ARROW_DOWN || e.keyCode == SWT.PAGE_UP || e.keyCode == SWT.PAGE_DOWN
+					|| e.keyCode == SWT.HOME || e.keyCode == SWT.END) {
+				arrowTime[0] = e.time;
+			}
+		});
+		pathText.addListener(SWT.Selection, e -> {
+			if (Math.abs(e.time - arrowTime[0]) > 200) {
 				go(pathText.getText());
 			}
 		});
