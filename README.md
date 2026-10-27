@@ -1,4 +1,4 @@
-# Modern Terminal for Eclipse
+# <img src="docs/images/icon.svg" width="40" height="40" alt="" align="top"> Modern Terminal for Eclipse
 
 **Run Claude Code inside Eclipse.**
 Modern Terminal is a terminal view that gets wide characters, full-screen programs and modern key handling right, so that Claude Code, Codex CLI, vim, less and htop work as they do in Windows Terminal: beside your editor, and a Ctrl+click on a path in Claude's answer opens the file.
