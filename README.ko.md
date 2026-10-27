@@ -1,8 +1,8 @@
 # <img src="docs/images/icon.svg" width="40" height="40" alt="" align="top"> Modern Terminal for Eclipse
 
-**Eclipse 안에서 Claude Code를 실행.**
-Modern Terminal은 한글 등 넓은 문자, 전체 화면 프로그램, 최신 키 입력을 제대로 처리하는 Eclipse 터미널 뷰.
-Claude Code, Codex CLI, vim, less, htop이 Windows Terminal과 같이 편집기 옆에서 동작하고, Claude 답의 경로를 Ctrl+클릭하면 그 파일이 열림.
+**Eclipse 안에서 Claude Code를 실행.**\
+Modern Terminal은 한글 등 넓은 문자, 전체 화면 프로그램, 최신 키 입력을 제대로 처리하는 Eclipse 터미널 뷰.\
+Claude Code, Codex CLI, vim, less, htop이 Windows Terminal과 같이 편집기 옆에서 동작하고, Claude 답의 경로를 Ctrl+클릭하면 그 파일이 열림.\
 Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 터미널 옆에 설치됨.
 
 [English README](README.md)
