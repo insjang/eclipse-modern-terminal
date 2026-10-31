@@ -25,6 +25,7 @@ import org.eclipse.swt.graphics.Drawable;
 import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.graphics.GC;
 import org.eclipse.swt.graphics.Point;
+import org.eclipse.swt.graphics.Rectangle;
 import io.github.insjang.terminal.connector.Logger;
 import io.github.insjang.terminal.internal.control.impl.TerminalPlugin;
 import io.github.insjang.terminal.internal.model.CharWidth;
@@ -164,6 +165,14 @@ public class TextLineRenderer implements ILinelRenderer {
 		if (row == cursorLine) {
 			int cursorColumn = model.getCursorColumn();
 			if (cursorColumn < getTerminalText().getWidth()) {
+				// On a wide character the cursor covers both of its cells, whichever
+				// one it is on, as in xterm: half a glyph cannot be drawn reversed.
+				char[] chars = getTerminalText().getChars(row);
+				String line = chars == null ? "" : new String(chars); //$NON-NLS-1$
+				if (cursorColumn < line.length() && CharWidth.isSecondCell(line, cursorColumn)) {
+					cursorColumn--;
+				}
+				int cells = cursorColumn + 1 < line.length() && CharWidth.isSecondCell(line, cursorColumn + 1) ? 2 : 1;
 				TerminalStyle style = getTerminalText().getStyle(row, cursorColumn);
 				if (style == null) {
 					// TODO make the cursor color customizable
@@ -176,8 +185,13 @@ public class TextLineRenderer implements ILinelRenderer {
 				}
 				style = style.setReverse(!style.isReverse());
 				setupGC(gc, style);
-				String text = String.valueOf(getTerminalText().getChar(row, cursorColumn));
+				String text = cells == 2 ? line.substring(cursorColumn, cursorColumn + 2)
+						: String.valueOf(getTerminalText().getChar(row, cursorColumn));
+				Rectangle clipping = gc.getClipping();
+				gc.setClipping(clipping.intersection(new Rectangle(x + (cursorColumn - colFirst) * getCellWidth(), y,
+						cells * getCellWidth(), getCellHeight())));
 				drawText(gc, x, y, colFirst, cursorColumn, text);
+				gc.setClipping(clipping);
 			}
 		}
 	}

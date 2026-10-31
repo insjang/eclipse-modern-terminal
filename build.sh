@@ -9,7 +9,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=$HERE/build
 QUALIFIER=v$(date +%Y%m%d-%H%M%S)
 # Eclipse's plugins, minus its own terminal: nothing may compile against it by accident
-CP=$(find "$ECLIPSE/plugins" -maxdepth 1 -name '*.jar' ! -name 'org.eclipse.terminal.*' | tr '\n' ':')
+CP=$(find "$ECLIPSE/plugins" -maxdepth 1 -name '*.jar' ! -name 'org.eclipse.terminal.*' | sort | tr '\n' ':')
 BUNDLES="control view.core view.ui connector.process connector.local connector.ssh" # dependency order
 
 rm -rf "$OUT" && mkdir -p "$OUT"
