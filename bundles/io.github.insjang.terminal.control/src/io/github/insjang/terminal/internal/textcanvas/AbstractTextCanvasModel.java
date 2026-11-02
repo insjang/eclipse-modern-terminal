@@ -294,6 +294,17 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			fSelectionSnapshot.detach();
 			fSelectionSnapshot = null;
 		}
+		if (fSelectionSnapshot != null) {
+			// A wide character is selected whole: a selection that starts on its
+			// second cell starts on its first, one that ends on its first ends on
+			// its second.
+			if (isSecondCell(startLine, startColumn)) {
+				startColumn--;
+			}
+			if (isSecondCell(endLine, endColumn + 1)) {
+				endColumn++;
+			}
+		}
 		int oldStart = fSelectionStartLine;
 		int oldEnd = fSeletionEndLine;
 		fSelectionStartLine = startLine;
@@ -482,6 +493,14 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 	 * Calculates the currently selected text
 	 * @return the currently selected text
 	 */
+	private boolean isSecondCell(int line, int col) {
+		if (line < 0 || line >= fSelectionSnapshot.getHeight() || col <= 0) {
+			return false;
+		}
+		char[] chars = fSelectionSnapshot.getChars(line);
+		return chars != null && col < chars.length && CharWidth.isSecondCell(new String(chars), col);
+	}
+
 	private String extractSelectedText() {
 		if (fSelectionStartLine < 0 || fSelectionStartCoumn < 0 || fSelectionSnapshot == null) {
 			return ""; //$NON-NLS-1$
