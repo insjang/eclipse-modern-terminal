@@ -489,10 +489,6 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 		return text.toString();
 	}
 
-	/**
-	 * Calculates the currently selected text
-	 * @return the currently selected text
-	 */
 	private boolean isSecondCell(int line, int col) {
 		if (line < 0 || line >= fSelectionSnapshot.getHeight() || col <= 0) {
 			return false;
@@ -501,6 +497,10 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 		return chars != null && col < chars.length && CharWidth.isSecondCell(new String(chars), col);
 	}
 
+	/**
+	 * Calculates the currently selected text
+	 * @return the currently selected text
+	 */
 	private String extractSelectedText() {
 		if (fSelectionStartLine < 0 || fSelectionStartCoumn < 0 || fSelectionSnapshot == null) {
 			return ""; //$NON-NLS-1$
