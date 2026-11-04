@@ -27,6 +27,7 @@ import java.util.StringJoiner;
 import io.github.insjang.terminal.connector.Logger;
 import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.model.ITerminalTextData;
+import io.github.insjang.terminal.model.TerminalStyle;
 import io.github.insjang.terminal.model.TerminalTextDataFactory;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -718,6 +719,16 @@ public class VT100EmulatorTest {
 		assertTrue(all.toString().contains("Hello 2"));
 		assertTrue(!all.toString().contains("Full screen"));
 		assertTrue(all.toString().trim().endsWith("after"));
+	}
+
+	@Test
+	public void testFullResetErasesInTheDefaultBackground() {
+		run("\u001b[42m", "\u001bc", "x");
+		// the screen a program left green comes back in the default background
+		int line = data.getHeight() - WINDOW_LINES;
+		TerminalStyle erased = data.getStyle(line, 1);
+		assertTrue(erased == null
+				|| erased.getBackgroundTerminalColor() == data.getStyle(line, 0).getBackgroundTerminalColor());
 	}
 
 	@Test
