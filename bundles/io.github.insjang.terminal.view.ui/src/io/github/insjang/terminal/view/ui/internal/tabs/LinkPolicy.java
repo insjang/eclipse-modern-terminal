@@ -15,6 +15,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Set;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 import io.github.insjang.terminal.control.TerminalDirectory;
 
@@ -193,7 +195,27 @@ public final class LinkPolicy {
 		} catch (IOException | RuntimeException e) {
 			return null;
 		}
-		return systemProgramAllowed(real) ? real : null;
+		return systemProgramAllowed(real) && (!isOffice(real) || macroFree(real)) ? real : null;
+	}
+
+	private static boolean isOffice(String path) {
+		String p = path.toLowerCase(Locale.ROOT).replaceAll("[. ]+$", ""); //$NON-NLS-1$ //$NON-NLS-2$
+		return p.endsWith(".xlsx") || p.endsWith(".docx") || p.endsWith(".pptx"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+	}
+
+	/**
+	 * Office opens a file by what it holds, not by its name: a workbook with macros renamed
+	 * to .xlsx would still run them. The document has to be what its name says, a ZIP
+	 * package (an old binary document is not one), with no macro project in it.
+	 */
+	static boolean macroFree(String path) {
+		try (ZipFile zip = new ZipFile(path)) {
+			return zip.stream().map(ZipEntry::getName).map(n -> n.toLowerCase(Locale.ROOT))
+					.noneMatch(n -> n.endsWith("vbaproject.bin") || n.endsWith("vbadata.xml") //$NON-NLS-1$ //$NON-NLS-2$
+							|| n.contains("activex")); //$NON-NLS-1$
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
 	}
 
 	/**

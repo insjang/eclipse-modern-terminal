@@ -140,4 +140,31 @@ public class LinkPolicyTest {
 		assertEquals("a.txt", LinkPolicy.fileName("C:\\x\\a.txt"));
 		assertEquals("a.txt", LinkPolicy.fileName("a.txt"));
 	}
+
+	@Test
+	public void testOfficeOnlyWithoutMacros() throws IOException {
+		Path dir = Files.createTempDirectory(tmp, "office");
+		Path plain = dir.resolve("plain.xlsx");
+		zip(plain, "[Content_Types].xml", "xl/workbook.xml");
+		assertEquals(plain.toRealPath().toString(), LinkPolicy.systemProgramTarget(plain.toString(), true));
+		// macros in a package named as one without them
+		Path macros = dir.resolve("macros.xlsx");
+		zip(macros, "[Content_Types].xml", "xl/vbaProject.bin");
+		assertNull(LinkPolicy.systemProgramTarget(macros.toString(), true));
+		// an old binary document (OLE) renamed
+		Path ole = dir.resolve("old.docx");
+		Files.write(ole, new byte[] { (byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0, (byte) 0xA1, (byte) 0xB1, 0x1A,
+				(byte) 0xE1 });
+		assertNull(LinkPolicy.systemProgramTarget(ole.toString(), true));
+	}
+
+	private static void zip(Path file, String... names) throws IOException {
+		try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(file))) {
+			for (String name : names) {
+				out.putNextEntry(new java.util.zip.ZipEntry(name));
+				out.write('x');
+				out.closeEntry();
+			}
+		}
+	}
 }
