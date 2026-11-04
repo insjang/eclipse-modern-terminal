@@ -10,11 +10,16 @@
 package io.github.insjang.terminal.view.ui.internal.tabs;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.IDN;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -206,16 +211,66 @@ public final class LinkPolicy {
 	/**
 	 * Office opens a file by what it holds, not by its name: a workbook with macros renamed
 	 * to .xlsx would still run them. The document has to be what its name says, a ZIP
-	 * package (an old binary document is not one), with no macro project in it.
+	 * package from its first byte (an old binary document, or one hidden behind it, is
+	 * not), with nothing in it that runs or is fetched: no macro project, ActiveX control,
+	 * ribbon customisation or embedded object, and no relationship that reaches out of the
+	 * file other than a hyperlink (a remote template is fetched on opening, and with it
+	 * goes the Windows login).
 	 */
 	static boolean macroFree(String path) {
-		try (ZipFile zip = new ZipFile(path)) {
-			return zip.stream().map(ZipEntry::getName).map(n -> n.toLowerCase(Locale.ROOT))
-					.noneMatch(n -> n.endsWith("vbaproject.bin") || n.endsWith("vbadata.xml") //$NON-NLS-1$ //$NON-NLS-2$
-							|| n.contains("activex")); //$NON-NLS-1$
+		try (InputStream in = Files.newInputStream(Path.of(path))) {
+			byte[] head = in.readNBytes(4);
+			if (head.length < 4 || head[0] != 'P' || head[1] != 'K' || head[2] != 3 || head[3] != 4) {
+				return false;
+			}
 		} catch (IOException | RuntimeException e) {
 			return false;
 		}
+		try (ZipFile zip = new ZipFile(path)) {
+			for (ZipEntry entry : Collections.list(zip.entries())) {
+				String name = entry.getName().toLowerCase(Locale.ROOT);
+				if (name.contains("vbaproject") || name.contains("vbadata") || name.contains("activex") //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
+						|| name.contains("customui") || name.contains("/embeddings/")) { //$NON-NLS-1$ //$NON-NLS-2$
+					return false;
+				}
+				if (name.endsWith(".rels") && reachesOut(zip, entry)) { //$NON-NLS-1$
+					return false;
+				}
+				// what the package says its parts are, whatever they are called
+				if (name.equals("[content_types].xml")) { //$NON-NLS-1$
+					String types = read(zip, entry).toLowerCase(Locale.ROOT);
+					if (types.contains("macroenabled") || types.contains("vbaproject") //$NON-NLS-1$ //$NON-NLS-2$
+							|| types.contains("activex") || types.contains("oleobject")) { //$NON-NLS-1$ //$NON-NLS-2$
+						return false;
+					}
+				}
+			}
+			return true;
+		} catch (IOException | RuntimeException e) {
+			return false;
+		}
+	}
+
+	private static final Pattern RELATIONSHIP = Pattern.compile("<Relationship\\b[^>]*>"); //$NON-NLS-1$
+
+	private static String read(ZipFile zip, ZipEntry entry) throws IOException {
+		if (entry.getSize() > 1 << 20) {
+			throw new IOException("too large"); // not a part of a document anyone wrote //$NON-NLS-1$
+		}
+		try (InputStream in = zip.getInputStream(entry)) {
+			return new String(in.readNBytes(1 << 20), StandardCharsets.UTF_8);
+		}
+	}
+
+	private static boolean reachesOut(ZipFile zip, ZipEntry rels) throws IOException {
+		Matcher m = RELATIONSHIP.matcher(read(zip, rels));
+		while (m.find()) {
+			String r = m.group();
+			if (r.contains("External") && !r.matches("(?s).*Type=\"[^\"]*/hyperlink\".*")) { //$NON-NLS-1$ //$NON-NLS-2$
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**

