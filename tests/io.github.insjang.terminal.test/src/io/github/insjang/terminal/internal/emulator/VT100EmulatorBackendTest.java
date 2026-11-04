@@ -1502,17 +1502,17 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("한x");
 		vt100.setCursor(0, 1);
 		vt100.eraseCharacters(1);
-		assertEquals(" \000x", new String(term.getChars(0), 0, 3));
+		assertEquals("\000\000x", new String(term.getChars(0), 0, 3));
 		vt100.setCursor(1, 0);
 		vt100.appendString("한x");
 		vt100.setCursor(1, 0);
 		vt100.eraseCharacters(1);
-		assertEquals("\000 x", new String(term.getChars(1), 0, 3));
+		assertEquals("\000\000x", new String(term.getChars(1), 0, 3));
 		vt100.setCursor(2, 0);
 		vt100.appendString("a😀b");
 		vt100.setCursor(2, 2);
 		vt100.eraseCharacters(1);
-		assertEquals("a \000b", new String(term.getChars(2), 0, 4));
+		assertEquals("a\000\000b", new String(term.getChars(2), 0, 4));
 	}
 
 	@Test
@@ -1525,12 +1525,12 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("ab한cd");
 		vt100.setCursor(0, 3);
 		vt100.eraseLineToEnd();
-		assertEquals("ab \000\000\000", new String(term.getChars(0)));
+		assertEquals("ab\000\000\000\000", new String(term.getChars(0)));
 		vt100.setCursor(1, 0);
 		vt100.appendString("ab한cd");
 		vt100.setCursor(1, 2);
 		vt100.eraseLineToCursor();
-		assertEquals("\000\000\000 cd", new String(term.getChars(1)));
+		assertEquals("\000\000\000\000cd", new String(term.getChars(1)));
 	}
 
 	@Test
@@ -1619,7 +1619,7 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("abc한");
 		vt100.setCursor(2, 4);
 		vt100.appendString("가");
-		assertEquals("abc \000", new String(term.getChars(2)));
+		assertEquals("abc\000\000", new String(term.getChars(2)));
 		assertEquals("가\000", new String(term.getChars(3), 0, 2));
 	}
 
@@ -1636,5 +1636,35 @@ public class VT100EmulatorBackendTest {
 		vt100.setCursor(1, 0);
 		vt100.appendString("한");
 		assertEquals("한", new String(term.getChars(1)));
+	}
+
+	@Test
+	public void testEraseHalfOfWideKeepsBackground() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(3);
+		vt100.setDimensions(3, 8);
+		vt100.setDefaultStyle(TerminalStyle.getStyle(WHITE, BLACK));
+		TerminalStyle onGreen = TerminalStyle.getStyle(WHITE, GREEN);
+		for (int line = 0; line < 3; line++) {
+			vt100.setStyle(TerminalStyle.getStyle(WHITE, BLACK));
+			vt100.setCursor(line, 0);
+			vt100.appendString("\uD55C\uAE00");
+		}
+		// erasing from or to half of a wide character erases both of its cells, in the current background
+		vt100.setStyle(onGreen);
+		vt100.setCursor(0, 1);
+		vt100.eraseLineToEnd();
+		vt100.setCursor(1, 2);
+		vt100.eraseLineToCursor();
+		vt100.setCursor(2, 1);
+		vt100.eraseCharacters(2);
+		for (int line = 0; line < 3; line++) {
+			for (int col = 0; col < 4; col++) {
+				assertEquals(GREEN, term.getStyle(line, col).getBackgroundTerminalColor(), line + "," + col);
+			}
+		}
+		assertEquals('\000', term.getChar(0, 0));
+		assertEquals('\000', term.getChar(1, 3));
 	}
 }

@@ -446,11 +446,24 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	public void eraseLineToEnd() {
 		synchronized (fTerminal) {
 			int line = toAbsoluteLine(fCursorLine);
-			breakWideChar(line, fCursorColumn);
-			eraseCells(line, fCursorColumn, fColumns);
+			eraseWhole(line, fCursorColumn, fColumns);
 			// Nothing is left out to the margin, so the line ends where the cursor is.
 			fTerminal.clearWrappedLine(line);
 		}
+	}
+
+	/**
+	 * Erasing either half of a wide character erases all of it, in the same
+	 * background as the rest of the range.
+	 */
+	private void eraseWhole(int line, int from, int to) {
+		if (isSecondCell(line, from)) {
+			from--;
+		}
+		if (isSecondCell(line, to)) {
+			to++;
+		}
+		eraseCells(line, from, to);
 	}
 
 	/**
@@ -475,9 +488,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	@Override
 	public void eraseLineToCursor() {
 		synchronized (fTerminal) {
-			int line = toAbsoluteLine(fCursorLine);
-			breakWideChar(line, fCursorColumn);
-			eraseCells(line, 0, fCursorColumn + 1);
+			eraseWhole(toAbsoluteLine(fCursorLine), 0, fCursorColumn + 1);
 		}
 	}
 
@@ -1020,12 +1031,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			return; // nothing is erased, so no wide character may be broken either
 		}
 		synchronized (fTerminal) {
-			int line = toAbsoluteLine(fCursorLine);
-			int end = Math.min(fCursorColumn + n, fColumns);
-			// erasing either half of a wide character erases all of it
-			breakWideChar(line, fCursorColumn);
-			breakWideChar(line, end - 1);
-			eraseCells(line, fCursorColumn, end);
+			eraseWhole(toAbsoluteLine(fCursorLine), fCursorColumn, Math.min(fCursorColumn + n, fColumns));
 		}
 	}
 }
