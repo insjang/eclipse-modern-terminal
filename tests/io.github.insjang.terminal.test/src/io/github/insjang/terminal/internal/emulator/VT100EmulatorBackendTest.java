@@ -1767,6 +1767,8 @@ public class VT100EmulatorBackendTest {
 		TerminalStyle red = TerminalStyle.getStyle(RED, BLACK);
 		vt100.setStyle(red);
 		vt100.enableAlternateScreen(true);
+		// entering keeps what was selected: no SGR reset was sent
+		assertEquals(red, vt100.getStyle());
 		vt100.setStyle(TerminalStyle.getStyle(WHITE, BLACK).setBold(true)); // the program's own
 		vt100.enableAlternateScreen(false);
 		// the shell goes on in its red, and nothing of the program's bold leaks into it

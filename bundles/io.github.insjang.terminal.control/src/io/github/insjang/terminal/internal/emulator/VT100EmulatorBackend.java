@@ -162,6 +162,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				// growing the buffer, as a program on this screen expects.
 				clearAll();
 				fTerminal.setMaxHeight(fLines);
+				// the rendition carries over: clearAll resets it, entering does not
+				setStyle(fNormalStyle);
 			} else {
 				restoreNormalScreen();
 			}
