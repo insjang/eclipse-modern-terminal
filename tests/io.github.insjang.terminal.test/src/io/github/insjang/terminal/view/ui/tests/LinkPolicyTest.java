@@ -125,4 +125,11 @@ public class LinkPolicyTest {
 			Files.delete(dir);
 		}
 	}
+
+	@Test
+	public void testFileName() {
+		assertEquals("reviewer_prompt.md", LinkPolicy.fileName("reference/reviewer_prompt.md"));
+		assertEquals("a.txt", LinkPolicy.fileName("C:\\x\\a.txt"));
+		assertEquals("a.txt", LinkPolicy.fileName("a.txt"));
+	}
 }

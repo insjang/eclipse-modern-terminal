@@ -57,6 +57,11 @@ public final class LinkPolicy {
 		return path.length() > 3 && path.charAt(0) == '/' && path.charAt(2) == ':' ? path.substring(1) : path;
 	}
 
+	/** @return the last segment of a path, by either separator: what a file is called */
+	public static String fileName(String path) {
+		return path.substring(Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\')) + 1);
+	}
+
 	/** @return whether the text is an http or https URL, in any case */
 	public static boolean isWeb(String s) {
 		return s.regionMatches(true, 0, "http://", 0, 7) || s.regionMatches(true, 0, "https://", 0, 8); //$NON-NLS-1$ //$NON-NLS-2$

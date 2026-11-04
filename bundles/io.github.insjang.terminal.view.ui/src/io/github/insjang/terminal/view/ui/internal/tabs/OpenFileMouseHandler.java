@@ -201,7 +201,8 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				ResourcesPlugin.getPlugin();
 				OpenResourceDialog openResourceDialog = new OpenResourceDialog(site.getShell(),
 						ResourcesPlugin.getWorkspace().getRoot(), IResource.FILE);
-				openResourceDialog.setInitialPattern(textToOpen);
+				// the dialog matches resource names, so a path in it finds nothing
+				openResourceDialog.setInitialPattern(LinkPolicy.fileName(textToOpen));
 				if (openResourceDialog.open() != Window.OK) {
 					return;
 				}
