@@ -529,6 +529,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	}
 
 	private void eraseLine(int line) {
+		fWrapPending = false; // also when there is nothing to fill
 		fTerminal.cleanLine(line);
 		if (eraseStyle() != null) {
 			eraseCells(line, 0, fColumns);

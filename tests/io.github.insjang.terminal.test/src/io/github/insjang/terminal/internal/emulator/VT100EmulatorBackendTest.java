@@ -1347,6 +1347,14 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("z");
 		assertEquals('z', term.getChar(0, 4));
 		assertEquals(0, vt100.getCursorLine());
+		// so does erasing the whole line, also in the default colours, which leave nothing to fill
+		vt100.setCursor(0, 4);
+		vt100.appendString("e");
+		vt100.eraseLine();
+		vt100.appendString("w");
+		assertEquals('w', term.getChar(0, 4));
+		assertEquals(0, vt100.getCursorLine());
+		assertFalse(term.isWrappedLine(0));
 		// only writing on is a wrap
 		vt100.setCursor(0, 4);
 		vt100.appendString("ef");
