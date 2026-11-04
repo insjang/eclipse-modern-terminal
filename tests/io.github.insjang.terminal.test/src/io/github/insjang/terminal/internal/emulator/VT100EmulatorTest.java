@@ -735,8 +735,10 @@ public class VT100EmulatorTest {
 	public void testAlternateScreenModesAndTheCursor() {
 		data.setMaxHeight(1000);
 		run("Hello 1\r\nHello 2");
-		// 47 and 1047 save no cursor: it stays where the program left it
-		run("\u001b[?1047h", CURSOR_POSITION(5, 3), "x", "\u001b[?1047l");
+		// 47 and 1047 move no cursor, neither in nor out: it stays where it is
+		run(CURSOR_POSITION(5, 3), "\u001b[?1047h");
+		assertCursorLocation(4, 2);
+		run("x", "\u001b[?1047l");
 		assertAll(() -> assertCursorLocation(4, 3), () -> assertTextEquals("Hello 1", "Hello 2"));
 		run(CURSOR_POSITION(2, 8));
 		// 1049 brings it back to where it was on the way in

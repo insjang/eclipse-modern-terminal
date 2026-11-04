@@ -164,6 +164,12 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				fTerminal.setMaxHeight(fLines);
 				// the rendition carries over: clearing resets it, entering does not
 				setStyle(fNormalStyle);
+				if (!cursor) {
+					// 47 and 1047 move no cursor: it stays on its row and column, a
+					// wrap pending there still pending
+					setCursor(fNormalCursorLine - (fNormalScreen.getHeight() - fLines), fNormalCursorColumn);
+					fWrapPending = fNormalWrapPending;
+				}
 			} else {
 				restoreNormalScreen(cursor);
 			}
@@ -180,6 +186,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		// where the program left the cursor, for the modes that keep it there
 		int programLine = fCursorLine;
 		int programColumn = fCursorColumn;
+		boolean programWrapPending = fWrapPending;
 		TerminalStyle programStyle = fStyle;
 		ITerminalTextData saved = fNormalScreen;
 		fNormalScreen = null;
@@ -213,6 +220,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		if (!cursorBack) {
 			// 47 and 1047 save no cursor: it stays on the row and column the program left it
 			setCursor(programLine, programColumn);
+			fWrapPending = programWrapPending && fCursorColumn == fColumns - 1;
 			setStyle(programStyle);
 			return;
 		}
