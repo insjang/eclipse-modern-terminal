@@ -21,6 +21,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -201,6 +202,19 @@ public final class LinkPolicy {
 	 * @return the real path to hand to the system program, or null to open inside Eclipse
 	 */
 	public static String systemProgramTarget(String path, boolean windows) {
+		return systemProgramTarget(path, windows, name -> false);
+	}
+
+	/**
+	 * As {@link #systemProgramTarget(String, boolean)}, and a file the user has associated
+	 * with a program outside Eclipse (Preferences &gt; General &gt; Editors &gt; File
+	 * Associations) may open in it as well, judged by the name of the real file. What runs
+	 * on its own when opened never does, whatever it is associated with, and an Office
+	 * document named as one without macros still has to be one.
+	 *
+	 * @param chosen whether the user associated a file of this name with a program outside Eclipse
+	 */
+	public static String systemProgramTarget(String path, boolean windows, Predicate<String> chosen) {
 		// a network path is never touched, not even to resolve it (that would hand over the Windows login)
 		if (!windows || path.startsWith("//") || path.startsWith("\\\\")) { //$NON-NLS-1$ //$NON-NLS-2$
 			return null;
@@ -211,8 +225,40 @@ public final class LinkPolicy {
 		} catch (IOException | RuntimeException e) {
 			return null;
 		}
-		return systemProgramAllowed(real) && (!isOffice(real) || macroFree(real)) ? real : null;
+		String type = typeOf(real);
+		if (type == null || EXECUTABLE.contains(type)) {
+			return null;
+		}
+		boolean allowed = systemProgramAllowed(real) || chosen.test(Path.of(real).getFileName().toString());
+		return allowed && (!isOffice(real) || macroFree(real)) ? real : null;
 	}
+
+	/** @return whether the file is of a kind that can carry macros the program may run */
+	public static boolean macroCapable(String path) {
+		String type = typeOf(path);
+		return type != null && MACRO_CAPABLE.contains(type);
+	}
+
+	/** @return the extension as Windows reads it, in lower case; null for none, a stream or UNC */
+	private static String typeOf(String path) {
+		String p = path.replace('\\', '/');
+		if (p.startsWith("//") || p.indexOf(':', p.length() > 1 && p.charAt(1) == ':' ? 2 : 0) >= 0) { //$NON-NLS-1$
+			return null;
+		}
+		String name = p.substring(p.lastIndexOf('/') + 1).replaceAll("[. ]+$", ""); //$NON-NLS-1$ //$NON-NLS-2$
+		int dot = name.lastIndexOf('.');
+		return dot > 0 ? name.substring(dot + 1).toLowerCase(Locale.ROOT) : null;
+	}
+
+	// What Windows runs rather than opens: never from a terminal link, whatever it is associated with.
+	private static final Set<String> EXECUTABLE = Set.of("exe", "com", "bat", "cmd", "ps1", "psm1", "psd1", "vbs", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$
+			"vbe", "vb", "js", "jse", "wsf", "wsh", "wsc", "hta", "lnk", "url", "scf", "pif", "scr", "cpl", "msi", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$ //$NON-NLS-10$ //$NON-NLS-11$ //$NON-NLS-12$ //$NON-NLS-13$ //$NON-NLS-14$ //$NON-NLS-15$
+			"msp", "mst", "msc", "reg", "inf", "jar", "dll", "sys", "chm", "application", "appref-ms", "gadget", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$ //$NON-NLS-10$ //$NON-NLS-11$ //$NON-NLS-12$
+			"xll", "xla", "xlam", "ppa", "ppam", "wll", "settingcontent-ms", "library-ms", "search-ms"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$
+
+	// Documents that can carry macros: they open only where the user chose, after a warning.
+	private static final Set<String> MACRO_CAPABLE = Set.of("xlsm", "xltm", "xlsb", "xls", "xlt", "docm", "dotm", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$
+			"doc", "dot", "pptm", "potm", "ppsm", "ppt", "pot", "pps", "odt", "ods", "odp", "odg"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$ //$NON-NLS-7$ //$NON-NLS-8$ //$NON-NLS-9$ //$NON-NLS-10$ //$NON-NLS-11$ //$NON-NLS-12$
 
 	private static boolean isOffice(String path) {
 		String p = path.toLowerCase(Locale.ROOT).replaceAll("[. ]+$", ""); //$NON-NLS-1$ //$NON-NLS-2$

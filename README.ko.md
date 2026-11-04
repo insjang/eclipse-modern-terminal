@@ -95,6 +95,8 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 - 터미널 내용은 프로그램과 서버가 보내는 것이므로 Ctrl+클릭(경로, URL, OSC 8 링크)으로는 아무것도 실행하지 않음
 - 파일은 Eclipse 에디터로 열기 (Eclipse에 맞는 에디터가 없으면 텍스트 에디터), Eclipse 밖의 프로그램이나 OLE 에디터로는 열지 않음
 - Windows에서만 PDF, 이미지(pdf, png, jpg, jpeg, gif, bmp), 매크로를 담을 수 없는 Office 문서(xlsx, docx, pptx)를 시스템 프로그램으로 열 수 있고, 그때도 전체 경로를 보여 주고 먼저 물어봄
+  - 사용자가 Eclipse 밖의 프로그램과 연결해 둔 파일(환경설정 > General > Editors > File Associations에서 System Editor나 직접 지정한 프로그램)도 같은 질문 뒤 그 프로그램으로 열기, 매크로를 담을 수 있는 형식(xlsm, docm, xls, doc, ppt, odt 등)이면 질문에 그 경고를 함께 보여 줌
+  - Windows가 열지 않고 실행하는 파일(exe, bat, cmd, ps1, vbs, js, hta, lnk, msi, scr, reg, jar, Office 추가 기능 등)은 연결과 상관없이 터미널 링크로는 절대 열지 않음
   - Office 문서는 내용도 이름과 같아야 함: 첫 바이트부터 ZIP 패키지여야 하고, 매크로 프로젝트, ActiveX, 리본 사용자 지정, 포함된 개체, 하이퍼링크가 아닌 외부 연결(원격 템플릿)이 없어야 함. 이름만 바꾼 옛 바이너리 문서, 매크로가 든 문서, 템플릿을 불러오는 문서는 거부
   - 심볼릭 링크·정션이면 가리키는 실제 파일로 판단하고 그 파일을 열기, 이름은 Windows가 읽는 방식으로 판단 (끝의 점·공백 무시), 대체 데이터 스트림(`a.exe:x.pdf`)과 네트워크(UNC) 경로는 거부
   - Linux·macOS에서는 항상 Eclipse 안에서 열기 (xdg-open은 이름이 아니라 내용으로 프로그램을 고름)

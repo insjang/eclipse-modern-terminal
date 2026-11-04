@@ -96,6 +96,8 @@ What the terminal shows comes from programs and servers, so Ctrl+click (on a pat
 
 - A file opens in an Eclipse editor (the text editor when Eclipse has none for it), never in a program outside Eclipse or an OLE editor
 - On Windows only a PDF, an image (pdf, png, jpg, jpeg, gif, bmp) or an Office document in a format that cannot carry macros (xlsx, docx, pptx) may open in the program the system has for it, and only after a question that shows the full path
+  - A file the user associated with a program outside Eclipse (Preferences > General > Editors > File Associations: the System Editor or a program of their own) opens there too, after the same question; for a kind that can carry macros (xlsm, docm, xls, doc, ppt, odt, ...) the question says so
+  - What Windows runs rather than opens (exe, bat, cmd, ps1, vbs, js, hta, lnk, msi, scr, reg, jar, Office add-ins and the like) never opens from a terminal link, whatever it is associated with
   - An Office document must also be what its name says, a ZIP package from its first byte with no macro project, ActiveX control, ribbon customisation, embedded object or relationship that reaches out of the file other than a hyperlink (a remote template): a renamed old binary document, a workbook with macros or a document that fetches a template is refused
   - It is judged by the file a symlink or junction leads to, and that file is what is opened; the name is read as Windows reads it (trailing dots and spaces dropped), and alternate data streams (`a.exe:x.pdf`) and network (UNC) paths are refused
   - On Linux and macOS files always open inside Eclipse (xdg-open picks the program by the content, not the name)

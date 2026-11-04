@@ -219,4 +219,32 @@ public class LinkPolicyTest {
 			}
 		}
 	}
+
+	@Test
+	public void testWhatTheUserAssociated() throws IOException {
+		Path dir = Files.createTempDirectory(tmp, "chosen");
+		Path xlsm = Files.writeString(dir.resolve("book.xlsm"), "x");
+		Path exe = Files.writeString(dir.resolve("tool.exe"), "MZ");
+		Path csv = Files.writeString(dir.resolve("data.csv"), "a,b");
+		// associated by the user with a program outside Eclipse: it may open there
+		assertEquals(xlsm.toRealPath().toString(), LinkPolicy.systemProgramTarget(xlsm.toString(), true, n -> true));
+		assertEquals(csv.toRealPath().toString(), LinkPolicy.systemProgramTarget(csv.toString(), true, n -> true));
+		// not associated: only the default list
+		assertNull(LinkPolicy.systemProgramTarget(xlsm.toString(), true, n -> false));
+		assertNull(LinkPolicy.systemProgramTarget(csv.toString(), true, n -> false));
+		// what runs on its own never does, associated or not
+		assertNull(LinkPolicy.systemProgramTarget(exe.toString(), true, n -> true));
+		assertNull(LinkPolicy.systemProgramTarget(dir.resolve("a.ps1").toString(), true, n -> true));
+		// judged by the real file: a link named .csv to an .exe stays shut
+		Path disguised = Files.createSymbolicLink(dir.resolve("report.csv"), exe);
+		assertNull(LinkPolicy.systemProgramTarget(disguised.toString(), true, n -> true));
+		// an .xlsx has to be what it says even where the user chose a program for it
+		Path fake = Files.writeString(dir.resolve("fake.xlsx"), "not a zip");
+		assertNull(LinkPolicy.systemProgramTarget(fake.toString(), true, n -> true));
+		// and the question warns for a kind that can carry macros
+		assertTrue(LinkPolicy.macroCapable("D:\\a.XLSM"));
+		assertTrue(LinkPolicy.macroCapable("D:\\a.doc"));
+		assertFalse(LinkPolicy.macroCapable("D:\\a.xlsx"));
+		assertFalse(LinkPolicy.macroCapable("D:\\a.pdf"));
+	}
 }

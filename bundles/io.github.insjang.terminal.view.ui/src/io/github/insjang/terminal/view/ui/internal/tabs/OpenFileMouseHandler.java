@@ -52,6 +52,7 @@ import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
 import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorPart;
+import org.eclipse.ui.IEditorRegistry;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPartSite;
 import org.eclipse.ui.IWorkbenchWindow;
@@ -269,16 +270,35 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		if (!LinkPolicy.TEXT_EDITOR_ID.equals(id) || d != null && d.isInternal()) {
 			return id; // an editor inside Eclipse
 		}
-		String target = LinkPolicy.systemProgramTarget(path, Platform.OS_WIN32.equals(Platform.getOS()));
+		// what the user chose in the File Associations preferences, for the real file
+		IEditorRegistry registry = PlatformUI.getWorkbench().getEditorRegistry();
+		String target = LinkPolicy.systemProgramTarget(path, Platform.OS_WIN32.equals(Platform.getOS()),
+				name -> isOutside(registry.getDefaultEditor(name)));
 		if (target == null) {
 			return id;
 		}
 		// the real file, what a link leads to: the one checked is the one launched
+		String question = LinkPolicy.macroCapable(target) ? Messages.OpenSystem_macros : Messages.OpenSystem_question;
 		if (MessageDialog.openQuestion(site.getShell(), Messages.OpenSystem_title,
-				NLS.bind(Messages.OpenSystem_question, LinkPolicy.display(target)))) {
-			Program.launch(target);
+				NLS.bind(question, LinkPolicy.display(target)))) {
+			IEditorDescriptor chosen = registry.getDefaultEditor(new File(target).getName());
+			if (isOutside(chosen) && !LinkPolicy.SYSTEM_EDITOR_ID.equals(chosen.getId())) {
+				try {
+					// the program the user named for this kind of file
+					IDE.openEditor(site.getPage(), new File(target).toURI(), chosen.getId(), true);
+				} catch (PartInitException e) {
+					ILog.of(getClass()).error("Failed to open " + target, e); //$NON-NLS-1$
+				}
+			} else {
+				Program.launch(target);
+			}
 		}
 		return null;
+	}
+
+	/** @return whether the editor is a program outside Eclipse: the system's or one the user named */
+	private static boolean isOutside(IEditorDescriptor d) {
+		return d != null && (d.isOpenExternal() || LinkPolicy.SYSTEM_EDITOR_ID.equals(d.getId()));
 	}
 
 	private static String localHostName() {
