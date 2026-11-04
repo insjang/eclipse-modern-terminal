@@ -34,7 +34,8 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 	private boolean fShowCursor;
 	private long fCursorTime;
 	private boolean fCursorIsEnabled;
-	private boolean fCursorHidden;
+	// set by the emulator thread, read when painting
+	private volatile boolean fCursorHidden;
 	private final ITerminalTextDataSnapshot fSnapshot;
 	private int fLines;
 
