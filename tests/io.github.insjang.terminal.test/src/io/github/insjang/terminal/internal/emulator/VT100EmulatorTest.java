@@ -718,4 +718,15 @@ public class VT100EmulatorTest {
 		assertTrue(!all.toString().contains("Full screen"));
 		assertTrue(all.toString().trim().endsWith("after"));
 	}
+
+	@Test
+	public void testResetStateResetsTheStyleAfterTheAlternateScreen() {
+		run("\u001b[31m");
+		run(ALTERNATE_SCREEN_ON);
+		emulator.resetState();
+		// leaving the alternate screen puts back the red; the reset after it still resets
+		run("x\u001b[0my");
+		int line = data.getHeight() - WINDOW_LINES;
+		assertEquals(data.getStyle(line, 1), data.getStyle(line, 0));
+	}
 }

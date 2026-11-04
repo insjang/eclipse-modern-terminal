@@ -1750,12 +1750,13 @@ public class VT100Emulator implements ControlListener {
 	 */
 	public void resetState() {
 		ansiState = ANSISTATE_INITIAL;
+		// a new connection starts on the normal screen, even if the last one ended
+		// while a full screen program had the alternate one; first, as leaving it puts
+		// back the shell's rendition, which the reset then resets
+		text.enableAlternateScreen(false);
 		text.setStyle(text.getDefaultStyle());
 		text.setScrollRegion(-1, -1);
 		text.setInsertMode(false);
-		// a new connection starts on the normal screen, even if the last one ended
-		// while a full screen program had the alternate one
-		text.enableAlternateScreen(false);
 		// the modes a program asked for end with its connection: a program that
 		// hid the cursor and was cut off must not leave the next shell without one
 		terminal.showCursor(true);

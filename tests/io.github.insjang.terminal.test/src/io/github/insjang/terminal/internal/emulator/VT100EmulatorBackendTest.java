@@ -17,6 +17,7 @@
 package io.github.insjang.terminal.internal.emulator;
 
 import static io.github.insjang.terminal.model.TerminalColor.BLACK;
+import static io.github.insjang.terminal.model.TerminalColor.RED;
 import static io.github.insjang.terminal.model.TerminalColor.GREEN;
 import static io.github.insjang.terminal.model.TerminalColor.WHITE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1754,5 +1755,21 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("e");
 		assertEquals("abcd", new String(term.getChars(0), 0, 4));
 		assertEquals('e', term.getChar(1, 0));
+	}
+
+	@Test
+	public void testAlternateScreenKeepsTheStyle() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(2, 8);
+		vt100.setDefaultStyle(TerminalStyle.getStyle(WHITE, BLACK));
+		TerminalStyle red = TerminalStyle.getStyle(RED, BLACK);
+		vt100.setStyle(red);
+		vt100.enableAlternateScreen(true);
+		vt100.setStyle(TerminalStyle.getStyle(WHITE, BLACK).setBold(true)); // the program's own
+		vt100.enableAlternateScreen(false);
+		// the shell goes on in its red, and nothing of the program's bold leaks into it
+		assertEquals(red, vt100.getStyle());
 	}
 }

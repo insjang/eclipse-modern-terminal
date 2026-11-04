@@ -118,6 +118,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private int fNormalLines;
 	private int fNormalColumns;
 	private boolean fNormalWrapPending;
+	/** the rendition the shell had selected: 1049 saves it with the cursor, as DECSC does */
+	private TerminalStyle fNormalStyle;
 	private boolean fVT100LineWrapping;
 	private ScrollRegion fScrollRegion = ScrollRegion.FULL_WINDOW;
 	/** the line of the last prompt (OSC 133;A) when it was marked, -1 for none; lines only move up since */
@@ -152,6 +154,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				fNormalLines = fLines;
 				fNormalColumns = fColumns;
 				fNormalWrapPending = fWrapPending;
+				fNormalStyle = fStyle;
 				fNormalMaxHeight = fTerminal.getMaxHeight();
 				// clearAll leaves the buffer the size of the screen, which is what the
 				// alternate screen is: no history to scroll back through. Capping the
@@ -204,6 +207,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		setCursor(cursor - (fTerminal.getHeight() - fLines), fNormalCursorColumn);
 		// and to a wrap that was pending there, if the line is as wide as it was
 		fWrapPending = fNormalWrapPending && fColumns == fNormalColumns && fCursorColumn == fColumns - 1;
+		// in the colours the shell was writing in, not the ones the program left selected
+		setStyle(fNormalStyle);
 	}
 
 	@Override
