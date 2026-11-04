@@ -324,6 +324,10 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			for (int i = 0; i < used; i++) {
 				fTerminal.addLine();
 			}
+			if (used > 0) {
+				// the screen moved down the buffer: the cursor stays on its row of it
+				setCursorLine(fCursorLine);
+			}
 			for (int line = toAbsoluteLine(0); line < toAbsoluteLine(fLines); line++) {
 				eraseLine(line);
 			}

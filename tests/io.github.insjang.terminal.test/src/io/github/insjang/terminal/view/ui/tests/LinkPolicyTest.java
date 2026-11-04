@@ -158,12 +158,12 @@ public class LinkPolicyTest {
 		assertNull(LinkPolicy.systemProgramTarget(ole.toString(), true));
 		// a hyperlink out of the document is fine, a remote template is not
 		Path links = dir.resolve("links.docx");
-		zipWith(links, "word/_rels/document.xml.rels", "<Relationships><Relationship Id=\"r1\" "
+		zipWith(links, "word/_rels/document.xml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"r1\" "
 				+ "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink\" "
 				+ "Target=\"https://example.com/\" TargetMode=\"External\"/></Relationships>");
 		assertEquals(links.toRealPath().toString(), LinkPolicy.systemProgramTarget(links.toString(), true));
 		Path template = dir.resolve("template.docx");
-		zipWith(template, "word/_rels/settings.xml.rels", "<Relationships><Relationship Id=\"r1\" "
+		zipWith(template, "word/_rels/settings.xml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"r1\" "
 				+ "Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate\" "
 				+ "Target=\"file://attacker/share/t.dotm\" TargetMode=\"External\"/></Relationships>");
 		assertNull(LinkPolicy.systemProgramTarget(template.toString(), true));
@@ -171,7 +171,7 @@ public class LinkPolicyTest {
 		Path declared = dir.resolve("declared.xlsx");
 		try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(declared))) {
 			out.putNextEntry(new java.util.zip.ZipEntry("[Content_Types].xml"));
-			out.write("<Types><Override PartName=\"/xl/x.bin\" ContentType=\"application/vnd.ms-office.vbaProject\"/></Types>"
+			out.write("<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"><Override PartName=\"/xl/x.bin\" ContentType=\"application/vnd.ms-office.vbaProject\"/></Types>"
 					.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 			out.closeEntry();
 		}
@@ -181,6 +181,16 @@ public class LinkPolicyTest {
 		Files.write(behind, java.util.Arrays.copyOf(new byte[] { (byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0 }, 4));
 		Files.write(behind, Files.readAllBytes(plain), java.nio.file.StandardOpenOption.APPEND);
 		assertNull(LinkPolicy.systemProgramTarget(behind.toString(), true));
+		// a character reference in the attribute is still External to Office
+		Path encoded = dir.resolve("encoded.docx");
+		zipWith(encoded, "word/_rels/settings.xml.rels", "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
+				+ "<Relationship Id=\"r1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/frame\" "
+				+ "Target=\"https://attacker/\" TargetMode=\"&#69;xternal\"/></Relationships>");
+		assertNull(LinkPolicy.systemProgramTarget(encoded.toString(), true));
+		// a DOCTYPE, the way to entities, is refused outright
+		Path doctype = dir.resolve("doctype.docx");
+		zipWith(doctype, "word/_rels/document.xml.rels", "<!DOCTYPE r [<!ENTITY e \"External\">]><Relationships/>");
+		assertNull(LinkPolicy.systemProgramTarget(doctype.toString(), true));
 		Path embedded = dir.resolve("embedded.pptx");
 		zip(embedded, "[Content_Types].xml", "ppt/embeddings/oleObject1.bin");
 		assertNull(LinkPolicy.systemProgramTarget(embedded.toString(), true));
@@ -189,7 +199,7 @@ public class LinkPolicyTest {
 	private static void zipWith(Path file, String name, String text) throws IOException {
 		try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(file))) {
 			out.putNextEntry(new java.util.zip.ZipEntry("[Content_Types].xml"));
-			out.write('x');
+			out.write(TYPES.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 			out.closeEntry();
 			out.putNextEntry(new java.util.zip.ZipEntry(name));
 			out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
@@ -197,11 +207,14 @@ public class LinkPolicyTest {
 		}
 	}
 
+	private static final String TYPES = "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">"
+			+ "<Default Extension=\"xml\" ContentType=\"application/xml\"/></Types>";
+
 	private static void zip(Path file, String... names) throws IOException {
 		try (java.util.zip.ZipOutputStream out = new java.util.zip.ZipOutputStream(Files.newOutputStream(file))) {
 			for (String name : names) {
 				out.putNextEntry(new java.util.zip.ZipEntry(name));
-				out.write('x');
+				out.write(name.equals("[Content_Types].xml") ? TYPES.getBytes(java.nio.charset.StandardCharsets.UTF_8) : new byte[] { 'x' });
 				out.closeEntry();
 			}
 		}

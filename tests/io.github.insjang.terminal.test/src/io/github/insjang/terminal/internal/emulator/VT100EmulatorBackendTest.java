@@ -340,6 +340,7 @@ public class VT100EmulatorBackendTest {
 			// erasing does not move the cursor
 			assertEquals(2, vt100.getCursorLine());
 			assertEquals(1, vt100.getCursorColumn());
+			assertEquals(7, term.getCursorLine()); // the model's cursor too, on the screen's row 2
 			// a blank screen adds nothing
 			vt100.eraseAll();
 			assertEquals(9, term.getHeight());
