@@ -53,6 +53,9 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 	private int fCols;
 
 	private TextRange fHoverRange = TextRange.EMPTY;
+	// the cell the hover was asked for, so it can be found again when its line is redrawn
+	private int fHoverLine = -1;
+	private int fHoverColumn = -1;
 
 	public AbstractTextCanvasModel(ITerminalTextDataSnapshot snapshot) {
 		fSnapshot = snapshot;
@@ -121,10 +124,13 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 				// has any line changed?
 				if (y < Integer.MAX_VALUE) {
 					int height = fSnapshot.getLastChangedLine() - y + 1;
-					// Once its line changes, what is underlined for a ctrl+click is no
-					// longer the word that is there, and the underline would stay behind.
+					// Once its line changes, what is underlined for a ctrl+click may no
+					// longer be the word that is there. Look again rather than drop it: a
+					// program that draws its own screen redraws lines that did not change,
+					// and a ctrl+click while it does so would find nothing to open.
 					if (!fHoverRange.isEmpty() && y < fHoverRange.rowEnd && y + height > fHoverRange.rowStart) {
 						fHoverRange = TextRange.EMPTY;
+						expandHoverSelectionAt(fHoverLine, fHoverColumn);
 					}
 					fireCellRangeChanged(0, y, fSnapshot.getWidth(), height);
 				}
@@ -378,6 +384,8 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 
 	@Override
 	public void expandHoverSelectionAt(final int line, final int col) {
+		fHoverLine = line;
+		fHoverColumn = col;
 		if (fHoverRange.contains(col, line)) {
 			// position is inside current hover range -> no change
 			return;

@@ -70,4 +70,31 @@ public class TextCanvasModelTest {
 		assertEquals(new Point(0, 0), model.getSelectionStart());
 		assertEquals(new Point(3, 0), model.getSelectionEnd());
 	}
+
+	@Test
+	public void testHoverSurvivesARedrawOfItsLine() {
+		TerminalTextData data = new TerminalTextData();
+		data.setDimensions(2, 20);
+		data.setChars(0, 0, "see a/b.md now".toCharArray(), null);
+		ITerminalTextDataSnapshot snapshot = data.makeSnapshot();
+		snapshot.updateSnapshot(true);
+		AbstractTextCanvasModel model = new AbstractTextCanvasModel(snapshot) {
+		};
+		model.expandHoverSelectionAt(0, 6);
+		assertEquals("a/b.md", model.getHoverSelectionText());
+		// a full screen program writes the same line again, and the line below
+		data.setChars(0, 0, "see a/b.md now".toCharArray(), null);
+		data.setChars(1, 0, "spinner".toCharArray(), null);
+		model.update();
+		assertEquals("a/b.md", model.getHoverSelectionText());
+		// when the word under the pointer does change, the hover follows it
+		data.setChars(0, 0, "see c/d.md now".toCharArray(), null);
+		model.update();
+		assertEquals("c/d.md", model.getHoverSelectionText());
+		// and once the hover is let go, a redraw does not bring it back
+		model.expandHoverSelectionAt(-1, -1);
+		data.setChars(0, 0, "see a/b.md now".toCharArray(), null);
+		model.update();
+		assertEquals("", model.getHoverSelectionText());
+	}
 }
