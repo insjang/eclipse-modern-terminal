@@ -59,12 +59,13 @@ public class VT100EmulatorTest {
 		return "\033[" + startRow + ";" + endRow + "r";
 	}
 
+	private static final String ALTERNATE_SCREEN_ON = "\u001b[?1049h";
+	private static final String ALTERNATE_SCREEN_OFF = "\u001b[?1049l";
+
 	/**
 	 * Set the cursor position to line/column. Note that this is the logical
 	 * line and column, so 1, 1 is the top left.
 	 */
-	private static final String ALTERNATE_SCREEN_ON = "\u001b[?1049h";
-	private static final String ALTERNATE_SCREEN_OFF = "\u001b[?1049l";
 
 	private static String CURSOR_POSITION(int line, int column) {
 		return "\033[" + line + ";" + column + "H";
@@ -728,5 +729,53 @@ public class VT100EmulatorTest {
 		run("x\u001b[0my");
 		int line = data.getHeight() - WINDOW_LINES;
 		assertEquals(data.getStyle(line, 1), data.getStyle(line, 0));
+	}
+
+	@Test
+	public void testAlternateScreenModesAndTheCursor() {
+		data.setMaxHeight(1000);
+		run("Hello 1\r\nHello 2");
+		// 47 and 1047 save no cursor: it stays where the program left it
+		run("\u001b[?1047h", CURSOR_POSITION(5, 3), "x", "\u001b[?1047l");
+		assertAll(() -> assertCursorLocation(4, 3), () -> assertTextEquals("Hello 1", "Hello 2"));
+		run(CURSOR_POSITION(2, 8));
+		// 1049 brings it back to where it was on the way in
+		run(ALTERNATE_SCREEN_ON, CURSOR_POSITION(5, 3), "x", ALTERNATE_SCREEN_OFF);
+		assertCursorLocation(1, 7);
+		// ESC 7 / ESC 8 keep a slot per screen: the program's does not overwrite the shell's
+		run(CURSOR_POSITION(1, 2), "\u001b7", ALTERNATE_SCREEN_ON, CURSOR_POSITION(6, 6), "\u001b7",
+				CURSOR_POSITION(1, 1), "\u001b8");
+		assertCursorLocation(5, 5);
+		run(ALTERNATE_SCREEN_OFF, CURSOR_POSITION(3, 3), "\u001b8");
+		assertCursorLocation(0, 1);
+		// and 1048 saves and restores as they do
+		run(CURSOR_POSITION(2, 4), "\u001b[?1048h", CURSOR_POSITION(6, 1), "\u001b[?1048l");
+		assertCursorLocation(1, 3);
+	}
+
+	@Test
+	public void testClearOnAlternateScreenClearsWhatIsBehindIt() {
+		data.setMaxHeight(1000);
+		run("secret 1\r\nsecret 2");
+		run(ALTERNATE_SCREEN_ON, "Full screen");
+		emulator.clearTerminal(); // Clear Terminal while the program shows
+		run(ALTERNATE_SCREEN_OFF);
+		// what the user cleared does not come back with the shell
+		for (int line = 0; line < data.getHeight(); line++) {
+			char[] chars = data.getChars(line);
+			assertTrue(chars == null || !new String(chars).contains("secret"), "line " + line);
+		}
+		assertEquals(1000, data.getMaxHeight());
+	}
+
+	@Test
+	public void testBufferLineLimitWhileOnTheAlternateScreen() {
+		emulator.setBufferLineLimit(1000);
+		run(ALTERNATE_SCREEN_ON);
+		// the normal screen's limit, not the alternate screen's height
+		assertEquals(1000, emulator.getBufferLineLimit());
+		emulator.setBufferLineLimit(emulator.getBufferLineLimit()); // read and written back
+		run(ALTERNATE_SCREEN_OFF);
+		assertEquals(1000, data.getMaxHeight());
 	}
 }

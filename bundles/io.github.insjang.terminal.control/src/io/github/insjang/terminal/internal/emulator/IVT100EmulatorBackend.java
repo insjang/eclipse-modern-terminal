@@ -33,7 +33,25 @@ public interface IVT100EmulatorBackend {
 	 *
 	 * @param enable whether to show the alternate screen
 	 */
-	void enableAlternateScreen(boolean enable);
+	default void enableAlternateScreen(boolean enable) {
+		enableAlternateScreen(enable, true);
+	}
+
+	/**
+	 * As {@link #enableAlternateScreen(boolean)}, for the modes that differ in the
+	 * cursor: 1049 saves it on the way in and restores it on the way out, as DECSC
+	 * and DECRC do, while 47 and 1047 leave it where the program put it.
+	 *
+	 * @param enable whether to show the alternate screen
+	 * @param cursor whether the cursor and its rendition come back with the normal screen
+	 */
+	void enableAlternateScreen(boolean enable, boolean cursor);
+
+	/**
+	 * @return how many lines the normal screen keeps, history included, also while the
+	 *         alternate screen, which keeps none, is showing
+	 */
+	int getBufferLineLimit();
 
 	/**
 	 * Sets how many lines the normal screen keeps, history included. While the

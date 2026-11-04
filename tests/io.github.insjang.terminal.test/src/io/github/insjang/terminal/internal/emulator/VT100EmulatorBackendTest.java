@@ -1774,4 +1774,22 @@ public class VT100EmulatorBackendTest {
 		// the shell goes on in its red, and nothing of the program's bold leaks into it
 		assertEquals(red, vt100.getStyle());
 	}
+
+	@Test
+	public void testEraseAllEndsTheHistoryOnALineEnd() {
+		for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
+			IVT100EmulatorBackend vt100 = makeBakend(term);
+			term.setMaxHeight(100);
+			vt100.setDimensions(4, 4);
+			vt100.setCursor(0, 0);
+			vt100.appendString("ABCD"); // immediate wrapping: the line runs on to the empty row below
+			assertTrue(term.isWrappedLine(term.getHeight() - 4));
+			vt100.eraseAll();
+			// the row it runs on to goes into the history with it, so the history ends on a line end
+			int top = term.getHeight() - 4;
+			for (int line = 0; line < top; line++) {
+				assertTrue(!term.isWrappedLine(line) || line + 1 < top, "line " + line);
+			}
+		}
+	}
 }

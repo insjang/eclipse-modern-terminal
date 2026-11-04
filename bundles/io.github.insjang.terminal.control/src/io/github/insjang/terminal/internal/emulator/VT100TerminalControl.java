@@ -1613,7 +1613,9 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	@Override
 	public int getBufferLineLimit() {
-		return fTerminalModel.getMaxHeight();
+		// through the emulator as well: while the alternate screen shows, the model's
+		// limit is that screen's height, and writing it back would cap the history there
+		return fTerminalText.getBufferLineLimit();
 	}
 
 	@Override

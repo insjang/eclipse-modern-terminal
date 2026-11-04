@@ -140,7 +140,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	}
 
 	@Override
-	public void enableAlternateScreen(boolean enable) {
+	public void enableAlternateScreen(boolean enable, boolean cursor) {
 		synchronized (fTerminal) {
 			if (enable == (fNormalScreen != null)) {
 				// Already on the screen being asked for. Programs do ask twice.
@@ -156,16 +156,16 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				fNormalWrapPending = fWrapPending;
 				fNormalStyle = fStyle;
 				fNormalMaxHeight = fTerminal.getMaxHeight();
-				// clearAll leaves the buffer the size of the screen, which is what the
+				// clearing leaves the buffer the size of the screen, which is what the
 				// alternate screen is: no history to scroll back through. Capping the
 				// buffer there keeps it so: scrolling drops the top line instead of
 				// growing the buffer, as a program on this screen expects.
-				clearAll();
+				clearBuffer();
 				fTerminal.setMaxHeight(fLines);
-				// the rendition carries over: clearAll resets it, entering does not
+				// the rendition carries over: clearing resets it, entering does not
 				setStyle(fNormalStyle);
 			} else {
-				restoreNormalScreen();
+				restoreNormalScreen(cursor);
 			}
 		}
 	}
@@ -176,7 +176,11 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	 * back is the one from before. Narrower, and every write past its margin throws;
 	 * shorter than the screen, and the top of the screen sits above its first line.
 	 */
-	private void restoreNormalScreen() {
+	private void restoreNormalScreen(boolean cursorBack) {
+		// where the program left the cursor, for the modes that keep it there
+		int programLine = fCursorLine;
+		int programColumn = fCursorColumn;
+		TerminalStyle programStyle = fStyle;
 		ITerminalTextData saved = fNormalScreen;
 		fNormalScreen = null;
 		// the margins were the full screen program's, not the shell's
@@ -206,11 +210,25 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		}
 		fTerminal.setMaxHeight(Math.max(limit, fTerminal.getHeight()));
 		// back to the line the cursor was on, wherever it is on the screen now
+		if (!cursorBack) {
+			// 47 and 1047 save no cursor: it stays on the row and column the program left it
+			setCursor(programLine, programColumn);
+			setStyle(programStyle);
+			return;
+		}
 		setCursor(cursor - (fTerminal.getHeight() - fLines), fNormalCursorColumn);
 		// and to a wrap that was pending there, if the line is as wide as it was
 		fWrapPending = fNormalWrapPending && fColumns == fNormalColumns && fCursorColumn == fColumns - 1;
 		// in the colours the shell was writing in, not the ones the program left selected
 		setStyle(fNormalStyle);
+	}
+
+	@Override
+	public int getBufferLineLimit() {
+		synchronized (fTerminal) {
+			// while the alternate screen shows, the model's limit is that screen's height
+			return fNormalScreen != null ? fNormalMaxHeight : fTerminal.getMaxHeight();
+		}
 	}
 
 	@Override
@@ -233,6 +251,22 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void clearAll() {
+		synchronized (fTerminal) {
+			if (fNormalScreen != null) {
+				// Clearing while a full screen program shows clears what is behind it as
+				// well, or leaving the program would bring back what the user cleared:
+				// a blank normal screen, the cursor on the row of it where it was.
+				int row = fNormalCursorLine - (fNormalScreen.getHeight() - fNormalLines);
+				fNormalScreen = new TerminalTextDataStore();
+				fNormalScreen.setDimensions(fNormalLines, fNormalColumns);
+				fNormalCursorLine = Math.max(0, Math.min(row, fNormalLines - 1));
+				fNormalWrapPending = false;
+			}
+			clearBuffer();
+		}
+	}
+
+	private void clearBuffer() {
 		synchronized (fTerminal) {
 			// clear the history
 			int n = fTerminal.getHeight();
@@ -362,6 +396,10 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			int used = fLines;
 			while (used > 0 && isBlank(toAbsoluteLine(used - 1))) {
 				used--;
+			}
+			// but not the row a line runs on to: the history ends where a line ends
+			if (used > 0 && used < fLines && fTerminal.isWrappedLine(toAbsoluteLine(used - 1))) {
+				used++;
 			}
 			for (int i = 0; i < used; i++) {
 				fTerminal.addLine();

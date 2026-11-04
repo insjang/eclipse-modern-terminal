@@ -39,9 +39,14 @@ public class VT100BackendTraceDecorator implements IVT100EmulatorBackend {
 	}
 
 	@Override
-	public void enableAlternateScreen(boolean enable) {
-		fWriter.println("enableAlternateScreen(" + enable + ')'); //$NON-NLS-1$
-		fBackend.enableAlternateScreen(enable);
+	public void enableAlternateScreen(boolean enable, boolean cursor) {
+		fWriter.println("enableAlternateScreen(" + enable + ", " + cursor + ')'); //$NON-NLS-1$ //$NON-NLS-2$
+		fBackend.enableAlternateScreen(enable, cursor);
+	}
+
+	@Override
+	public int getBufferLineLimit() {
+		return fBackend.getBufferLineLimit();
 	}
 
 	@Override
