@@ -153,7 +153,9 @@ public final class LinkPolicy {
 	/** The id of the editor that hands a file to the program the system has for it. */
 	public static final String SYSTEM_EDITOR_ID = "org.eclipse.ui.systemExternalEditor"; //$NON-NLS-1$
 	/** What the system program may open from terminal output: documents and images that run nothing. */
-	private static final Set<String> SYSTEM_PROGRAM_TYPES = Set.of("pdf", "png", "jpg", "jpeg", "gif", "bmp"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+	// Office documents only in the formats that cannot carry macros (not xlsm, docm, xls, doc)
+	private static final Set<String> SYSTEM_PROGRAM_TYPES = Set.of("pdf", "png", "jpg", "jpeg", "gif", "bmp", //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$ //$NON-NLS-5$ //$NON-NLS-6$
+			"xlsx", "docx", "pptx"); //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$
 
 	/**
 	 * The editor for a file named by terminal output: the registered one if it runs inside
@@ -174,8 +176,9 @@ public final class LinkPolicy {
 
 	/**
 	 * The file the system program may open in place of an Eclipse editor: on Windows only
-	 * (elsewhere xdg-open picks the program by the content, not the name), and only a PDF or
-	 * an image by the name of the file a link, junction or symlink leads to.
+	 * (elsewhere xdg-open picks the program by the content, not the name), and only a PDF,
+	 * an image or an Office document that cannot carry macros, by the name of the file a
+	 * link, junction or symlink leads to.
 	 *
 	 * @return the real path to hand to the system program, or null to open inside Eclipse
 	 */
@@ -194,7 +197,8 @@ public final class LinkPolicy {
 	}
 
 	/**
-	 * @return whether the file is a PDF or an image as Windows opens it: the name without
+	 * @return whether the file is a PDF, an image or a macro-free Office document as Windows
+	 *         opens it: the name without
 	 *         trailing dots and spaces (Windows drops them), no alternate data stream (a ':'
 	 *         after the drive), not a UNC path
 	 */

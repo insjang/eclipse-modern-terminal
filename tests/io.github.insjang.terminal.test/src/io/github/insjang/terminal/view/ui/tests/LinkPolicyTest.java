@@ -89,6 +89,14 @@ public class LinkPolicyTest {
 		assertFalse(LinkPolicy.systemProgramAllowed("C:\\a.exe:x.pdf")); // an alternate data stream
 		assertFalse(LinkPolicy.systemProgramAllowed("\\\\server\\share\\a.pdf")); // UNC
 		assertFalse(LinkPolicy.systemProgramAllowed("/tmp/.pdf"));
+		// Office documents only where they cannot carry macros
+		assertTrue(LinkPolicy.systemProgramAllowed("D:\\docs\\report.XLSX"));
+		assertTrue(LinkPolicy.systemProgramAllowed("D:\\docs\\a.docx"));
+		assertTrue(LinkPolicy.systemProgramAllowed("D:\\docs\\a.pptx"));
+		assertFalse(LinkPolicy.systemProgramAllowed("D:\\docs\\a.xlsm"));
+		assertFalse(LinkPolicy.systemProgramAllowed("D:\\docs\\a.docm"));
+		assertFalse(LinkPolicy.systemProgramAllowed("D:\\docs\\a.xls"));
+		assertFalse(LinkPolicy.systemProgramAllowed("D:\\docs\\a.doc"));
 	}
 
 	@Test
