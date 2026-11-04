@@ -696,4 +696,26 @@ public class VT100EmulatorTest {
 		assertAll(() -> assertEquals(0, control.getMouseMode()), () -> assertFalse(control.isSgrMouseEncoding()),
 				() -> assertFalse(control.isFocusReporting()), () -> assertFalse(control.isSynchronizedOutput()));
 	}
+
+	@Test
+	public void testFullResetLeavesAlternateScreen() {
+		data.setMaxHeight(1000);
+		run("Hello 1\r\nHello 2");
+		run(ALTERNATE_SCREEN_ON);
+		run("Full screen");
+		run("\u001bc"); // ESC c, a full reset
+		assertEquals(1000, data.getMaxHeight());
+		// a late request to leave does not bring back the screen from before the reset
+		run("after");
+		run(ALTERNATE_SCREEN_OFF);
+		// the normal screen with its history (CSI 2 J keeps what was on it), never the program's
+		StringBuilder all = new StringBuilder();
+		for (int line = 0; line < data.getHeight(); line++) {
+			char[] chars = data.getChars(line);
+			all.append(chars == null ? "" : new String(chars).replace("\000", "").trim()).append('\n');
+		}
+		assertTrue(all.toString().contains("Hello 2"));
+		assertTrue(!all.toString().contains("Full screen"));
+		assertTrue(all.toString().trim().endsWith("after"));
+	}
 }

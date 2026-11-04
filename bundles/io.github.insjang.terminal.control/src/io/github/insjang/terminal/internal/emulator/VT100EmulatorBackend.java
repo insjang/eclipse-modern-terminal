@@ -114,6 +114,10 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	/** in the normal buffer, not on the screen: the screen may be resized meanwhile */
 	private int fNormalCursorLine;
 	private int fNormalCursorColumn;
+	/** the screen the normal buffer was saved from, and whether a wrap was pending on it */
+	private int fNormalLines;
+	private int fNormalColumns;
+	private boolean fNormalWrapPending;
 	private boolean fVT100LineWrapping;
 	private ScrollRegion fScrollRegion = ScrollRegion.FULL_WINDOW;
 	/** the line of the last prompt (OSC 133;A) when it was marked, -1 for none; lines only move up since */
@@ -145,6 +149,9 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				fNormalScreen.copy(fTerminal);
 				fNormalCursorLine = toAbsoluteLine(fCursorLine);
 				fNormalCursorColumn = fCursorColumn;
+				fNormalLines = fLines;
+				fNormalColumns = fColumns;
+				fNormalWrapPending = fWrapPending;
 				fNormalMaxHeight = fTerminal.getMaxHeight();
 				// clearAll leaves the buffer the size of the screen, which is what the
 				// alternate screen is: no history to scroll back through. Capping the
@@ -153,22 +160,50 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				clearAll();
 				fTerminal.setMaxHeight(fLines);
 			} else {
-				fTerminal.copy(fNormalScreen);
-				fNormalScreen = null;
-				// the margins were the full screen program's, not the shell's
-				fScrollRegion = ScrollRegion.FULL_WINDOW;
-				fTerminal.setMaxHeight(Math.max(fNormalMaxHeight, fTerminal.getHeight()));
-				// The window may have been resized while the program had the screen, and
-				// the buffer put back is the one from before. Narrower, and every write
-				// past its margin throws; shorter than the screen, and the top of the
-				// screen sits above its first line, so every line number comes out negative.
-				if (fTerminal.getHeight() < fLines || fTerminal.getWidth() != fColumns) {
-					fTerminal.setDimensions(Math.max(fTerminal.getHeight(), fLines), fColumns);
-				}
-				// back to the line the cursor was on, wherever it is on the screen now
-				setCursor(fNormalCursorLine - (fTerminal.getHeight() - fLines), fNormalCursorColumn);
+				restoreNormalScreen();
 			}
 		}
+	}
+
+	/**
+	 * Puts the normal screen back as if it had been resized along with the alternate
+	 * one: the window may have changed while the program had it, and the buffer put
+	 * back is the one from before. Narrower, and every write past its margin throws;
+	 * shorter than the screen, and the top of the screen sits above its first line.
+	 */
+	private void restoreNormalScreen() {
+		ITerminalTextData saved = fNormalScreen;
+		fNormalScreen = null;
+		// the margins were the full screen program's, not the shell's
+		fScrollRegion = ScrollRegion.FULL_WINDOW;
+		int height = saved.getHeight();
+		int cursor = fNormalCursorLine; // a line of the saved buffer
+		// the height setDimensions would give the normal screen: at least the screen,
+		// and with no history, the rows below the cursor go when the screen shrinks
+		int newHeight = Math.max(fLines, height);
+		if (fLines < fNormalLines && height == fNormalLines) {
+			newHeight = Math.max(fLines, cursor + 1);
+		}
+		fTerminal.setMaxHeight(Math.max(fTerminal.getMaxHeight(), Math.max(height, newHeight)));
+		fTerminal.copy(saved);
+		fTerminal.setDimensions(newHeight, fColumns);
+		// rows the buffer gains are blank: they may still hold what the program drew there
+		for (int line = height; line < newHeight; line++) {
+			fTerminal.cleanLine(line);
+		}
+		// a limit lowered meanwhile takes the oldest lines, never the screen
+		int limit = Math.max(fNormalMaxHeight, fLines);
+		int excess = newHeight - limit;
+		if (excess > 0) {
+			fTerminal.scroll(0, newHeight, -excess);
+			fTerminal.setDimensions(limit, fColumns);
+			cursor -= excess;
+		}
+		fTerminal.setMaxHeight(Math.max(limit, fTerminal.getHeight()));
+		// back to the line the cursor was on, wherever it is on the screen now
+		setCursor(cursor - (fTerminal.getHeight() - fLines), fNormalCursorColumn);
+		// and to a wrap that was pending there, if the line is as wide as it was
+		fWrapPending = fNormalWrapPending && fColumns == fNormalColumns && fCursorColumn == fColumns - 1;
 	}
 
 	@Override

@@ -505,6 +505,10 @@ public class VT100Emulator implements ControlListener {
 	}
 
 	private void resetTerminal() {
+		// a full reset (ESC c) puts the normal screen back first, history and all, as a
+		// reset before a connection does; else the history stays capped away and a
+		// later CSI ? 1049 l would bring back the screen from before the reset
+		text.enableAlternateScreen(false);
 		text.eraseAll();
 		text.setCursor(0, 0);
 		text.setStyle(text.getDefaultStyle());

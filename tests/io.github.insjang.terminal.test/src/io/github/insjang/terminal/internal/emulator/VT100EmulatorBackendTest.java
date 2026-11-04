@@ -1668,4 +1668,91 @@ public class VT100EmulatorBackendTest {
 		assertEquals('\000', term.getChar(0, 0));
 		assertEquals('\000', term.getChar(1, 3));
 	}
+
+	@Test
+	public void testAlternateScreenKeepsALoweredLimit() {
+		for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
+			IVT100EmulatorBackend vt100 = makeBakend(term);
+			term.setMaxHeight(1000);
+			vt100.setDimensions(3, 10);
+			for (int i = 0; i < 750; i++) {
+				vt100.appendString("l" + i);
+				vt100.processNewline();
+				vt100.setCursorColumn(0);
+			}
+			vt100.appendString("last");
+			vt100.enableAlternateScreen(true);
+			vt100.setBufferLineLimit(500); // the preference changes while the program has the screen
+			vt100.enableAlternateScreen(false);
+			// the oldest lines went, not the screen, and the limit holds from now on
+			assertEquals(500, term.getHeight());
+			assertEquals(500, term.getMaxHeight());
+			assertEquals("last", new String(term.getChars(499), 0, 4));
+			assertEquals(2, vt100.getCursorLine());
+			assertEquals(4, vt100.getCursorColumn());
+		}
+	}
+
+	@Test
+	public void testAlternateScreenGrownLeavesNoTextBehind() {
+		for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
+			IVT100EmulatorBackend vt100 = makeBakend(term);
+			term.setMaxHeight(100);
+			vt100.setDimensions(3, 10);
+			vt100.setCursor(0, 0);
+			vt100.appendString("shell");
+			vt100.enableAlternateScreen(true);
+			vt100.setDimensions(6, 10);
+			for (int line = 0; line < 6; line++) {
+				vt100.setCursor(line, 0);
+				vt100.appendString("program");
+			}
+			vt100.enableAlternateScreen(false);
+			// the rows the screen gained show nothing of the program
+			assertEquals(6, term.getHeight());
+			assertEquals("shell", new String(term.getChars(0), 0, 5));
+			for (int line = 1; line < 6; line++) {
+				char[] chars = term.getChars(line);
+				assertTrue(chars == null || new String(chars).trim().replace("\000", "").isEmpty(), "row " + line);
+			}
+		}
+	}
+
+	@Test
+	public void testAlternateScreenShrunkKeepsTheCursorOnItsLine() {
+		for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
+			IVT100EmulatorBackend vt100 = makeBakend(term);
+			term.setMaxHeight(100);
+			vt100.setDimensions(24, 10);
+			vt100.setCursor(0, 0);
+			vt100.appendString("a");
+			vt100.setCursor(1, 0);
+			vt100.appendString("$ ");
+			vt100.enableAlternateScreen(true);
+			vt100.setDimensions(12, 10);
+			vt100.enableAlternateScreen(false);
+			// no history: the unused rows below the cursor go, and the prompt stays where it was
+			assertEquals(12, term.getHeight());
+			assertEquals(1, vt100.getCursorLine());
+			assertEquals(2, vt100.getCursorColumn());
+			vt100.appendString("ls");
+			assertEquals("$ ls", new String(term.getChars(1), 0, 4));
+		}
+	}
+
+	@Test
+	public void testAlternateScreenKeepsAPendingWrap() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(10);
+		vt100.setDimensions(2, 4);
+		vt100.setVT100LineWrapping(true);
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcd"); // the cursor waits on the last column to wrap
+		vt100.enableAlternateScreen(true);
+		vt100.enableAlternateScreen(false);
+		vt100.appendString("e");
+		assertEquals("abcd", new String(term.getChars(0), 0, 4));
+		assertEquals('e', term.getChar(1, 0));
+	}
 }
