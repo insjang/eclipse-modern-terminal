@@ -406,7 +406,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				used--;
 			}
 			// but not the row a line runs on to: the history ends where a line ends
-			if (used > 0 && used < fLines && fTerminal.isWrappedLine(toAbsoluteLine(used - 1))) {
+			while (used > 0 && used < fLines && fTerminal.isWrappedLine(toAbsoluteLine(used - 1))) {
 				used++;
 			}
 			for (int i = 0; i < used; i++) {

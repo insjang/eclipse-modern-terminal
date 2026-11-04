@@ -1777,18 +1777,19 @@ public class VT100EmulatorBackendTest {
 
 	@Test
 	public void testEraseAllEndsTheHistoryOnALineEnd() {
-		for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
-			IVT100EmulatorBackend vt100 = makeBakend(term);
-			term.setMaxHeight(100);
-			vt100.setDimensions(4, 4);
-			vt100.setCursor(0, 0);
-			vt100.appendString("ABCD"); // immediate wrapping: the line runs on to the empty row below
-			assertTrue(term.isWrappedLine(term.getHeight() - 4));
-			vt100.eraseAll();
-			// the row it runs on to goes into the history with it, so the history ends on a line end
-			int top = term.getHeight() - 4;
-			for (int line = 0; line < top; line++) {
-				assertTrue(!term.isWrappedLine(line) || line + 1 < top, "line " + line);
+		// immediate wrapping: the line runs on to the empty row below, or over a row of spaces first
+		for (String text : new String[] { "ABCD", "ABCD    " }) {
+			for (ITerminalTextData term : new ITerminalTextData[] { makeITerminalTextData(), new TerminalTextData() }) {
+				IVT100EmulatorBackend vt100 = makeBakend(term);
+				term.setMaxHeight(100);
+				vt100.setDimensions(4, 4);
+				vt100.setCursor(0, 0);
+				vt100.appendString(text);
+				assertTrue(term.isWrappedLine(term.getHeight() - 4));
+				vt100.eraseAll();
+				// the rows it runs on to go into the history with it, so the history ends on a line end
+				int top = term.getHeight() - 4;
+				assertFalse(term.isWrappedLine(top - 1), text);
 			}
 		}
 	}
