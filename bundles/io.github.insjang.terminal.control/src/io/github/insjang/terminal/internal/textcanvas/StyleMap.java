@@ -20,6 +20,7 @@
 package io.github.insjang.terminal.internal.textcanvas;
 
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -54,6 +55,12 @@ public class StyleMap {
 	private boolean fProportional;
 	private final int[] fOffsets = new int[256];
 	private final Map<TerminalColor, Color> fColorMap = new EnumMap<>(TerminalColor.class);
+
+	/** faint colours already blended, by the colour and the background it fades to */
+	private final Map<FaintKey, Color> fFaintColors = new HashMap<>();
+
+	private record FaintKey(RGB color, RGB background) {
+	}
 
 	public StyleMap(Supplier<Drawable> usageContextProvider) {
 		fDefaultStyle = TerminalStyle.getDefaultStyle();
@@ -116,10 +123,14 @@ public class StyleMap {
 		if (!style.isDim()) {
 			return color;
 		}
-		RGB rgb = color.getRGB();
-		RGB background = getBackgroundColor(style).getRGB();
-		return new Color((rgb.red + background.red) / 2, (rgb.green + background.green) / 2,
-				(rgb.blue + background.blue) / 2);
+		if (fFaintColors.size() >= 1024) {
+			// a program in 24-bit colour could ask for any number of them: start over rather than track use
+			fFaintColors.clear();
+		}
+		// SWT 3.136 has RGB.blend for this, as upstream uses; eclipse.next's SWT 3.135 does not
+		return fFaintColors.computeIfAbsent(new FaintKey(color.getRGB(), getBackgroundColor(style).getRGB()),
+				key -> new Color((key.color().red + key.background().red) / 2,
+						(key.color().green + key.background().green) / 2, (key.color().blue + key.background().blue) / 2));
 	}
 
 	public Color getBackgroundColor(TerminalStyle style) {

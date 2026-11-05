@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.StringJoiner;
 
 import io.github.insjang.terminal.connector.Logger;
@@ -29,6 +30,7 @@ import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.model.ITerminalTextData;
 import io.github.insjang.terminal.model.TerminalStyle;
 import io.github.insjang.terminal.model.TerminalTextDataFactory;
+import org.eclipse.swt.SWT;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -630,18 +632,25 @@ public class VT100EmulatorTest {
 
 	@Test
 	public void testModifiedSpecialKeys() {
-		// xterm's spelling: the plain key with the modifier as a parameter, 2 shift, 3 alt, 5 control
-		assertEquals("\u001b[1;5A", VT100TerminalControl.modifiedSpecialKey(0x1000001, org.eclipse.swt.SWT.CTRL));
-		assertEquals("\u001b[1;2F", VT100TerminalControl.modifiedSpecialKey(0x1000008, org.eclipse.swt.SWT.SHIFT));
-		assertEquals("\u001b[5;3~", VT100TerminalControl.modifiedSpecialKey(0x1000005, org.eclipse.swt.SWT.ALT));
-		assertEquals("\u001b[1;6P", VT100TerminalControl.modifiedSpecialKey(0x100000a, org.eclipse.swt.SWT.CTRL | org.eclipse.swt.SWT.SHIFT));
-		assertEquals("\u001b[15;5~", VT100TerminalControl.modifiedSpecialKey(0x100000e, org.eclipse.swt.SWT.CTRL));
-		assertEquals("\u001b[24;2~", VT100TerminalControl.modifiedSpecialKey(0x1000015, org.eclipse.swt.SWT.SHIFT));
-		// no modifier held that xterm can spell: not this way
-		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(0x1000001, 0));
+		// xterm's spelling: CSI number ; modifier final, with 2 shift, 3 alt, 5 control and their sums
+		Map<Integer, String> keys = Map.ofEntries(Map.entry(SWT.ARROW_UP, "1;%dA"), Map.entry(SWT.ARROW_DOWN, "1;%dB"),
+				Map.entry(SWT.ARROW_RIGHT, "1;%dC"), Map.entry(SWT.ARROW_LEFT, "1;%dD"), Map.entry(SWT.HOME, "1;%dH"),
+				Map.entry(SWT.END, "1;%dF"), Map.entry(SWT.INSERT, "2;%d~"), Map.entry(SWT.PAGE_UP, "5;%d~"),
+				Map.entry(SWT.PAGE_DOWN, "6;%d~"), Map.entry(SWT.F1, "1;%dP"), Map.entry(SWT.F2, "1;%dQ"),
+				Map.entry(SWT.F3, "1;%dR"), Map.entry(SWT.F4, "1;%dS"), Map.entry(SWT.F5, "15;%d~"),
+				Map.entry(SWT.F6, "17;%d~"), Map.entry(SWT.F7, "18;%d~"), Map.entry(SWT.F8, "19;%d~"),
+				Map.entry(SWT.F9, "20;%d~"), Map.entry(SWT.F10, "21;%d~"), Map.entry(SWT.F11, "23;%d~"),
+				Map.entry(SWT.F12, "24;%d~"));
+		Map<Integer, Integer> modifiers = Map.of(SWT.SHIFT, 2, SWT.ALT, 3, SWT.CTRL, 5, SWT.CTRL | SWT.SHIFT, 6,
+				SWT.CTRL | SWT.ALT | SWT.SHIFT, 8);
+		keys.forEach((key, spelling) -> modifiers.forEach((mask, modifier) -> assertEquals(
+				"\u001b[" + spelling.formatted(modifier), VT100TerminalControl.modifiedSpecialKey(key, mask))));
+		// no modifier held that xterm can spell, or a key it does not spell this way: not this way
+		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(SWT.ARROW_UP, 0));
+		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(SWT.TAB, SWT.CTRL));
 		// the Mac's Cmd, alone or with others, stays in Eclipse: Cmd+Shift+Left is not Shift+Left
-		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(0x1000003, org.eclipse.swt.SWT.COMMAND));
-		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(0x1000003, org.eclipse.swt.SWT.COMMAND | org.eclipse.swt.SWT.SHIFT));
+		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(SWT.ARROW_LEFT, SWT.COMMAND));
+		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(SWT.ARROW_LEFT, SWT.COMMAND | SWT.SHIFT));
 	}
 
 	@Test

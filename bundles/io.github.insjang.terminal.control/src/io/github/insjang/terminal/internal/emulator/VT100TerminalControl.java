@@ -648,11 +648,32 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		return PASTE_START + text.replace("\u001b", "").replace("\u009b", "") + PASTE_END; //$NON-NLS-1$ //$NON-NLS-2$ //$NON-NLS-3$ //$NON-NLS-4$
 	}
 
+	private record XtermKey(int number, char last) {
+	}
+
 	/**
-	 * The sequences above are sent only when no modifier is held, so a program was
-	 * never told about Ctrl+End and the rest of them. xterm spells a modified
+	 * xterm's number and final character for each key: the arrows, Home, End and
+	 * F1-F4 spelled with a letter after 1, the others with a number before ~
+	 * (xterm uses no 16 or 22)
+	 */
+	private static final Map<Integer, XtermKey> XTERM_KEYS = Map.ofEntries(
+			Map.entry(SWT.ARROW_UP, new XtermKey(1, 'A')), Map.entry(SWT.ARROW_DOWN, new XtermKey(1, 'B')),
+			Map.entry(SWT.ARROW_RIGHT, new XtermKey(1, 'C')), Map.entry(SWT.ARROW_LEFT, new XtermKey(1, 'D')),
+			Map.entry(SWT.HOME, new XtermKey(1, 'H')), Map.entry(SWT.END, new XtermKey(1, 'F')),
+			Map.entry(SWT.INSERT, new XtermKey(2, '~')),
+			Map.entry(SWT.PAGE_UP, new XtermKey(5, '~')), Map.entry(SWT.PAGE_DOWN, new XtermKey(6, '~')),
+			Map.entry(SWT.F1, new XtermKey(1, 'P')), Map.entry(SWT.F2, new XtermKey(1, 'Q')),
+			Map.entry(SWT.F3, new XtermKey(1, 'R')), Map.entry(SWT.F4, new XtermKey(1, 'S')),
+			Map.entry(SWT.F5, new XtermKey(15, '~')), Map.entry(SWT.F6, new XtermKey(17, '~')),
+			Map.entry(SWT.F7, new XtermKey(18, '~')), Map.entry(SWT.F8, new XtermKey(19, '~')),
+			Map.entry(SWT.F9, new XtermKey(20, '~')), Map.entry(SWT.F10, new XtermKey(21, '~')),
+			Map.entry(SWT.F11, new XtermKey(23, '~')), Map.entry(SWT.F12, new XtermKey(24, '~')));
+
+	/**
+	 * The special keys in keyPressed are sent only when no modifier is held, so a
+	 * program was never told about Ctrl+End and the rest of them. xterm spells a modified
 	 * special key as the plain one carrying the modifier as a parameter, which is
-	 * what this builds. Keys the switch already answered never reach here, so what
+	 * what this builds. Keys keyPressed already answered never reach here, so what
 	 * works today keeps working.
 	 *
 	 * @return the sequence, or null when the key is not one that is spelled this way
@@ -664,56 +685,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		}
 		int modifier = 1 + ((modifierKeys & SWT.SHIFT) != 0 ? 1 : 0) + ((modifierKeys & SWT.ALT) != 0 ? 2 : 0)
 				+ ((modifierKeys & SWT.CTRL) != 0 ? 4 : 0);
-		if (modifier == 1) {
-			// Something held that xterm has no spelling for.
-			return null;
-		}
-		switch (keyCode) {
-		case 0x1000001: // Up arrow.
-			return "\u001b[1;" + modifier + 'A'; //$NON-NLS-1$
-		case 0x1000002: // Down arrow.
-			return "\u001b[1;" + modifier + 'B'; //$NON-NLS-1$
-		case 0x1000003: // Left arrow.
-			return "\u001b[1;" + modifier + 'D'; //$NON-NLS-1$
-		case 0x1000004: // Right arrow.
-			return "\u001b[1;" + modifier + 'C'; //$NON-NLS-1$
-		case 0x1000005: // PgUp key.
-			return "\u001b[5;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000006: // PgDn key.
-			return "\u001b[6;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000007: // Home key.
-			return "\u001b[1;" + modifier + 'H'; //$NON-NLS-1$
-		case 0x1000008: // End key.
-			return "\u001b[1;" + modifier + 'F'; //$NON-NLS-1$
-		case 0x1000009: // Insert.
-			return "\u001b[2;" + modifier + '~'; //$NON-NLS-1$
-		case 0x100000a: // F1, which xterm spells with a letter like the arrows.
-			return "\u001b[1;" + modifier + 'P'; //$NON-NLS-1$
-		case 0x100000b: // F2.
-			return "\u001b[1;" + modifier + 'Q'; //$NON-NLS-1$
-		case 0x100000c: // F3.
-			return "\u001b[1;" + modifier + 'R'; //$NON-NLS-1$
-		case 0x100000d: // F4.
-			return "\u001b[1;" + modifier + 'S'; //$NON-NLS-1$
-		case 0x100000e: // F5, and from here on a number, with 16 and 22 left out.
-			return "\u001b[15;" + modifier + '~'; //$NON-NLS-1$
-		case 0x100000f: // F6.
-			return "\u001b[17;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000010: // F7.
-			return "\u001b[18;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000011: // F8.
-			return "\u001b[19;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000012: // F9.
-			return "\u001b[20;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000013: // F10.
-			return "\u001b[21;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000014: // F11.
-			return "\u001b[23;" + modifier + '~'; //$NON-NLS-1$
-		case 0x1000015: // F12.
-			return "\u001b[24;" + modifier + '~'; //$NON-NLS-1$
-		default:
-			return null;
-		}
+		XtermKey key = XTERM_KEYS.get(keyCode);
+		return modifier == 1 || key == null ? null : "\u001b[" + key.number() + ';' + modifier + key.last(); //$NON-NLS-1$
 	}
 
 	protected void sendChar(char chKey, boolean altKeyPressed) {
