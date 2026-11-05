@@ -479,6 +479,13 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testPasteLineEndings() {
+		// each line break goes as a CR, as the Enter key sends it: a Windows CR LF is one break
+		assertEquals("a\rb\rc\rd", VT100TerminalControl.pasteText("a\r\nb\nc\rd", false));
+		assertEquals("\033[200~a\rb\033[201~", VT100TerminalControl.pasteText("a\r\nb", true));
+	}
+
+	@Test
 	public void testBracketedPasteCannotEndEarly() {
 		String start = "\033[200~", end = "\033[201~";
 		assertEquals(start + "a[201~b" + end, VT100TerminalControl.bracketed("a\033[201~b")); // ESC goes, the rest is text

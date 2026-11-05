@@ -223,6 +223,58 @@ public class InputStreamMonitor extends OutputStream implements IDisposable {
 	/**
 	 * Reads from the queue and writes the read content to the stream.
 	 */
+	/**
+	 * How much of the data to write next: at most {@code max} bytes from {@code from},
+	 * but never ending inside a UTF-8 character or an escape sequence. Between two
+	 * writes there is a pause, and ConPTY has passed the pieces of a sequence split
+	 * across reads on as plain text (microsoft/terminal#16352): the end marker of a
+	 * bracketed paste cut as
+	 * "ESC[20" and "1~" reached the shell as the text "1~", and the shell then took
+	 * everything typed after it as part of the paste.
+	 *
+	 * @return the number of bytes, at least 1
+	 */
+	public static int writeLength(byte[] data, int from, int max) {
+		int end = from + max;
+		if (end >= data.length) {
+			return data.length - from;
+		}
+		while (end > from && (data[end] & 0xC0) == 0x80) {
+			end--; // a UTF-8 continuation byte: the next write starts at its character
+		}
+		// an escape sequence that would not be complete in this write moves to the next
+		for (int i = end - 1; i >= Math.max(from, end - 32); i--) {
+			if (data[i] == 0x1b) {
+				if (!isComplete(data, i, end)) {
+					end = i;
+				}
+				break;
+			}
+		}
+		return end > from ? end - from : Math.min(max, data.length - from);
+	}
+
+	/** whether the escape sequence at {@code esc} ends before {@code end} */
+	private static boolean isComplete(byte[] data, int esc, int end) {
+		if (esc + 1 >= end) {
+			return false;
+		}
+		byte type = data[esc + 1];
+		if (type == '[') {
+			// CSI: parameters and intermediates up to a final byte
+			for (int i = esc + 2; i < end; i++) {
+				if (data[i] >= 0x40 && data[i] <= 0x7e) {
+					return true;
+				}
+			}
+			return false;
+		}
+		if (type == 'O') {
+			return esc + 2 < end; // SS3, as an arrow key in application mode
+		}
+		return true; // ESC and one character (Alt with a key)
+	}
+
 	protected void writeStream() {
 		// Read from the queue and write to the stream until disposed
 		outer: while (thread != null && !disposed) {
@@ -248,7 +300,7 @@ public class InputStreamMonitor extends OutputStream implements IDisposable {
 					int written = 0;
 					byte[] buf = new byte[1000];
 					while (written < data.length) {
-						int len = Math.min(buf.length, data.length - written);
+						int len = writeLength(data, written, buf.length);
 						System.arraycopy(data, written, buf, 0, len);
 						// Write the data to the stream
 						stream.write(buf, 0, len);

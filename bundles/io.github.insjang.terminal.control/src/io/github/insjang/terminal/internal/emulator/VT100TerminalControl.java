@@ -360,8 +360,21 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		if (strText == null) {
 			return false;
 		}
-		sendString(fBracketedPaste ? bracketed(strText) : strText);
+		sendString(pasteText(strText, fBracketedPaste));
 		return true;
+	}
+
+	/**
+	 * Pasted text as it goes to the program: each line break as the Enter key sends
+	 * it, a CR, as Windows Terminal (CR LF to CR) and tmux (LF to CR) paste. A
+	 * Windows clipboard's CR LF would reach the shell as two breaks, and readline
+	 * then draws two rows for every line: a paste taller than the screen pushes the
+	 * prompt off it, and the redraw on the next key lands where the prompt no
+	 * longer is.
+	 */
+	public static String pasteText(String text, boolean bracketedPaste) {
+		String lines = text.replace("\r\n", "\r").replace('\n', '\r'); //$NON-NLS-1$ //$NON-NLS-2$
+		return bracketedPaste ? bracketed(lines) : lines;
 	}
 
 	@Override
