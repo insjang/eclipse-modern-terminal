@@ -15,14 +15,13 @@
 package io.github.insjang.terminal.internal.textcanvas;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.swt.graphics.Point;
 import io.github.insjang.terminal.connector.Logger;
-import io.github.insjang.terminal.internal.model.CharWidth;
+import io.github.insjang.terminal.internal.model.Cells;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
 import io.github.insjang.terminal.model.ITerminalTextDataSnapshot;
 import io.github.insjang.terminal.model.TextRange;
@@ -306,11 +305,12 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			// A wide character is selected whole: a selection that starts on its
 			// second cell starts on its first, one that ends on its first ends on
 			// its second.
-			if (isSecondCell(startLine, startColumn)) {
-				startColumn--;
+			if (inside(startLine, startColumn)) {
+				startColumn = Cells.start(fSelectionSnapshot, startLine, startColumn);
 			}
-			if (isSecondCell(endLine, endColumn + 1)) {
-				endColumn++;
+			if (inside(endLine, endColumn)) {
+				int start = Cells.start(fSelectionSnapshot, endLine, endColumn);
+				endColumn = start + fSelectionSnapshot.getCellWidth(endLine, start) - 1;
 			}
 		}
 		int oldStart = fSelectionStartLine;
@@ -392,7 +392,7 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			return;
 		}
 		fHoverRange = TextRange.EMPTY;
-		if (line < 0 || line > fSnapshot.getHeight() || col < 0) {
+		if (line < 0 || line >= fSnapshot.getHeight() || col < 0) {
 			return;
 		}
 		int row1 = line;
@@ -400,61 +400,50 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 		while (row1 > 0 && fSnapshot.isWrappedLine(row1 - 1)) {
 			row1--;
 		}
-		while (row2 < fSnapshot.getHeight() && fSnapshot.isWrappedLine(row2)) {
+		while (row2 + 1 < fSnapshot.getHeight() && fSnapshot.isWrappedLine(row2)) {
 			row2++;
 		}
 		row2++;
 		int width = fSnapshot.getWidth();
-		// each row as wide as the screen, so that an offset in the text is a row and a column
-		char[][] rows = new char[row2 - row1][];
-		String lineText = ""; //$NON-NLS-1$
+		// the first cells of the characters of the logical line, as row * width + column
+		int[] cells = new int[(row2 - row1) * width];
+		int n = 0;
+		int at = -1;
+		int under = col < width ? line * width + Cells.start(fSnapshot, line, col) : -1;
 		for (int l = row1; l < row2; l++) {
-			char[] chars = fSnapshot.getChars(l);
-			if (chars == null) {
+			if (fSnapshot.getChars(l) == null) {
 				return;
 			}
-			rows[l - row1] = Arrays.copyOf(chars, width);
-			char[] cells = rows[l - row1].clone();
-			for (int c = 0; c + 1 < width; c++) {
-				String cluster = fSnapshot.getCluster(l, c);
-				if (cluster != null && CharWidth.clusterCells(cluster) == 2 && CharWidth.of(cells[c]) == 1
-						&& cells[c + 1] == '\000') {
-					cells[c + 1] = cells[c]; // the second cell of a narrow character grown wide is part of it, not a gap
+			for (int c = 0; c < width; c++) {
+				if (fSnapshot.getCellWidth(l, c) > 0) {
+					if (l * width + c == under) {
+						at = n;
+					}
+					cells[n++] = l * width + c;
 				}
 			}
-			lineText += String.valueOf(cells);
 		}
-		int col1 = col + (line - row1) * width;
-		if (lineText.length() <= col1 || isBoundary(lineText, col1)) {
+		if (at < 0 || isBoundary(cells[at], width)) {
 			return;
 		}
-		int wordStart = 0;
-		int wordEnd = lineText.length();
-		for (int c = col1; c >= 1; c--) {
-			if (isBoundary(lineText, c - 1)) {
-				wordStart = c;
-				break;
-			}
+		int first = at;
+		int last = at;
+		while (first > 0 && !isBoundary(cells[first - 1], width)) {
+			first--;
 		}
-		for (int c = col1; c < lineText.length(); c++) {
-			if (isBoundary(lineText, c)) {
-				wordEnd = c;
-				break;
-			}
+		while (last + 1 < n && !isBoundary(cells[last + 1], width)) {
+			last++;
 		}
-		if (wordStart < wordEnd) {
-			StringBuilder word = new StringBuilder();
-			for (int p = wordStart; p < wordEnd; p = (p / width + 1) * width) {
-				int l = row1 + p / width;
-				int end = Math.min(wordEnd - (p / width) * width, width);
-				word.append(withClusters(fSnapshot, l, rows[l - row1], p % width, end));
-			}
-			fHoverRange = new TextRange(row1 + wordStart / width, row1 + (wordEnd - 1) / width + 1, (wordStart % width),
-					(wordEnd - 1) % width + 1, word.toString().replace("\000", "")); //$NON-NLS-1$ //$NON-NLS-2$
-			if (DEBUG_HOVER) {
-				System.out.format("hover: %s   <- [%s,%s][%s,%s]\n", //$NON-NLS-1$
-						fHoverRange, col, line, wordStart, wordEnd);
-			}
+		StringBuilder word = new StringBuilder();
+		for (int k = first; k <= last; k++) {
+			word.append(Cells.text(fSnapshot, cells[k] / width, cells[k] % width));
+		}
+		int a = cells[first];
+		int b = cells[last];
+		fHoverRange = new TextRange(a / width, b / width + 1, a % width,
+				b % width + fSnapshot.getCellWidth(b / width, b % width), word.toString());
+		if (DEBUG_HOVER) {
+			System.out.format("hover: %s   <- [%s,%s]\n", fHoverRange, col, line); //$NON-NLS-1$
 		}
 	}
 
@@ -464,58 +453,22 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 	}
 
 	/**
-	 * The filler in the second cell of a wide character is what its character is:
-	 * part of the word for a path with Hangul in it, which would otherwise end at
-	 * every syllable, and a boundary for an ideographic space (U+3000).
-	 * Brackets end a word, so the path in Write(/a/b.md) is just the path.
+	 * A word ends at a cell never written, at whitespace, the wide ideographic space
+	 * included, at a quote, and at a bracket, so the path in Write(/a/b.md) is just
+	 * the path.
 	 */
-	private boolean isBoundary(String text, int index) {
-		char c = text.charAt(CharWidth.isFiller(text, index) ? index - 1 : index);
+	private boolean isBoundary(int cell, int width) {
+		String text = Cells.text(fSnapshot, cell / width, cell % width);
+		if (text.isEmpty()) {
+			return true;
+		}
+		char c = text.charAt(0);
 		return Character.isWhitespace(c) || c < '\u0020' || "\"'()[]<>`".indexOf(c) >= 0; //$NON-NLS-1$
 	}
 
-	// helper to sanitize text copied out of a snapshot
-	private static String scrubLine(String text) {
-		// get rid of the empty space at the end of the lines; null means space
-		int i = text.length() - 1;
-		while (i >= 0 && text.charAt(i) == '\000') {
-			i--;
-		}
-		return text.substring(0, i + 1).replace('\000', ' ');
-	}
-
-	/**
-	 * The cells from <code>from</code> to <code>to</code> as text: each cluster given
-	 * in full in place of the one character its cells hold, the filler of a wide
-	 * character left out, and a cell never written given as a null.
-	 */
-	private static String withClusters(ITerminalTextDataReadOnly data, int line, char[] chars, int from, int to) {
-		StringBuilder text = new StringBuilder(to - from);
-		String cells = new String(chars);
-		for (int col = from; col < to; col++) {
-			String cluster = data.getCluster(line, col);
-			int n = cluster == null ? 1 : CharWidth.clusterCells(cluster);
-			if (cluster != null && col + n <= to) {
-				text.append(cluster);
-				col += n - 1;
-			} else if (!CharWidth.isFiller(cells, col)) {
-				text.append(chars[col]);
-			}
-		}
-		return text.toString();
-	}
-
-	private boolean isSecondCell(int line, int col) {
-		if (line < 0 || line >= fSelectionSnapshot.getHeight() || col <= 0) {
-			return false;
-		}
-		char[] chars = fSelectionSnapshot.getChars(line);
-		if (chars == null || col >= chars.length) {
-			return false;
-		}
-		String cluster = fSelectionSnapshot.getCluster(line, col - 1);
-		return CharWidth.isSecondCell(new String(chars), col)
-				|| cluster != null && CharWidth.clusterCells(cluster) == 2;
+	/** @return whether the cell is on the selection's snapshot */
+	private boolean inside(int line, int col) {
+		return line >= 0 && line < fSelectionSnapshot.getHeight() && col >= 0 && col < fSelectionSnapshot.getWidth();
 	}
 
 	/**
@@ -531,11 +484,12 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			String text;
 			char[] chars = fSelectionSnapshot.getChars(line);
 			if (chars != null) {
-				int from = line == fSelectionStartLine ? Math.min(fSelectionStartCoumn, chars.length) : 0;
+				int width = fSelectionSnapshot.getWidth();
+				int from = line == fSelectionStartLine ? Math.min(fSelectionStartCoumn, width) : 0;
 				int to = line == fSeletionEndLine && fSelectionEndColumn >= 0
-						? Math.min(fSelectionEndColumn + 1, chars.length)
-						: chars.length;
-				text = scrubLine(withClusters(fSelectionSnapshot, line, chars, from, to));
+						? Math.min(fSelectionEndColumn + 1, width)
+						: width;
+				text = Cells.text(fSelectionSnapshot, line, from, to);
 			} else {
 				text = ""; //$NON-NLS-1$
 			}
@@ -600,7 +554,7 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			char[] chars = snapshot.getChars(line);
 			String text;
 			if (chars != null) {
-				text = scrubLine(withClusters(snapshot, line, chars, 0, chars.length)); // take care of NULs
+				text = Cells.text(snapshot, line, 0, snapshot.getWidth());
 			} else {
 				text = ""; //$NON-NLS-1$ null arrays represent empty lines
 			}

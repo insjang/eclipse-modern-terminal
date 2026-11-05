@@ -9,7 +9,6 @@
  *******************************************************************************/
 package io.github.insjang.terminal.internal.model;
 
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -210,26 +209,21 @@ public final class TerminalFind {
 		if (chars == null) {
 			return cells;
 		}
-		String row = new String(chars);
-		int end = row.length();
-		while (end > 0 && row.charAt(end - 1) == '\000') {
+		int end = Math.min(chars.length, data.getWidth());
+		while (end > 0 && chars[end - 1] == '\000') {
 			end--; // never written: no text
 		}
 		for (int col = 0; col < end; col++) {
-			if (CharWidth.isFiller(row, col)) {
-				continue;
+			int width = data.getCellWidth(line, col);
+			if (width == 0) {
+				continue; // the second cell of a character
 			}
-			String cluster = data.getCluster(line, col);
-			int cellsTaken = cluster == null ? 1 : CharWidth.clusterCells(cluster);
-			if (col + cellsTaken > row.length()) {
-				cluster = null;
-				cellsTaken = 1;
+			// a character is found as it is drawn: an accent sent as a mark matches the accented letter
+			String s = Cells.drawn(data, line, col);
+			if (s.isEmpty()) {
+				s = " "; //$NON-NLS-1$
 			}
-			// a cluster is found as it is shown: an accent sent as a mark matches the accented letter
-			String s = cluster != null ? Normalizer.normalize(cluster, Normalizer.Form.NFC)
-					: String.valueOf(row.charAt(col) == '\000' ? ' ' : row.charAt(col));
-			int last = cluster != null ? col + cellsTaken - 1
-					: col + 1 < row.length() && CharWidth.isFiller(row, col + 1) ? col + 1 : col;
+			int last = col + width - 1;
 			for (int i = 0; i < s.length(); i++) {
 				int at = text.length();
 				if (at == cells[0].length) {
@@ -241,9 +235,6 @@ public final class TerminalFind {
 				cells[1][at] = col;
 				cells[2][at] = last;
 				text.append(s.charAt(i));
-			}
-			if (cluster != null) {
-				col += cellsTaken - 1;
 			}
 		}
 		return cells;

@@ -370,6 +370,16 @@ public class TerminalTextData implements ITerminalTextData {
 	}
 
 	@Override
+	public int getCellWidth(int line, int column) {
+		return fData.getCellWidth(line, column);
+	}
+
+	@Override
+	public boolean isSimpleLine(int line) {
+		return fData.isSimpleLine(line);
+	}
+
+	@Override
 	public void setCluster(int line, int column, String cluster) {
 		fData.setCluster(line, column, cluster);
 		sendLineChangedToSnapshots(line);

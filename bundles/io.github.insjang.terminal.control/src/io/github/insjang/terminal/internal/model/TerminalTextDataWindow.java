@@ -291,6 +291,16 @@ public class TerminalTextDataWindow implements ITerminalTextData {
 	}
 
 	@Override
+	public int getCellWidth(int line, int column) {
+		return isInWindow(line) ? fData.getCellWidth(line - fWindowStartLine, column) : 1;
+	}
+
+	@Override
+	public boolean isSimpleLine(int line) {
+		return !isInWindow(line) || fData.isSimpleLine(line - fWindowStartLine);
+	}
+
+	@Override
 	public void setCluster(int line, int column, String cluster) {
 		if (isInWindow(line)) {
 			fData.setCluster(line - fWindowStartLine, column, cluster);

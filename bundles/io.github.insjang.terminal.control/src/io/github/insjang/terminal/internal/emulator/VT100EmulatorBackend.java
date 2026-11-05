@@ -16,9 +16,6 @@ package io.github.insjang.terminal.internal.emulator;
 
 import java.text.BreakIterator;
 import java.text.Normalizer;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -27,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.github.insjang.terminal.internal.model.Cells;
 import io.github.insjang.terminal.internal.model.CharWidth;
 import io.github.insjang.terminal.model.ITerminalTextData;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
@@ -103,6 +101,24 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	 * and next output requires line wrap */
 	private boolean fWrapPending;
 	private boolean fInsertMode;
+
+	/** a run of characters on its way into the cells, with their fillers */
+	private char[] fRun = new char[0];
+
+	/** finds where a grapheme cluster ends, by the rules of UAX #29 */
+	private final BreakIterator fGraphemes = BreakIterator.getCharacterInstance();
+
+	/** the first half of a surrogate pair that ended the last write, waiting for the second */
+	private char fHighSurrogate;
+
+	/** the cluster written last, which what comes next may still go onto */
+	private String fLastText;
+	/** its first cell, and how many lines above the cursor it is: 1 after an immediate wrap */
+	private int fLastColumn, fLastLinesBack;
+	/** where the cursor was right after it: anywhere else, nothing goes onto it */
+	private int fAfterLine, fAfterColumn;
+	private boolean fAfterPending;
+
 	private TerminalStyle fDefaultStyle;
 	private TerminalStyle fStyle;
 	int fLines;
@@ -297,6 +313,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			if (lines == fLines && cols == fColumns) {
 				return; // nothing to do
 			}
+			fLastText = null; // its place is no longer what it was
 			// relative cursor line
 			int cl = getCursorLine();
 			int cc = getCursorColumn();
@@ -356,23 +373,16 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		}
 		synchronized (fTerminal) {
 			int line = toAbsoluteLine(fCursorLine);
-			int n = charactersToInsert;
-			// A wide character is not left half on the line: one the insertion splits
-			// is blanked whole, and so is one whose second cell it pushes off the end.
-			if (isSecondCell(line, fCursorColumn)) {
-				eraseCells(line, fCursorColumn - 1, fCursorColumn + 1);
+			int col = fCursorColumn;
+			int n = Math.min(charactersToInsert, fColumns - col);
+			// A character is not left half on the line: one the insertion splits is
+			// erased whole, and so is one whose second cell it pushes off the end.
+			eraseWhole(line, col, col);
+			if (col + n < fColumns) {
+				eraseWhole(line, fColumns - n, fColumns - n);
 			}
-			if (fCursorColumn + n < fColumns && isSecondCell(line, fColumns - n)) {
-				eraseCells(line, fColumns - n - 1, fColumns - n);
-			}
-			Map<Integer, String> clusters = clustersIn(line, fCursorColumn, fColumns - n);
-			for (int col = fColumns - 1; col >= fCursorColumn + n; col--) {
-				char c = fTerminal.getChar(line, col - n);
-				TerminalStyle style = fTerminal.getStyle(line, col - n);
-				fTerminal.setChar(line, col, c, style);
-			}
-			eraseCells(line, fCursorColumn, Math.min(fCursorColumn + n, fColumns));
-			clusters.forEach((col, cluster) -> fTerminal.setCluster(line, col + n, cluster));
+			moveCells(line, col, fColumns - n, n);
+			eraseCells(line, col, col + n);
 		}
 	}
 
@@ -428,15 +438,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	}
 
 	private boolean isBlank(int line) {
-		char[] chars = fTerminal.getChars(line);
-		if (chars != null) {
-			for (char c : chars) {
-				if (c != '\000' && c != ' ') {
-					return false;
-				}
-			}
-		}
-		return true;
+		return Cells.text(fTerminal, line, 0, fColumns).isBlank();
 	}
 
 	@Override
@@ -536,8 +538,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	private void eraseLine(int line) {
 		fWrapPending = false; // also when there is nothing to fill
-		fWrappedJustNow = false;
-		fLead = null;
 		fTerminal.cleanLine(line);
 		if (eraseStyle() != null) {
 			eraseCells(line, 0, fColumns);
@@ -559,11 +559,11 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	 * background as the rest of the range.
 	 */
 	private void eraseWhole(int line, int from, int to) {
-		if (isSecondCell(line, from)) {
-			from--;
+		if (from < fColumns) {
+			from = Cells.start(fTerminal, line, from);
 		}
-		if (isSecondCell(line, to)) {
-			to++;
+		if (to < fColumns && fTerminal.getCellWidth(line, to) == 0) {
+			to++; // the range ends inside a character: all of it goes
 		}
 		eraseCells(line, from, to);
 	}
@@ -579,8 +579,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	 */
 	private void eraseCells(int line, int from, int to) {
 		fWrapPending = false; // erasing, inserting and deleting all forget a pending wrap
-		fWrappedJustNow = false;
-		fLead = null;
 		if (from < to) {
 			fTerminal.setChars(line, from, new char[to - from], eraseStyle());
 		}
@@ -627,22 +625,15 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		}
 		synchronized (fTerminal) {
 			int line = toAbsoluteLine(fCursorLine);
-			// deleting either half of a wide character leaves none of it
-			int end = Math.min(fCursorColumn + n, fColumns);
-			if (isSecondCell(line, fCursorColumn)) {
-				eraseCells(line, fCursorColumn - 1, fCursorColumn);
+			int col = fCursorColumn;
+			n = Math.min(n, fColumns - col);
+			// deleting either half of a character leaves none of it
+			eraseWhole(line, col, col);
+			if (col + n < fColumns) {
+				eraseWhole(line, col + n, col + n);
 			}
-			if (isSecondCell(line, end)) {
-				eraseCells(line, end, end + 1);
-			}
-			Map<Integer, String> clusters = clustersIn(line, fCursorColumn + n, fColumns);
-			for (int col = fCursorColumn + n; col < fColumns; col++) {
-				char c = fTerminal.getChar(line, col);
-				TerminalStyle style = fTerminal.getStyle(line, col);
-				fTerminal.setChar(line, col - n, c, style);
-			}
-			eraseCells(line, Math.max(fCursorColumn, fColumns - n), fColumns);
-			clusters.forEach((col, cluster) -> fTerminal.setCluster(line, col - n, cluster));
+			moveCells(line, col + n, fColumns, -n);
+			eraseCells(line, fColumns - n, fColumns);
 		}
 	}
 
@@ -697,34 +688,27 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	@Override
 	public void appendString(String buffer) {
 		synchronized (fTerminal) {
+			// a reader may hand over the two halves of a surrogate pair apart
+			if (fHighSurrogate != 0) {
+				buffer = fHighSurrogate + buffer;
+				fHighSurrogate = 0;
+			}
+			if (!buffer.isEmpty() && Character.isHighSurrogate(buffer.charAt(buffer.length() - 1))) {
+				fHighSurrogate = buffer.charAt(buffer.length() - 1);
+				buffer = buffer.substring(0, buffer.length() - 1);
+			}
+			buffer = withoutHidden(buffer);
 			char[] chars = buffer.toCharArray();
 			int line = toAbsoluteLine(fCursorLine);
-			// zero width code points a cluster starts with (a prefix sign, a stray mark),
-			// kept for the character after them in the cluster, which has cells to keep them
-			// in; the last write may have left some for this one, written where it ended
-			String lead = fLead != null && fLeadLine == line && fLeadColumn == fCursorColumn ? fLead : null;
-			fLead = null;
-			boolean[] starts = clusterStarts(lead != null ? lead : clusterBefore(line), buffer);
+			boolean[] starts = clusterStarts(lastCluster() >= 0 ? fLastText : "", buffer); //$NON-NLS-1$
 			int i = 0;
 			while (i < chars.length) {
 				int codePoint = Character.codePointAt(chars, i);
 				int charsUsed = Character.charCount(codePoint);
-				int width = CharWidth.of(codePoint);
-				// What goes on with the cluster before it goes onto that, even one on the
-				// last cell with a wrap pending: it belongs there, not on the next line.
-				if (starts[i]) {
-					lead = null;
-				}
-				if (!starts[i] && lead == null && continuesCluster(line, codePoint)) {
-					line = toAbsoluteLine(fCursorLine); // a cluster grown wide may have wrapped
-					i += charsUsed;
-					continue;
-				}
-				if (width == 0) {
-					// no cell of its own, and none before it to go onto
-					if (lead == null || lead.length() < MAX_CLUSTER) {
-						lead = (lead == null ? "" : lead) + Character.toString(codePoint); //$NON-NLS-1$
-					}
+				// What goes on with the cluster written last goes onto it, even when that is
+				// on the last cell with a wrap pending: it belongs there, not on the next line.
+				if ((!starts[i] || takesNoCell(codePoint)) && lastCluster() >= 0) {
+					line = goOn(Character.toString(codePoint));
 					i += charsUsed;
 					continue;
 				}
@@ -732,83 +716,381 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 					line = doLineWrap();
 				}
 				int room = fColumns - fCursorColumn;
-				int col;
-				int n = narrowRun(chars, starts, i, room);
+				int col = fCursorColumn;
+				// a run of characters of the BMP that are each a cluster of their own goes
+				// in at once: most text is nothing else
+				if (fRun.length < room) {
+					fRun = new char[room];
+				}
+				int n = 0;
+				int cells = 0;
+				int width = 0;
+				while (i + n < chars.length && starts[i + n] && !Character.isSurrogate(chars[i + n])) {
+					width = CharWidth.of(chars[i + n]);
+					if (width == 0 || cells + width > room) {
+						break;
+					}
+					fRun[cells++] = chars[i + n++];
+					if (width == 2) {
+						fRun[cells++] = '\000'; // the filler of a wide character
+					}
+				}
 				if (n > 0) {
 					if (fInsertMode) {
 						// room on the line the run goes to, which a wrap may have changed
-						insertCharacters(n);
+						insertCharacters(cells);
 					}
-					breakWideChar(line, fCursorColumn);
-					breakWideChar(line, fCursorColumn + n - 1);
-					fTerminal.setChars(line, fCursorColumn, chars, i, n, fStyle);
-					col = fCursorColumn + n;
+					breakAround(line, col, col + cells);
+					fTerminal.setChars(line, col, fRun, 0, cells, fStyle);
+					link(line, col, col + cells);
 					i += n;
-				} else {
-					width = CharWidth.cells(codePoint);
-					if (width > room) {
-						if (fCursorColumn > 0) {
-							// a wide character is never split across the right margin,
-							// and the cell it leaves unused there is erased
-							eraseCharacters(room);
-							line = doLineWrap();
-							continue;
-						}
-						// terminal narrower than the character itself
-						width = room;
-					}
-					if (fInsertMode) {
-						insertCharacters(width); // room in cells, not characters
-					}
-					breakWideChar(line, fCursorColumn);
-					breakWideChar(line, fCursorColumn + width - 1);
-					if (charsUsed > width) {
-						// a one column terminal: the two chars of a surrogate pair cannot share its cell
-						fTerminal.setChar(line, fCursorColumn, '\uFFFD', fStyle);
-					} else if (charsUsed == 2) {
-						fTerminal.setChars(line, fCursorColumn, chars, i, 2, fStyle);
-					} else {
-						fTerminal.setChar(line, fCursorColumn, chars[i], fStyle);
-						if (width == 2) {
-							fTerminal.setChar(line, fCursorColumn + 1, '\000', fStyle);
-						}
-					}
-					if (lead != null && CharWidth.clusterCells(lead + Character.toString(codePoint)) == width) {
-						fTerminal.setCluster(line, fCursorColumn, lead + Character.toString(codePoint));
-					}
-					lead = null;
-					col = fCursorColumn + width;
-					i += charsUsed;
+					char last = chars[i - 1];
+					line = written(col + cells - CharWidth.of(last), String.valueOf(last), col + cells);
+					continue;
 				}
-				if (fLink != null) {
-					for (int c = fCursorColumn; c < col; c++) {
-						fTerminal.setLink(line, c, fLink);
+				String text = Character.toString(codePoint);
+				cells = CharWidth.clusterCells(text);
+				if (cells > room) {
+					if (col > 0) {
+						// a wide character is never split across the right margin,
+						// and the cell it leaves unused there is erased
+						eraseWhole(line, col, fColumns);
+						line = doLineWrap();
+						continue;
 					}
+					cells = room; // a screen narrower than the character
 				}
-				line = advance(col);
-			}
-			if (lead != null) {
-				fLead = lead;
-				fLeadLine = line;
-				fLeadColumn = fCursorColumn;
+				if (fInsertMode) {
+					insertCharacters(cells); // room in cells, not characters
+				}
+				put(line, col, text, cells, fStyle);
+				i += charsUsed;
+				line = written(col, text, col + cells);
 			}
 		}
 	}
 
-	/** Longest cluster kept, in chars; the longest emoji sequences are about 15. */
+	/**
+	 * Where a grapheme cluster starts in the text, by the Unicode rules (UAX #29),
+	 * the cluster written last going first as the context the text goes on from.
+	 *
+	 * @return for each char of the text, whether a cluster starts there
+	 */
+	private boolean[] clusterStarts(String before, String text) {
+		boolean[] starts = new boolean[text.length()];
+		int simple = before.isEmpty() || startsAlways(before.charAt(before.length() - 1)) ? 0 : -1;
+		while (simple >= 0 && simple < starts.length && startsAlways(text.charAt(simple))) {
+			starts[simple++] = true;
+		}
+		if (simple == starts.length) {
+			return starts; // most text is nothing else
+		}
+		fGraphemes.setText(before + text);
+		int b = fGraphemes.following(Math.max(before.length() - 1, 0));
+		for (; b != BreakIterator.DONE; b = fGraphemes.next()) {
+			if (b >= before.length() && b - before.length() < starts.length) {
+				starts[b - before.length()] = true;
+			}
+		}
+		if (before.isEmpty() && starts.length > 0) {
+			starts[0] = true;
+		}
+		return starts;
+	}
+
+	/** the longest cluster kept, in chars: the longest emoji sequence is 15 */
 	private static final int MAX_CLUSTER = 32;
 
 	/**
-	 * Zero width code points left over from the last write, and where it ended;
-	 * any cursor move or erase forgets them.
+	 * The text without what is kept out of the cells: control characters, format
+	 * characters no cluster needs (a zero width space, bidirectional marks and
+	 * overrides), and what only hides text: tag characters outside the tag
+	 * sequence of a flag, and a variation selector that does not follow a
+	 * character it could vary. None is drawn, and in text copied from the
+	 * terminal it could make a command read differently from how it runs, or
+	 * carry text no one saw. Taken out before the clusters are found, so that
+	 * where the text was split into writes makes no difference.
 	 */
-	private String fLead;
-	private int fLeadLine, fLeadColumn;
+	private String withoutHidden(String text) {
+		int i = 0;
+		while (i < text.length() && CharWidth.of(text.charAt(i)) != 0 && !Character.isSurrogate(text.charAt(i))) {
+			i++;
+		}
+		if (i == text.length()) {
+			return text; // nothing that could be: most text
+		}
+		StringBuilder kept = new StringBuilder(text.length()).append(text, 0, i);
+		String before = i > 0 ? text.substring(0, i) : lastCluster() >= 0 ? fLastText : ""; //$NON-NLS-1$
+		int last = before.isEmpty() ? -1 : before.codePointBefore(before.length());
+		int tags = 0; // tag characters of a flag so far
+		for (int k = before.length(); k > 0 && isTagSpec(before.codePointBefore(k)); k -= 2) {
+			tags++;
+		}
+		for (; i < text.length(); i += Character.charCount(text.codePointAt(i))) {
+			int codePoint = text.codePointAt(i);
+			if (!isHidden(codePoint, last, tags)) {
+				kept.appendCodePoint(codePoint);
+				tags = isTagSpec(codePoint) ? tags + 1 : 0;
+				last = codePoint;
+			}
+		}
+		return kept.toString();
+	}
+
 	/**
-	 * What was just written ended on the last cell and the cursor moved on at once
-	 * (immediate wrap): the character before the cursor is at the end of the line above.
+	 * @param last the code point kept before it
+	 * @param tags how many tag characters of a flag are right before it
+	 * @return whether the code point is kept out of the cells
 	 */
-	private boolean fWrappedJustNow;
+	private boolean isHidden(int codePoint, int last, int tags) {
+		int type = Character.getType(codePoint);
+		if (type == Character.CONTROL) {
+			return true;
+		}
+		if (isSelector(codePoint)) {
+			return last < 0 || CharWidth.cells(last) == 0; // it varies or joins the character before it
+		}
+		if (type != Character.FORMAT || codePoint == 0x200D || codePoint == 0x200C) {
+			return false;
+		}
+		if (isTagSpec(codePoint)) {
+			// a flag spelled with tags (UTS #51): the black flag, up to six letters or digits, a cancel tag
+			return !(last == 0x1F3F4 || tags > 0) || tags >= 6;
+		}
+		if (codePoint == 0xE007F) {
+			return tags == 0;
+		}
+		// a prefix sign goes with what follows it, but one is enough
+		String letter = "a"; //$NON-NLS-1$
+		return breaks(Character.toString(codePoint), letter)
+				|| last >= 0 && Character.getType(last) == Character.FORMAT && !breaks(Character.toString(last), letter);
+	}
+
+	/**
+	 * @return whether the code point is invisible and only says how to show the
+	 *         character before it: a variation selector, the combining grapheme
+	 *         joiner, a Mongolian free variation selector
+	 */
+	private static boolean isSelector(int codePoint) {
+		return codePoint >= 0xFE00 && codePoint <= 0xFE0F || codePoint >= 0xE0100 && codePoint <= 0xE01EF
+				|| codePoint == 0x034F || codePoint >= 0x180B && codePoint <= 0x180F;
+	}
+
+	/** @return whether the code point is a tag letter or digit, as in the tag sequence of a flag */
+	private static boolean isTagSpec(int codePoint) {
+		return codePoint >= 0xE0030 && codePoint <= 0xE0039 || codePoint >= 0xE0061 && codePoint <= 0xE007A;
+	}
+
+	/** per char of the BMP: 0 not asked yet, 1 a cluster of its own next to any other such, 2 not */
+	private static final byte[] ALONE = new byte[0x10000];
+
+	/**
+	 * Whether no rule of UAX #29 can join the char to the one before it or after it,
+	 * when that one is such a char too: for a run of them, every char starts a
+	 * cluster and the rules need not be run. Asked once of the rules themselves:
+	 * nothing joins it after a letter or before one, after a Hangul syllable (a
+	 * conjoining vowel or final would) or before one (a leading consonant would).
+	 * Half of a surrogate pair and a control character are never such a char.
+	 */
+	private boolean startsAlways(int c) {
+		if (ALONE[c] == 0) {
+			String one = String.valueOf((char) c);
+			String letter = "a"; //$NON-NLS-1$
+			String syllable = "\uac00"; //$NON-NLS-1$
+			boolean alone = !Character.isSurrogate((char) c) && Character.getType(c) != Character.CONTROL
+					&& Character.getType(c) != Character.FORMAT && breaks(letter, one) && breaks(one, letter)
+					&& breaks(syllable, one) && breaks(one, syllable);
+			ALONE[c] = (byte) (alone ? 1 : 2);
+		}
+		return ALONE[c] == 1;
+	}
+
+	private boolean breaks(String first, String second) {
+		fGraphemes.setText(first + second);
+		return fGraphemes.isBoundary(first.length());
+	}
+
+	/**
+	 * A cluster that starts with a code point that takes no cell, such as a zero
+	 * width space or a mark the rules leave on its own, goes onto the cluster
+	 * before it, which has a cell to keep it in. A prefix sign does not: it goes
+	 * with what follows it. Decided by the code point alone, so that it does not
+	 * matter where the text was split into writes.
+	 */
+	private boolean takesNoCell(int codePoint) {
+		if (CharWidth.cells(codePoint) > 0) {
+			return false;
+		}
+		String prefix = Character.toString(codePoint);
+		fGraphemes.setText(prefix + "a"); //$NON-NLS-1$
+		return fGraphemes.isBoundary(prefix.length());
+	}
+
+	/**
+	 * @return the line of the cluster written last, when what comes next can still go
+	 *         onto it: the cursor has not moved since, and the cells still hold it; -1
+	 *         otherwise
+	 */
+	private int lastCluster() {
+		if (fLastText == null || fCursorLine != fAfterLine || fCursorColumn != fAfterColumn
+				|| fWrapPending != fAfterPending || fLastColumn >= fColumns) {
+			return -1;
+		}
+		int line = toAbsoluteLine(fCursorLine) - fLastLinesBack;
+		return line >= 0 && fLastText.equals(Cells.text(fTerminal, line, fLastColumn)) ? line : -1;
+	}
+
+	/**
+	 * Moves the cursor past a character just written, whose cells end before
+	 * <code>end</code>, and remembers it for what may still go onto it.
+	 *
+	 * @return the line the cursor is now on
+	 */
+	private int written(int col, String text, int end) {
+		int line = advance(end);
+		fLastText = text;
+		fLastColumn = col;
+		fLastLinesBack = end == fColumns && !fVT100LineWrapping ? 1 : 0;
+		fAfterLine = fCursorLine;
+		fAfterColumn = fCursorColumn;
+		fAfterPending = fWrapPending;
+		return line;
+	}
+
+	/**
+	 * A grapheme cluster is what a reader takes for one character, however many code
+	 * points it runs to: a letter with its accents, a Hangul syllable sent as jamo,
+	 * an emoji with a skin tone or joined to others, a flag. The code point goes on
+	 * with the cluster written last. The cluster takes the cells its code points
+	 * would, but at least one and no more than two, summed as Windows Terminal sums
+	 * them: a mark takes none, VS16 (emoji presentation) makes it wide. Grown wide,
+	 * it takes the cell after it, or moves whole to the next line from the last one.
+	 *
+	 * @return the line the cursor is on
+	 */
+	private int goOn(String codePoint) {
+		if (fLastText.length() + codePoint.length() > MAX_CLUSTER) {
+			return toAbsoluteLine(fCursorLine); // a flood of marks must not grow one cell without bound
+		}
+		int line = lastCluster();
+		int col = fLastColumn;
+		String text = fLastText + codePoint;
+		int cells = fTerminal.getCellWidth(line, col);
+		TerminalStyle style = fTerminal.getStyle(line, col);
+		if (CharWidth.clusterCells(text) <= cells || fColumns < 2) {
+			put(line, col, text, cells, style);
+			fLastText = text; // in the same cells, with the cursor where it was
+			return toAbsoluteLine(fCursorLine);
+		}
+		if (col + 2 > fColumns) {
+			// on the last cell: a wide character is never split across the margin, so
+			// the cluster moves whole to the next line, the cell it leaves erased
+			boolean pending = fLastLinesBack == 0;
+			eraseCells(line, col, col + 1);
+			line = pending ? doLineWrap() : toAbsoluteLine(fCursorLine);
+			col = 0;
+			if (fInsertMode) {
+				insertCharacters(2);
+			}
+		} else if (fInsertMode) {
+			insertCharacters(1); // the second cell is room made, not a cell taken from what follows
+		}
+		put(line, col, text, 2, style);
+		return written(col, text, col + 2);
+	}
+
+	/**
+	 * Writes a character, which may be a whole grapheme cluster, into its cells from
+	 * <code>col</code>, the one way characters get into cells. The cell gets the
+	 * character that is drawn: the first that takes a cell (not a prefix sign before
+	 * it), composed with its marks (NFC) where they have a composed form; a second
+	 * cell gets a filler, unless the character is a surrogate pair. The cluster, as
+	 * the program wrote it, is kept beside the line whenever it is more than that.
+	 * A character the write cuts in half is blanked whole.
+	 */
+	private void put(int line, int col, String text, int cells, TerminalStyle style) {
+		breakAround(line, col, col + cells);
+		int base = ' ';
+		String composed = text.length() > Character.charCount(text.codePointAt(0))
+				? Normalizer.normalize(text, Normalizer.Form.NFC)
+				: text;
+		for (int i = 0; i < composed.length(); i += Character.charCount(composed.codePointAt(i))) {
+			base = composed.codePointAt(i);
+			if (CharWidth.cells(base) > 0) {
+				break;
+			}
+			base = ' ';
+		}
+		boolean lone = base >= Character.MIN_SURROGATE && base <= Character.MAX_SURROGATE; // half a pair
+		char[] chars = lone || Character.charCount(base) > cells ? new char[] { '\uFFFD' } : Character.toChars(base);
+		String drawn = new String(chars);
+		if (cells == 2 && chars.length == 1) {
+			chars = new char[] { chars[0], '\000' }; // the filler, written with it
+		}
+		fTerminal.setChars(line, col, chars, 0, chars.length, style);
+		if (!text.equals(drawn)) {
+			fTerminal.setCluster(line, col, text);
+		}
+		link(line, col, col + cells);
+	}
+
+	/** The hyperlink a program set (OSC 8) goes on the cells it writes. */
+	private void link(int line, int from, int to) {
+		for (int col = from; fLink != null && col < to; col++) {
+			fTerminal.setLink(line, col, fLink);
+		}
+	}
+
+	/**
+	 * A character that the cells from <code>from</code> to <code>to</code> cut in
+	 * half is blanked whole, as a terminal is expected to do: half of it cannot be
+	 * shown.
+	 */
+	private void breakAround(int line, int from, int to) {
+		int first = Cells.start(fTerminal, line, from);
+		int last = Cells.start(fTerminal, line, to - 1);
+		int end = Math.min(last + fTerminal.getCellWidth(line, last), fColumns);
+		for (int col = first; col < from; col++) {
+			blank(line, col);
+		}
+		for (int col = to; col < end; col++) {
+			blank(line, col);
+		}
+	}
+
+	/**
+	 * Moves the characters in the cells from <code>from</code> to <code>to</code> by
+	 * <code>shift</code> cells, each written whole, with its cluster.
+	 */
+	private void moveCells(int line, int from, int to, int shift) {
+		int n = to - from;
+		if (n <= 0) {
+			return;
+		}
+		// read all first: where they go may be where they were
+		char[] chars = new char[n];
+		TerminalStyle[] styles = new TerminalStyle[n];
+		String[] clusters = new String[n];
+		int[] widths = new int[n];
+		for (int i = 0; i < n; i++) {
+			chars[i] = fTerminal.getChar(line, from + i);
+			styles[i] = fTerminal.getStyle(line, from + i);
+			clusters[i] = fTerminal.getCluster(line, from + i);
+			widths[i] = fTerminal.getCellWidth(line, from + i);
+		}
+		for (int i = 0; i < n;) {
+			int width = i + widths[i] <= n ? Math.max(widths[i], 1) : 1;
+			fTerminal.setChars(line, from + shift + i, chars, i, width, styles[i]);
+			if (clusters[i] != null) {
+				fTerminal.setCluster(line, from + shift + i, clusters[i]);
+			}
+			i += width;
+		}
+	}
+
+	private void blank(int line, int col) {
+		fTerminal.setChar(line, col, ' ', fTerminal.getStyle(line, col));
+	}
 
 	/**
 	 * Moves the cursor past what was just written, which ends before <code>col</code>.
@@ -822,9 +1104,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				setCursorColumn(col - 1);
 				fWrapPending = true;
 			} else {
-				int line = doLineWrap();
-				fWrappedJustNow = true;
-				return line;
+				return doLineWrap();
 			}
 		} else {
 			// Writing that stops short of the margin says the line ends here.
@@ -835,216 +1115,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			setCursorColumn(col);
 		}
 		return toAbsoluteLine(fCursorLine);
-	}
-
-	/** finds where a grapheme cluster ends, by the rules of UAX #29 */
-	private final BreakIterator fGraphemes = BreakIterator.getCharacterInstance();
-
-	/**
-	 * Where a grapheme cluster starts in the text, by the Unicode rules (UAX #29),
-	 * the cluster before the cursor going first as the context the text goes on
-	 * from.
-	 *
-	 * @return for each char of the text, whether a cluster starts there
-	 */
-	private boolean[] clusterStarts(String before, String text) {
-		boolean[] starts = new boolean[text.length()];
-		if (before.isEmpty() || before.charAt(before.length() - 1) < 0x300) {
-			if (text.chars().allMatch(c -> c < 0x300)) {
-				// no rule joins two of these, and most text is made of nothing else
-				Arrays.fill(starts, true);
-				return starts;
-			}
-		}
-		fGraphemes.setText(before + text);
-		for (int b = fGraphemes.following(Math.max(before.length() - 1, 0)); b != BreakIterator.DONE; b = fGraphemes.next()) {
-			if (b >= before.length() && b - before.length() < starts.length) {
-				starts[b - before.length()] = true;
-			}
-		}
-		if (before.isEmpty() && starts.length > 0) {
-			starts[0] = true;
-		}
-		return starts;
-	}
-
-	/** @return the line of the character before the cursor: the one above right after an immediate wrap */
-	private int lineBefore(int line) {
-		return fWrappedJustNow && fCursorLine > 0 ? toAbsoluteLine(fCursorLine - 1) : line;
-	}
-
-	/** @return the first cell of the character before the cursor, on {@link #lineBefore(int)}, or -1 */
-	private int columnBefore(int line) {
-		int col = (fWrapPending || fWrappedJustNow && fCursorLine > 0 ? fColumns : fCursorColumn) - 1;
-		return isSecondCell(lineBefore(line), col) ? col - 1 : col;
-	}
-
-	/** @return the grapheme cluster in the cells before the cursor, or "" when nothing was written there */
-	private String clusterBefore(int line) {
-		int col = columnBefore(line);
-		line = lineBefore(line);
-		if (col < 0) {
-			return ""; //$NON-NLS-1$
-		}
-		char first = fTerminal.getChar(line, col);
-		String cluster = fTerminal.getCluster(line, col);
-		if (cluster != null) {
-			return cluster;
-		}
-		if (Character.isHighSurrogate(first)) {
-			return new String(new char[] { first, fTerminal.getChar(line, col + 1) });
-		}
-		return first == '\000' ? "" : String.valueOf(first); //$NON-NLS-1$
-	}
-
-	/**
-	 * A grapheme cluster is what a reader takes for one character, however many code
-	 * points it runs to: a letter with its accents, a Hangul syllable sent as jamo,
-	 * an emoji with a skin tone or joined to others, a flag. Such a cluster takes
-	 * the cells its code points would, but no more than two, summed as Windows
-	 * Terminal sums them: a mark takes none, and VS16 (emoji presentation) makes it wide. A
-	 * code point that takes cells of its own and leaves that count as it is, such
-	 * as an Indic vowel sign, is simply written into them, where it is drawn; not a
-	 * part of an emoji, though, since a selector or a joiner after it may still
-	 * change the count. The rest goes onto the cluster: its cells keep the first
-	 * character, which is what gets drawn, and the whole cluster is kept beside
-	 * them for copying, as the program wrote it. The character drawn is composed
-	 * with the marks (NFC) where they have a composed form, which is how an
-	 * accent, Hangul jamo or a Japanese voicing mark show in one cell.
-	 *
-	 * @param codePoint one that goes on with the cluster before the cursor, by UAX #29
-	 * @return whether it went onto that cluster
-	 */
-	private boolean continuesCluster(int line, int codePoint) {
-		String cluster = clusterBefore(line);
-		if (cluster.isEmpty()) {
-			return false;
-		}
-		if (cluster.length() >= MAX_CLUSTER) {
-			// a flood of marks must not grow one cell without bound: what takes no cell is dropped
-			return CharWidth.cells(codePoint) == 0;
-		}
-		int col = columnBefore(line);
-		int before = lineBefore(line);
-		String joined = cluster + Character.toString(codePoint);
-		int cells = CharWidth.clusterCells(cluster);
-		int grown = CharWidth.clusterCells(joined);
-		if (CharWidth.cells(codePoint) > 0 && grown == cells + CharWidth.cells(codePoint)
-				&& !Character.isExtendedPictographic(codePoint) && !Character.isEmojiComponent(codePoint)) {
-			return false; // written into cells of its own, it is drawn, and the columns come out the same
-		}
-		if (grown > cells && fColumns < 2) {
-			return false; // no second cell to grow into
-		}
-		TerminalStyle style = fTerminal.getStyle(before, col);
-		// the cell gets what is drawn: the character the marks compose with where they
-		// have a composed form (NFC); the cluster keeps what the program wrote
-		int base = Normalizer.normalize(joined, Normalizer.Form.NFC).codePointAt(0);
-		if (grown == cells) {
-			fTerminal.setChars(before, col, Character.toChars(base), 0, Character.charCount(base), style);
-			fTerminal.setCluster(before, col, joined);
-			return true;
-		}
-		if (fWrapPending || before != line) {
-			// on the last cell: a wide character is never split across the margin, so
-			// the cluster moves whole to the next line, the cell it leaves erased
-			boolean wrap = fWrapPending;
-			eraseCells(before, col, col + 1);
-			if (wrap) {
-				line = doLineWrap();
-			}
-			col = 0;
-			if (fInsertMode) {
-				insertCharacters(2);
-			}
-			breakWideChar(line, col);
-		} else if (fInsertMode) {
-			insertCharacters(1); // the second cell is room made, not a cell taken from what follows
-		}
-		breakWideChar(line, col + 1);
-		fTerminal.setChar(line, col + 1, '\000', style);
-		fTerminal.setChars(line, col, Character.toChars(base), 0, Character.charCount(base), style);
-		fTerminal.setCluster(line, col, joined);
-		// moved past only once it is all written: a wrap here may scroll the line away
-		advance(col + 2);
-		return true;
-	}
-
-	/**
-	 * A wide character owns two cells. Overwriting either one leaves the other
-	 * stranded: a filler with nothing in front of it, or a glyph that now spills
-	 * over whatever was written next to it. Blanking the partner before the write
-	 * goes in keeps the line honest, which is what a terminal is expected to do.
-	 */
-	private void breakWideChar(int line, int col) {
-		if (col < 0 || col >= fColumns) {
-			return;
-		}
-		char c = fTerminal.getChar(line, col);
-		if (Character.isLowSurrogate(c)) {
-			// second cell of a character beyond the BMP
-			if (col > 0 && Character.isHighSurrogate(fTerminal.getChar(line, col - 1))) {
-				blank(line, col - 1);
-			}
-		} else if (Character.isHighSurrogate(c)) {
-			if (col + 1 < fColumns && Character.isLowSurrogate(fTerminal.getChar(line, col + 1))) {
-				blank(line, col + 1);
-			}
-		} else if (c == '\000') {
-			if (col > 0 && (CharWidth.of(fTerminal.getChar(line, col - 1)) == 2 || isWideCluster(line, col - 1))) {
-				blank(line, col - 1);
-			}
-		} else if ((CharWidth.of(c) == 2 || isWideCluster(line, col)) && col + 1 < fColumns
-				&& fTerminal.getChar(line, col + 1) == '\000') {
-			blank(line, col + 1);
-		}
-	}
-
-	/**
-	 * @return whether the cell is the second of a wide character's two cells
-	 */
-	private boolean isSecondCell(int line, int col) {
-		return col > 0 && col < fColumns && (CharWidth.isSecondCell(
-				String.valueOf(new char[] { fTerminal.getChar(line, col - 1), fTerminal.getChar(line, col) }), 1)
-				|| isWideCluster(line, col - 1));
-	}
-
-	/** @return whether a cluster grown wide, such as a narrow character with VS16, starts at the cell */
-	private boolean isWideCluster(int line, int col) {
-		String cluster = fTerminal.getCluster(line, col);
-		return cluster != null && CharWidth.clusterCells(cluster) == 2;
-	}
-
-	/** The clusters starting in the cells from <code>from</code> to <code>to</code>, which a shift is about to move. */
-	private Map<Integer, String> clustersIn(int line, int from, int to) {
-		Map<Integer, String> clusters = new HashMap<>();
-		for (int col = from; col < to; col++) {
-			String cluster = fTerminal.getCluster(line, col);
-			if (cluster != null) {
-				clusters.put(col, cluster);
-			}
-		}
-		return clusters;
-	}
-
-	private void blank(int line, int col) {
-		fTerminal.setChar(line, col, ' ', fTerminal.getStyle(line, col));
-	}
-
-	/**
-	 * Length of the run of characters starting at <code>offset</code> that each
-	 * occupy exactly one cell and none of which can go on with a cluster before it,
-	 * so that they can be copied in one block. Capped at
-	 * <code>max</code> cells. Zero when the run does not start with such a
-	 * character, which sends the caller down the code point by code point path.
-	 */
-	private static int narrowRun(char[] chars, boolean[] starts, int offset, int max) {
-		int n = 0;
-		while (n < max && offset + n < chars.length && starts[offset + n] && !Character.isSurrogate(chars[offset + n])
-				&& CharWidth.of(chars[offset + n]) == 1) {
-			n++;
-		}
-		return n;
 	}
 
 	private int doLineWrap() {
@@ -1062,8 +1132,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	 */
 	private void doNewline() {
 		fWrapPending = false; // DEC STD 070: any move of the cursor forgets a pending wrap
-		fWrappedJustNow = false;
-		fLead = null;
 		if (fCursorLine == fScrollRegion.getBottomLine()) {
 			scrollUp(1);
 		} else if (fCursorLine + 1 >= fLines) {
@@ -1086,8 +1154,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	private void doReverseLineFeed() {
 		fWrapPending = false;
-		fWrappedJustNow = false;
-		fLead = null;
 		if (fCursorLine == fScrollRegion.getTopLine()) {
 			scrollDown(1);
 		} else {
@@ -1134,8 +1200,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			}
 			fCursorColumn = targetColumn;
 			fWrapPending = false;
-			fWrappedJustNow = false;
-			fLead = null;
 			// We make the assumption that nobody is changing the
 			// terminal cursor except this class!
 			// This assumption gives a huge performance improvement
@@ -1153,8 +1217,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			}
 			fCursorLine = targetLine;
 			fWrapPending = false;
-			fWrappedJustNow = false;
-			fLead = null;
 			// We make the assumption that nobody is changing the
 			// terminal cursor except this class!
 			// This assumption gives a huge performance improvement

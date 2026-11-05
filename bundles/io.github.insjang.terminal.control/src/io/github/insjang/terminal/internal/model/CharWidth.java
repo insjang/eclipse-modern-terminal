@@ -62,8 +62,20 @@ public final class CharWidth {
 			0x1FAEF, 0x1FAF8, 0x20000, 0x2FFFD, 0x30000, 0x3FFFD
 	};
 
+	/** the width of every character of the BMP, looked up rather than worked out for each one written */
+	private static final byte[] BMP = new byte[0x10000];
+	static {
+		for (int c = 0; c < BMP.length; c++) {
+			BMP[c] = (byte) compute(c);
+		}
+	}
+
 	/** @return 0 for combining and non-printing, 2 for East Asian W/F, else 1 */
 	public static int of(int codePoint) {
+		return codePoint < BMP.length ? BMP[codePoint] : compute(codePoint);
+	}
+
+	private static int compute(int codePoint) {
 		if (codePoint < 0x0080) {
 			return codePoint < 0x20 || codePoint == 0x7F ? 0 : 1;
 		}
@@ -97,34 +109,6 @@ public final class CharWidth {
 	/** @return the total display width of {@code s} */
 	public static int ofString(String s) {
 		return s.codePoints().map(CharWidth::of).sum();
-	}
-
-	/**
-	 * A {@code '\000'} means one of two things in a line of cells: the filler that
-	 * a wide character puts in the cell it also covers, which carries no text of
-	 * its own, or a cell that was never written or has been erased, which reads as
-	 * a space. Only a wide character of the BMP leaves a filler: one beyond the
-	 * BMP already covers its two cells with its two surrogates, so a null after it
-	 * is an ordinary empty cell.
-	 *
-	 * @return whether the cell at {@code index} is the filler of the character
-	 *         before it
-	 */
-	public static boolean isFiller(CharSequence text, int index) {
-		if (index == 0 || text.charAt(index) != '\000') {
-			return false;
-		}
-		char before = text.charAt(index - 1);
-		return !Character.isSurrogate(before) && of(before) == 2;
-	}
-
-	/**
-	 * @return whether the cell at {@code index} is the second of the two cells of
-	 *         a wide character: its filler, or the low half of a surrogate pair
-	 */
-	public static boolean isSecondCell(CharSequence text, int index) {
-		return isFiller(text, index) || index > 0 && Character.isLowSurrogate(text.charAt(index))
-				&& Character.isHighSurrogate(text.charAt(index - 1));
 	}
 
 	private static boolean isZeroWidth(int codePoint) {

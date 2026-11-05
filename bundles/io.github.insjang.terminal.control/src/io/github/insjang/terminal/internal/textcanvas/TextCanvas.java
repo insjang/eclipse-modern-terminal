@@ -48,7 +48,6 @@ import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Caret;
 import org.eclipse.swt.widgets.Composite;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
-import io.github.insjang.terminal.internal.model.CharWidth;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
 import io.github.insjang.terminal.model.ITerminalTextDataSnapshot;
 import io.github.insjang.terminal.model.TerminalColor;
@@ -757,20 +756,8 @@ public class TextCanvas extends GridCanvas {
 	 */
 	private boolean isFillerCell(int line, int col) {
 		ITerminalTextDataReadOnly text = fCellCanvasModel.getTerminalText();
-		if (col <= 0 || col >= text.getWidth() || line < 0 || line >= text.getHeight()) {
-			return false;
-		}
-		char c = text.getChar(line, col);
-		char before = text.getChar(line, col - 1);
-		// the filler of a wide character of the BMP, or the low half of a surrogate
-		// pair, whose high half sits in the cell before
-		if (Character.isLowSurrogate(c)) {
-			return Character.isHighSurrogate(before);
-		}
-		// or the second cell of a cluster grown wide, such as a heart with VS16
-		String cluster = text.getCluster(line, col - 1);
-		return c == '\000' && (!Character.isSurrogate(before) && CharWidth.of(before) == 2
-				|| cluster != null && CharWidth.clusterCells(cluster) == 2);
+		return col > 0 && col < text.getWidth() && line >= 0 && line < text.getHeight()
+				&& text.getCellWidth(line, col) == 0;
 	}
 
 	/** @return the default background of the cells, what the terminal is drawn on */

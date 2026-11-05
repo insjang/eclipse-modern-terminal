@@ -93,8 +93,8 @@ public interface ITerminalTextDataReadOnly {
 	/**
 	 * A grapheme cluster is drawn in one or two cells however many characters make
 	 * it up: a letter with a mark that has no composed form, an emoji joined to
-	 * others, or given a skin tone or a presentation selector. The cells hold its
-	 * first character; this is the whole of it.
+	 * others, or given a skin tone or a presentation selector. The cells hold the
+	 * character drawn for it; this is the whole of it, as the program wrote it.
 	 *
 	 * @param line
 	 * @param column the first of its cells
@@ -103,6 +103,32 @@ public interface ITerminalTextDataReadOnly {
 	 */
 	default String getCluster(int line, int column) {
 		return null;
+	}
+
+	/**
+	 * How the characters of a line lie in its cells: a character beyond the BMP, a
+	 * wide one and a grapheme cluster may take two. Set when the character is
+	 * written, together with what fills its second cell.
+	 *
+	 * @param line
+	 * @param column
+	 * @return 2 or 1, the cells the character starting in the cell takes; 0 when the
+	 *         cell is the second of a character starting in the one before
+	 * @since 1.2
+	 */
+	default int getCellWidth(int line, int column) {
+		return 1;
+	}
+
+	/**
+	 * @param line
+	 * @return whether every character on the line is one char in one cell, with no
+	 *         grapheme cluster kept beside it: then the chars are the text as it is
+	 *         drawn. False when not known.
+	 * @since 1.2
+	 */
+	default boolean isSimpleLine(int line) {
+		return false;
 	}
 
 	/** Shell integration (OSC 133): a prompt starts on the line. @since 1.2 */

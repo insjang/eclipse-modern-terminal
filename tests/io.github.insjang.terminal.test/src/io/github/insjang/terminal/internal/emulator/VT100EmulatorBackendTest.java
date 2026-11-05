@@ -1901,11 +1901,11 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("\ud83c\uddf0\ud83c\uddf7\ud83c\uddfa|");
 		assertEquals("\ud83c\uddf0\ud83c\uddf7", term.getCluster(2, 0));
 		assertEquals('|', term.getChar(2, 4));
-		// an Indic vowel sign keeps a cell of its own, where it is drawn: the columns are the same
+		// an Indic vowel sign goes with its consonant: one cluster, drawn whole over two cells
 		vt100.setCursor(3, 0);
 		vt100.appendString("\u0915\u093f|");
-		assertNull(term.getCluster(3, 0));
-		assertEquals("\u0915\u093f|", new String(term.getChars(3), 0, 3));
+		assertEquals("\u0915\u093f", term.getCluster(3, 0));
+		assertEquals('|', term.getChar(3, 2));
 		// a selector goes onto the character just written, not onto a cluster before it
 		vt100.setCursor(4, 0);
 		vt100.appendString("q\u0301x\ufe0f|");
@@ -1930,11 +1930,12 @@ public class VT100EmulatorBackendTest {
 		assertEquals("\u0600\u4e2d", term.getCluster(3, 11));
 		assertEquals('\u4e2d', term.getChar(3, 11));
 		assertEquals('|', term.getChar(3, 13));
-		// a terminal one column wide has no second cell for a heart to grow into
+		// a terminal one column wide has no second cell for a heart to grow into: it keeps one
 		vt100.setDimensions(8, 1);
 		vt100.setCursor(0, 0);
 		vt100.appendString("\u2764\ufe0f");
-		assertNull(term.getCluster(0, 0));
+		assertEquals("\u2764\ufe0f", term.getCluster(0, 0));
+		assertEquals(1, term.getCellWidth(0, 0));
 		assertEquals('\u2764', term.getChar(0, 0));
 		vt100.setDimensions(8, 20);
 		// a cluster goes on in the next string written
@@ -1992,5 +1993,101 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("\u2764\ufe0f");
 		assertEquals("\u2764\ufe0f", term.getCluster(0, 2));
 		assertNull(term.getCluster(1, 2));
+	}
+
+	@Test
+	public void testClusterEdgeCases() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		// a screen one row high: the row a mark goes back to after an immediate wrap is in the history
+		vt100.setDimensions(1, 4);
+		vt100.setVT100LineWrapping(false);
+		vt100.setCursor(0, 0);
+		vt100.appendString("abce");
+		vt100.appendString("\u0301");
+		assertEquals('\u00e9', term.getChar(term.getHeight() - 2, 3));
+		assertEquals("e\u0301", term.getCluster(term.getHeight() - 2, 3));
+		// on a screen one column wide nothing takes two cells, a cluster neither
+		vt100.setVT100LineWrapping(true);
+		vt100.setDimensions(1, 1);
+		vt100.setCursor(0, 0);
+		vt100.appendString("\u4e2d\u0301");
+		assertEquals("\u4e2d\u0301", term.getCluster(term.getHeight() - 1, 0));
+		assertEquals(1, term.getCellWidth(term.getHeight() - 1, 0));
+		// the cells show the character a prefix sign goes before, not the sign
+		vt100.setDimensions(1, 8);
+		vt100.setCursor(0, 0);
+		vt100.appendString("\u0600\u4e2d\u0301");
+		int row = term.getHeight() - 1;
+		assertEquals('\u4e2d', term.getChar(row, 0));
+		assertEquals("\u0600\u4e2d\u0301", term.getCluster(row, 0));
+		// so does a prefix sign beyond the BMP
+		vt100.setCursor(0, 6);
+		vt100.appendString("\ud804\udcbda"); // U+110BD, a prefix that takes no cell
+		assertEquals('a', term.getChar(row, 6));
+		assertEquals("\ud804\udcbda", term.getCluster(row, 6));
+		// a character beyond the BMP that composes into one inside it leaves a filler, not half a pair
+		vt100.setCursor(0, 3);
+		vt100.appendString("\ud87e\udc00\u0301"); // U+2F800, which NFC makes U+4E3D
+		assertEquals('\u4e3d', term.getChar(row, 3));
+		assertEquals('\000', term.getChar(row, 4));
+		assertEquals("\ud87e\udc00\u0301", term.getCluster(row, 3));
+	}
+
+	@Test
+	public void testInsertKeepsAClusterNextToTheMargin() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(2);
+		vt100.setDimensions(2, 10);
+		vt100.setVT100LineWrapping(true);
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcdefx\u0301g\u4e2d");
+		// the wide character is pushed off the end; the accented x moves two cells, its accent with it
+		vt100.setCursor(0, 0);
+		vt100.insertCharacters(2);
+		assertEquals("x\u0301", term.getCluster(0, 8));
+		assertEquals(1, term.getCellWidth(0, 8));
+		assertEquals(1, term.getCellWidth(0, 9));
+	}
+
+	@Test
+	public void testNothingHiddenAndNoEndlessCluster() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(2);
+		vt100.setDimensions(2, 20);
+		// control and format characters no cluster needs are kept out, so a copy shows what is drawn
+		vt100.setCursor(0, 0);
+		vt100.appendString("a\u0085\u202eb\u2066c\u2069\u200b\u200e\udb40\udc41d");
+		assertEquals("abcd", new String(term.getChars(0), 0, 4));
+		for (int col = 0; col < 4; col++) {
+			assertNull(term.getCluster(0, col));
+		}
+		assertEquals(4, vt100.getCursorColumn());
+		// the joiners and the tags of a flag stay
+		String england = "\ud83c\udff4\udb40\udc67\udb40\udc62\udb40\udc65\udb40\udc6e\udb40\udc67\udb40\udc7f";
+		vt100.appendString(england + "\u0628\u200c\u0628");
+		assertEquals(england, term.getCluster(0, 4));
+		assertEquals("\u0628\u200c", term.getCluster(0, 6));
+		// what only hides text: tags past a flag's six, and variation selectors not right after a character
+		vt100.setCursor(1, 0);
+		String tags = "\udb40\udc61".repeat(10);
+		vt100.appendString("\ud83c\udff4" + tags + "\udb40\udc7fx\ufe0f\ufe0f\u200d\ufe0f|");
+		assertEquals("\ud83c\udff4" + "\udb40\udc61".repeat(6) + "\udb40\udc7f", term.getCluster(1, 0));
+		assertEquals("x\ufe0f\u200d", term.getCluster(1, 2));
+		assertEquals('|', term.getChar(1, 4));
+		vt100.setCursor(1, 4);
+		vt100.appendString("y\u034f\u034f\u180b\u180b"); // invisible joiners and selectors: one, after a character
+		assertEquals("y\u034f", term.getCluster(1, 4));
+		vt100.setCursor(1, 6);
+		vt100.appendString("\u0600\u0600\u0600" + "1"); // one prefix sign is enough
+		assertEquals("\u06001", term.getCluster(1, 6));
+		// a flood of marks stops growing the cluster
+		vt100.setCursor(1, 0);
+		vt100.appendString("e" + "\u0301".repeat(10000) + "x");
+		assertEquals(32, term.getCluster(1, 0).length());
+		assertEquals('x', term.getChar(1, 1));
 	}
 }

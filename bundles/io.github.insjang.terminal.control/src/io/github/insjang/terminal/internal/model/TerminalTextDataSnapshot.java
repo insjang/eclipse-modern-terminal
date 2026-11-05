@@ -333,4 +333,14 @@ class TerminalTextDataSnapshot implements ITerminalTextDataSnapshot {
 	public String getCluster(int line, int column) {
 		return fSnapshot.getCluster(line, column);
 	}
+
+	@Override
+	public int getCellWidth(int line, int column) {
+		return fSnapshot.getCellWidth(line, column);
+	}
+
+	@Override
+	public boolean isSimpleLine(int line) {
+		return fSnapshot.isSimpleLine(line);
+	}
 }

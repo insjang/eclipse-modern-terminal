@@ -13,6 +13,7 @@ package io.github.insjang.terminal.internal.model;
 
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.HashMap;
 import java.util.List;
@@ -36,17 +37,28 @@ public class TerminalTextDataStore implements ITerminalTextData {
 	private int fCursorColumn;
 	private int fCursorLine;
 	final private BitSet fWrappedLines = new BitSet();
-	/** per line, the clusters on it by first column; sparse, most lines have none */
-	private Map<Integer, String>[] fClusters;
+	/** per line, how its characters lie in its cells; null for a line of one-cell characters only */
+	private Layout[] fLayout;
+
+	/**
+	 * Where a character takes two cells, and the grapheme clusters, of one line:
+	 * set when the characters are written, so that reading it is a lookup.
+	 */
+	private static final class Layout {
+		/** the cells that are the second of a character starting in the cell before */
+		final BitSet second = new BitSet();
+		/** the clusters, by first cell */
+		final Map<Integer, String> clusters = new HashMap<>();
+	}
 	/** per line, the hyperlinks of its cells by column; sparse, most lines have none */
-	private Map<Integer, String>[] fLinks = newClusters(0);
+	private Map<Integer, String>[] fLinks = newLinks(0);
 	/** per line, its shell integration marks */
 	private int[] fMarks = new int[0];
 
 	public TerminalTextDataStore() {
 		fChars = new char[0][];
 		fStyle = new TerminalStyle[0][];
-		fClusters = newClusters(0);
+		fLayout = new Layout[0];
 		fWidth = 0;
 	}
 
@@ -61,7 +73,6 @@ public class TerminalTextDataStore implements ITerminalTextData {
 	}
 
 	@Override
-	@SuppressWarnings("unchecked")
 	public void setDimensions(int height, int width) {
 		if (height < 0) {
 			throw new IllegalArgumentException("Parameter 'height' can't be negative value:" + height); //$NON-NLS-1$
@@ -77,7 +88,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			}
 			fStyle = (TerminalStyle[][]) resizeArray(fStyle, height);
 			fChars = (char[][]) resizeArray(fChars, height);
-			fClusters = (Map<Integer, String>[]) resizeArray(fClusters, height);
+			fLayout = (Layout[]) resizeArray(fLayout, height);
 			fMarks = (int[]) resizeArray(fMarks, height);
 			fLinks = (Map<Integer, String>[]) resizeArray(fLinks, height);
 		}
@@ -205,7 +216,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		ensureLineLength(line, column + 1);
 		fChars[line][column] = c;
 		fStyle[line][column] = style;
-		forgetClusters(line, column, 1);
+		layOut(line, column, 1);
 		forgetLinks(line, column, 1);
 	}
 
@@ -221,11 +232,9 @@ public class TerminalTextDataStore implements ITerminalTextData {
 					"Parameter 'column' must be >= 0 and less than 'width' (current value '" + fWidth + "')"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 		ensureLineLength(line, column + len);
-		for (int i = 0; i < len; i++) {
-			fChars[line][column + i] = chars[i + start];
-			fStyle[line][column + i] = style;
-		}
-		forgetClusters(line, column, len);
+		System.arraycopy(chars, start, fChars[line], column, len);
+		Arrays.fill(fStyle[line], column, column + len, style);
+		layOut(line, column, len);
 		forgetLinks(line, column, len);
 	}
 
@@ -252,38 +261,85 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fLinks[line].put(column, uri);
 	}
 
-	/** Writing a cell ends any cluster that had it, whether as its first cell or its second. */
-	private void forgetClusters(int line, int column, int len) {
-		Map<Integer, String> clusters = fClusters[line];
-		if (clusters == null || clusters.isEmpty()) {
-			return;
+	/**
+	 * The cells from <code>column</code> on were just written: what took them before
+	 * is gone, a character cut in half by the write is one cell, and a character
+	 * written together with what fills its second cell (a wide character and a
+	 * null, the two halves of a surrogate pair) takes two.
+	 */
+	private void layOut(int line, int column, int len) {
+		Layout layout = fLayout[line];
+		char[] chars = fChars[line];
+		int end = column + len;
+		if (layout == null) {
+			for (int col = column; col + 1 < end; col++) {
+				if (takesTwo(chars[col], chars[col + 1])) {
+					layout = fLayout[line] = new Layout();
+					break;
+				}
+			}
+			if (layout == null) {
+				return; // the usual case: one cell each, as before
+			}
 		}
-		String before = clusters.get(column - 1);
-		if (before != null && CharWidth.clusterCells(before) == 2) {
-			clusters.remove(column - 1);
+		if (column > 0 && layout.second.get(column)) {
+			layout.clusters.remove(column - 1); // its second cell is gone
 		}
-		for (int col = column; col < column + len; col++) {
-			clusters.remove(col);
+		layout.second.clear(column, end + 1);
+		for (int col = column; col < end && !layout.clusters.isEmpty(); col++) {
+			layout.clusters.remove(col);
 		}
+		for (int col = column; col + 1 < end; col++) {
+			if (takesTwo(chars[col], chars[col + 1])) {
+				layout.second.set(++col);
+			}
+		}
+	}
+
+	private static boolean takesTwo(char c, char next) {
+		return Character.isHighSurrogate(c) ? Character.isLowSurrogate(next) : next == '\000' && CharWidth.of(c) == 2;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static Map<Integer, String>[] newLinks(int n) {
+		return new Map[n];
+	}
+
+	@Override
+	public int getCellWidth(int line, int column) {
+		Layout layout = fLayout[line];
+		if (layout == null) {
+			return 1;
+		}
+		if (layout.second.get(column)) {
+			return 0;
+		}
+		return column + 1 < fWidth && layout.second.get(column + 1) ? 2 : 1;
 	}
 
 	@Override
 	public String getCluster(int line, int column) {
-		Map<Integer, String> clusters = fClusters[line];
-		return clusters == null ? null : clusters.get(column);
+		Layout layout = fLayout[line];
+		return layout == null || layout.clusters.isEmpty() ? null : layout.clusters.get(column);
+	}
+
+	@Override
+	public boolean isSimpleLine(int line) {
+		Layout layout = fLayout[line];
+		return layout == null || layout.second.isEmpty() && layout.clusters.isEmpty();
 	}
 
 	@Override
 	public void setCluster(int line, int column, String cluster) {
-		if (fClusters[line] == null) {
-			fClusters[line] = new HashMap<>();
+		if (fLayout[line] == null) {
+			fLayout[line] = new Layout();
 		}
-		fClusters[line].put(column, cluster);
-	}
-
-	@SuppressWarnings("unchecked")
-	private static Map<Integer, String>[] newClusters(int n) {
-		return new Map[n];
+		Layout layout = fLayout[line];
+		layout.clusters.put(column, cluster);
+		// a cluster written over two cells, its second one filled, takes both
+		if (column + 1 < fWidth && CharWidth.clusterCells(cluster) == 2 && !layout.second.get(column)) {
+			layout.second.set(column + 1);
+		}
 	}
 
 	@Override
@@ -298,7 +354,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			for (int i = startLine; i < startLine + size + shift; i++) {
 				fChars[i] = fChars[i - shift];
 				fStyle[i] = fStyle[i - shift];
-				fClusters[i] = fClusters[i - shift];
+				fLayout[i] = fLayout[i - shift];
 				fMarks[i] = fMarks[i - shift];
 				fLinks[i] = fLinks[i - shift];
 				fWrappedLines.set(i, fWrappedLines.get(i - shift));
@@ -310,7 +366,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 			for (int i = startLine + size - 1; i >= startLine && i - shift >= 0; i--) {
 				fChars[i] = fChars[i - shift];
 				fStyle[i] = fStyle[i - shift];
-				fClusters[i] = fClusters[i - shift];
+				fLayout[i] = fLayout[i - shift];
 				fMarks[i] = fMarks[i - shift];
 				fLinks[i] = fLinks[i - shift];
 				fWrappedLines.set(i, fWrappedLines.get(i - shift));
@@ -369,9 +425,9 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		if (getHeight() != n) {
 			fChars = new char[n][];
 			fStyle = new TerminalStyle[n][];
-			fClusters = newClusters(n);
+			fLayout = new Layout[n];
 			fMarks = new int[n];
-			fLinks = newClusters(n);
+			fLinks = newLinks(n);
 		}
 		for (int i = 0; i < n; i++) {
 			copyLine(source, i, i);
@@ -406,15 +462,10 @@ public class TerminalTextDataStore implements ITerminalTextData {
 	public void copyLine(ITerminalTextData source, int sourceLine, int destLine) {
 		char[] chars = source.getChars(sourceLine);
 		// read before writing: the source may be this very line
-		Map<Integer, String> clusters = null, links = null;
-		for (int col = 0; chars != null && col < chars.length; col++) {
-			String cluster = source.getCluster(sourceLine, col);
-			if (cluster != null) {
-				if (clusters == null) {
-					clusters = new HashMap<>();
-				}
-				clusters.put(col, cluster);
-			}
+		Layout layout = null;
+		Map<Integer, String> links = null;
+		boolean simple = source.isSimpleLine(sourceLine);
+		for (int col = 0; chars != null && col < chars.length && col < source.getWidth(); col++) {
 			String link = source.getLink(sourceLine, col);
 			if (link != null) {
 				if (links == null) {
@@ -422,12 +473,26 @@ public class TerminalTextDataStore implements ITerminalTextData {
 				}
 				links.put(col, link);
 			}
+			if (simple) {
+				continue;
+			}
+			String cluster = source.getCluster(sourceLine, col);
+			int width = source.getCellWidth(sourceLine, col);
+			if (cluster != null || width == 0) {
+				if (layout == null) {
+					layout = new Layout();
+				}
+				if (cluster != null) {
+					layout.clusters.put(col, cluster);
+				}
+				layout.second.set(col, width == 0);
+			}
 		}
 		fChars[destLine] = chars;
 		fStyle[destLine] = source.getStyles(sourceLine);
 		fWrappedLines.set(destLine, source.isWrappedLine(sourceLine));
 		fMarks[destLine] = source.getLineMark(sourceLine);
-		fClusters[destLine] = clusters;
+		fLayout[destLine] = layout;
 		fLinks[destLine] = links;
 	}
 
@@ -451,9 +516,10 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fChars[line] = chars.clone();
 		fStyle[line] = styles.clone();
 		fWrappedLines.clear(line);
-		fClusters[line] = null;
+		fLayout[line] = null;
 		fMarks[line] = 0;
 		fLinks[line] = null;
+		layOut(line, 0, chars.length);
 	}
 
 	@Override
@@ -471,7 +537,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		fChars[line] = null;
 		fStyle[line] = null;
 		fWrappedLines.clear(line);
-		fClusters[line] = null;
+		fLayout[line] = null;
 		fMarks[line] = 0;
 		fLinks[line] = null;
 	}
