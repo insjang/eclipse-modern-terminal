@@ -622,7 +622,10 @@ public class VT100EmulatorTest {
 		assertTrue(data.getStyle(0, 13).isDim());
 		assertTrue(data.getStyle(0, 13).isBold());
 		assertFalse(data.getStyle(0, 17).isDim());
-		assertFalse(data.getStyle(0, 17).isBold());
+		assertFalse(data.getStyle(0, 17).isBold());		// 21 is double underline in ECMA-48, not normal intensity: it takes bold off as before, faint stays
+		run("\r\n\u001b[1;2ma\u001b[21mb");
+		assertTrue(data.getStyle(1, 1).isDim());
+		assertFalse(data.getStyle(1, 1).isBold());
 	}
 
 	@Test
@@ -636,6 +639,9 @@ public class VT100EmulatorTest {
 		assertEquals("\u001b[24;2~", VT100TerminalControl.modifiedSpecialKey(0x1000015, org.eclipse.swt.SWT.SHIFT));
 		// no modifier held that xterm can spell: not this way
 		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(0x1000001, 0));
+		// the Mac's Cmd, alone or with others, stays in Eclipse: Cmd+Shift+Left is not Shift+Left
+		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(0x1000003, org.eclipse.swt.SWT.COMMAND));
+		assertEquals(null, VT100TerminalControl.modifiedSpecialKey(0x1000003, org.eclipse.swt.SWT.COMMAND | org.eclipse.swt.SWT.SHIFT));
 	}
 
 	@Test

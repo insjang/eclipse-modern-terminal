@@ -658,10 +658,14 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	 * @return the sequence, or null when the key is not one that is spelled this way
 	 */
 	public static String modifiedSpecialKey(int keyCode, int modifierKeys) {
+		if ((modifierKeys & SWT.COMMAND) != 0) {
+			// xterm has no spelling for the Mac's Cmd: a combination with it stays in Eclipse
+			return null;
+		}
 		int modifier = 1 + ((modifierKeys & SWT.SHIFT) != 0 ? 1 : 0) + ((modifierKeys & SWT.ALT) != 0 ? 2 : 0)
 				+ ((modifierKeys & SWT.CTRL) != 0 ? 4 : 0);
 		if (modifier == 1) {
-			// Something held that xterm has no spelling for, the Mac's Cmd among them.
+			// Something held that xterm has no spelling for.
 			return null;
 		}
 		switch (keyCode) {
@@ -1381,7 +1385,9 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 					break;
 				}
 
-				if (escSeq == null) {
+				// a key Eclipse has a binding for stays with it, as Alt+Right (Quick Access)
+				// and Alt+Up (Maximize) do in this terminal
+				if (escSeq == null && !hasKeyBinding(accelerator)) {
 					escSeq = modifiedSpecialKey(event.keyCode, modifierKeys);
 				}
 
@@ -1464,6 +1470,18 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			}
 
 			writeToTerminal(charBuffer.toString());
+		}
+
+		/**
+		 * @return whether an Eclipse key binding active here takes the key
+		 */
+		private boolean hasKeyBinding(int accelerator) {
+			if (!PlatformUI.isWorkbenchRunning()) {
+				return false;
+			}
+			IBindingService bindingService = PlatformUI.getWorkbench().getAdapter(IBindingService.class);
+			KeyStroke keyStroke = SWTKeySupport.convertAcceleratorToKeyStroke(accelerator);
+			return bindingService != null && bindingService.getPerfectMatch(KeySequence.getInstance(keyStroke)) != null;
 		}
 
 		/*
