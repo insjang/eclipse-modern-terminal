@@ -465,7 +465,7 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		Layout layout = null;
 		Map<Integer, String> links = null;
 		boolean simple = source.isSimpleLine(sourceLine);
-		for (int col = 0; chars != null && col < chars.length && col < source.getWidth(); col++) {
+		for (int col = 0; chars != null && col < chars.length; col++) {
 			String link = source.getLink(sourceLine, col);
 			if (link != null) {
 				if (links == null) {

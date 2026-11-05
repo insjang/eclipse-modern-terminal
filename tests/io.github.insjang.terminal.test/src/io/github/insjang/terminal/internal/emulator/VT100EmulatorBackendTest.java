@@ -2092,8 +2092,12 @@ public class VT100EmulatorBackendTest {
 		assertEquals("x\ufe0f\u200d", term.getCluster(1, 2));
 		assertEquals('|', term.getChar(1, 4));
 		vt100.setCursor(1, 4);
-		vt100.appendString("y\u034f\u034f\u180b\u180b"); // invisible joiners and selectors: one, after a character
-		assertEquals("y\u034f", term.getCluster(1, 4));
+		vt100.appendString("y\u180b\u180b\u180ez"); // selectors: one, after a character; U+180E is no selector
+		assertEquals("y\u180b", term.getCluster(1, 4));
+		assertEquals('z', term.getChar(1, 5));
+		vt100.setCursor(1, 4);
+		vt100.appendString("a\u0308\u034f\u0323"); // the joiner keeps marks apart, so it stays
+		assertEquals("a\u0308\u034f\u0323", term.getCluster(1, 4));
 		vt100.setCursor(1, 6);
 		vt100.appendString("\u0600\u0600\u0600" + "1"); // one prefix sign is enough
 		assertEquals("\u06001", term.getCluster(1, 6));
@@ -2102,5 +2106,29 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("e" + "\u0301".repeat(10000) + "x");
 		assertEquals(32, term.getCluster(1, 0).length());
 		assertEquals('x', term.getChar(1, 1));
+	}
+
+	@Test
+	public void testClusterKeptPastTheMarginAndEndedByAMove() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(2);
+		vt100.setDimensions(2, 4);
+		// a line copied while narrowed keeps the layout of what it holds past the margin
+		vt100.setCursor(0, 0);
+		vt100.appendString("ab\u2764\ufe0f");
+		vt100.setDimensions(2, 2);
+		term.copyLine(term, 0, 0);
+		vt100.setDimensions(2, 4);
+		assertEquals("\u2764\ufe0f", term.getCluster(0, 2));
+		assertEquals(2, term.getCellWidth(0, 2));
+		// moved away and back, the cursor no longer goes on with what it wrote
+		vt100.setCursor(1, 0);
+		vt100.appendString("\u0600");
+		vt100.setCursor(0, 0);
+		vt100.setCursor(1, 1);
+		vt100.appendString("x");
+		assertEquals('x', term.getChar(1, 1));
+		assertEquals(2, vt100.getCursorColumn());
 	}
 }

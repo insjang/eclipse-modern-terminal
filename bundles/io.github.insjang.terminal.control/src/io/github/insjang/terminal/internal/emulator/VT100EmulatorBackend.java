@@ -115,8 +115,9 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private String fLastText;
 	/** its first cell, and how many lines above the cursor it is: 1 after an immediate wrap */
 	private int fLastColumn, fLastLinesBack;
-	/** where the cursor was right after it: anywhere else, nothing goes onto it */
-	private int fAfterLine, fAfterColumn;
+	/** how often the cursor has been put somewhere, and how often when it was written */
+	private int fMoves, fAfterMoves;
+	/** whether a wrap was pending right after it */
 	private boolean fAfterPending;
 
 	private TerminalStyle fDefaultStyle;
@@ -868,12 +869,13 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	/**
 	 * @return whether the code point is invisible and only says how to show the
-	 *         character before it: a variation selector, the combining grapheme
-	 *         joiner, a Mongolian free variation selector
+	 *         character before it: a variation selector, a Mongolian free variation
+	 *         selector (not U+180E between them, a format character); the combining
+	 *         grapheme joiner is not one, it keeps marks apart (Unicode 23.2)
 	 */
 	private static boolean isSelector(int codePoint) {
 		return codePoint >= 0xFE00 && codePoint <= 0xFE0F || codePoint >= 0xE0100 && codePoint <= 0xE01EF
-				|| codePoint == 0x034F || codePoint >= 0x180B && codePoint <= 0x180F;
+				|| codePoint >= 0x180B && codePoint <= 0x180D || codePoint == 0x180F;
 	}
 
 	/** @return whether the code point is a tag letter or digit, as in the tag sequence of a flag */
@@ -932,8 +934,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	 *         otherwise
 	 */
 	private int lastCluster() {
-		if (fLastText == null || fCursorLine != fAfterLine || fCursorColumn != fAfterColumn
-				|| fWrapPending != fAfterPending || fLastColumn >= fColumns) {
+		if (fLastText == null || fMoves != fAfterMoves || fWrapPending != fAfterPending
+				|| fLastColumn >= fColumns) {
 			return -1;
 		}
 		int line = toAbsoluteLine(fCursorLine) - fLastLinesBack;
@@ -951,8 +953,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		fLastText = text;
 		fLastColumn = col;
 		fLastLinesBack = end == fColumns && !fVT100LineWrapping ? 1 : 0;
-		fAfterLine = fCursorLine;
-		fAfterColumn = fCursorColumn;
+		fAfterMoves = fMoves;
 		fAfterPending = fWrapPending;
 		return line;
 	}
@@ -1195,6 +1196,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			}
 			fCursorColumn = targetColumn;
 			fWrapPending = false;
+			fMoves++; // a cursor moved away and back no longer goes on with what it wrote
 			// We make the assumption that nobody is changing the
 			// terminal cursor except this class!
 			// This assumption gives a huge performance improvement
@@ -1212,6 +1214,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			}
 			fCursorLine = targetLine;
 			fWrapPending = false;
+			fMoves++;
 			// We make the assumption that nobody is changing the
 			// terminal cursor except this class!
 			// This assumption gives a huge performance improvement

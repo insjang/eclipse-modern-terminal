@@ -56,6 +56,22 @@ public class TextCanvasModelTest {
 	}
 
 	@Test
+	public void testHoverPrefixedSpaceIsBoundary() {
+		TerminalTextData data = new TerminalTextData();
+		data.setDimensions(1, 10);
+		// the space shown in the cell ends a word, whatever prefix was written before it
+		data.setChars(0, 0, "a b".toCharArray(), null);
+		data.setCluster(0, 1, "\u0600 ");
+		ITerminalTextDataSnapshot snapshot = data.makeSnapshot();
+		snapshot.updateSnapshot(true);
+		AbstractTextCanvasModel model = new AbstractTextCanvasModel(snapshot) {
+		};
+		model.expandHoverSelectionAt(0, 2);
+		assertEquals("b", model.getHoverSelectionText());
+		assertEquals(new Point(2, 0), model.getHoverSelectionStart());
+	}
+
+	@Test
 	public void testSelectionCoversWideCharactersWhole() {
 		TerminalTextData data = new TerminalTextData();
 		data.setDimensions(1, 10);

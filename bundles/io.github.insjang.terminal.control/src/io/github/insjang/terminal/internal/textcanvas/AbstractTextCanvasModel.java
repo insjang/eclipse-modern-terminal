@@ -458,11 +458,12 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 	 * the path.
 	 */
 	private boolean isBoundary(int cell, int width) {
-		String text = Cells.text(fSnapshot, cell / width, cell % width);
-		if (text.isEmpty()) {
+		int line = cell / width;
+		int col = cell % width;
+		if (fSnapshot.getCellWidth(line, col) == 0) {
 			return true;
 		}
-		char c = text.charAt(0);
+		char c = fSnapshot.getChar(line, col); // what the cell shows, not a prefix written before it
 		return Character.isWhitespace(c) || c < '\u0020' || "\"'()[]<>`".indexOf(c) >= 0; //$NON-NLS-1$
 	}
 
