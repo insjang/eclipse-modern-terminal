@@ -1107,11 +1107,6 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				return doLineWrap();
 			}
 		} else {
-			// Writing that stops short of the margin says the line ends here.
-			// A program that draws its own screen writes the same row again and
-			// again, and a row that was folded in one frame is a row of its own
-			// in the next, so the mark has to be able to come off.
-			fTerminal.clearWrappedLine(toAbsoluteLine(fCursorLine));
 			setCursorColumn(col);
 		}
 		return toAbsoluteLine(fCursorLine);
@@ -1288,7 +1283,14 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			return; // nothing is erased, so no wide character may be broken either
 		}
 		synchronized (fTerminal) {
-			eraseWhole(toAbsoluteLine(fCursorLine), fCursorColumn, Math.min(fCursorColumn + n, fColumns));
+			int line = toAbsoluteLine(fCursorLine);
+			int end = n >= fColumns - fCursorColumn ? fColumns : fCursorColumn + n;
+			eraseWhole(line, fCursorColumn, end);
+			if (end == fColumns) {
+				// Nothing is left out to the margin, so the line ends before it, as
+				// erasing to the end of the line says (xterm, Windows Terminal).
+				fTerminal.clearWrappedLine(line);
+			}
 		}
 	}
 }

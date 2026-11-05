@@ -362,6 +362,7 @@ public class TerminalTextData implements ITerminalTextData {
 	@Override
 	public void setWrappedLine(int line) {
 		fData.setWrappedLine(line);
+		sendLineChangedToSnapshots(line);
 	}
 
 	@Override
@@ -388,5 +389,6 @@ public class TerminalTextData implements ITerminalTextData {
 	@Override
 	public void clearWrappedLine(int line) {
 		fData.clearWrappedLine(line);
+		sendLineChangedToSnapshots(line);
 	}
 }

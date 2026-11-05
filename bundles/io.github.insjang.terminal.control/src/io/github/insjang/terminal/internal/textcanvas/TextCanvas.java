@@ -322,21 +322,8 @@ public class TextCanvas extends GridCanvas {
 					fDragScrolling = true;
 					getDisplay().timerExec(DRAG_SCROLL_INTERVAL, this::dragScroll);
 				}
-				Point curr = screenPointToCell(e.x, e.y);
 				updateHasSelection(e);
-				switch (fSelMode) {
-				case WORD:
-					updateWordSelection(curr);
-					break;
-				case LINE:
-					updateLineSelection(curr);
-					break;
-				case DRAG:
-				default:
-					setSelection(curr);
-					break;
-				}
-				fCellCanvasModel.expandHoverSelectionAt(-1, -1);
+				extendSelection(screenPointToCell(e.x, e.y));
 			} else if ((e.stateMask & SWT.MODIFIER_MASK) == SWT.MOD1) {
 				// highlight (underline) word that would be used by MOD1 + mouse click
 				Point pt = screenPointToCell(e.x, e.y);
@@ -372,6 +359,27 @@ public class TextCanvas extends GridCanvas {
 		setHorizontalBarVisible(false);
 	}
 
+	/**
+	 * A drag moves the end of the selection to the cell, by characters, words or
+	 * lines as it began: the one way a drag does, whether the pointer moved or the
+	 * view scrolled under it.
+	 */
+	private void extendSelection(Point cell) {
+		switch (fSelMode) {
+		case WORD:
+			updateWordSelection(cell);
+			break;
+		case LINE:
+			updateLineSelection(cell);
+			break;
+		case DRAG:
+		default:
+			setSelection(cell);
+			break;
+		}
+		fCellCanvasModel.expandHoverSelectionAt(-1, -1);
+	}
+
 	private void dragScroll() {
 		if (isDisposed() || fDraggingStart == null || fDragPast == 0) {
 			fDragScrolling = false;
@@ -379,7 +387,7 @@ public class TextCanvas extends GridCanvas {
 		}
 		scrollYDelta(fDragPast * getCellHeight());
 		Point p = toControl(getDisplay().getCursorLocation());
-		setSelection(screenPointToCell(p.x, p.y));
+		extendSelection(screenPointToCell(p.x, p.y));
 		redraw();
 		getDisplay().timerExec(DRAG_SCROLL_INTERVAL, this::dragScroll);
 	}

@@ -1436,17 +1436,30 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("abcdefg");
 		assertTrue(term.isWrappedLine(0));
 		assertFalse(term.isWrappedLine(1));
-		// drawn over shorter, the line ends there and the mark comes off
-		vt100.setCursor(0, 0);
-		vt100.appendString("xyz");
-		assertFalse(term.isWrappedLine(0));
-		// erasing to the end of the line says the same
-		vt100.setCursor(0, 0);
-		vt100.appendString("abcdefg");
+		// writing over part of it leaves it running on: aXcde is still followed by fg
+		vt100.setCursor(0, 1);
+		vt100.appendString("X");
 		assertTrue(term.isWrappedLine(0));
+		// erasing to the end of the line ends it there, as in xterm and Windows Terminal
 		vt100.setCursor(0, 3);
 		vt100.eraseLineToEnd();
 		assertFalse(term.isWrappedLine(0));
+		// and so does erasing characters as far as the margin, but not short of it
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcdefg");
+		vt100.setCursor(0, 1);
+		vt100.eraseCharacters(2);
+		assertTrue(term.isWrappedLine(0));
+		vt100.eraseCharacters(9);
+		assertFalse(term.isWrappedLine(0));
+		// however large the count
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcdefg");
+		vt100.setCursor(0, 1);
+		vt100.eraseCharacters(Integer.MAX_VALUE);
+		assertFalse(term.isWrappedLine(0));
+		assertEquals('a', term.getChar(0, 0));
+		assertEquals(0, term.getChar(0, 1));
 	}
 
 	@Test

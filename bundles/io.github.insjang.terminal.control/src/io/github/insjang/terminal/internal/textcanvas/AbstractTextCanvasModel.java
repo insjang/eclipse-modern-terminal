@@ -493,11 +493,7 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			} else {
 				text = ""; //$NON-NLS-1$
 			}
-			// Cells past the last character were never written to. They read as spaces
-			// because that is how an empty cell is drawn, but there is no text there to
-			// copy: on a line that ran on to the next one they are the room the fold
-			// left, and on one that ended they are the rest of the screen.
-			buffer.append(text.stripTrailing());
+			buffer.append(text);
 			if (line < fSeletionEndLine && !fSelectionSnapshot.isWrappedLine(line)) {
 				buffer.append('\n');
 			}
