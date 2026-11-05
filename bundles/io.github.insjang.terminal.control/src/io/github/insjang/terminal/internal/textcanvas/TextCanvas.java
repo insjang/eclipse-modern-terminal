@@ -767,7 +767,10 @@ public class TextCanvas extends GridCanvas {
 		if (Character.isLowSurrogate(c)) {
 			return Character.isHighSurrogate(before);
 		}
-		return c == '\000' && !Character.isSurrogate(before) && CharWidth.of(before) == 2;
+		// or the second cell of a cluster grown wide, such as a heart with VS16
+		String cluster = text.getCluster(line, col - 1);
+		return c == '\000' && (!Character.isSurrogate(before) && CharWidth.of(before) == 2
+				|| cluster != null && CharWidth.clusterCells(cluster) == 2);
 	}
 
 	/** @return the default background of the cells, what the terminal is drawn on */

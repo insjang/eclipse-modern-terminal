@@ -16,6 +16,7 @@
  *******************************************************************************/
 package io.github.insjang.terminal.internal.textcanvas;
 
+import java.text.Normalizer;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -82,7 +83,7 @@ public class TextLineRenderer implements ILinelRenderer {
 			}
 			for (LineSegment segment : segments) {
 				setupGC(gc, segment.getStyle());
-				drawText(gc, x, y, colFirst, segment.getColumn(), segment.getText(), true);
+				drawText(gc, line, x, y, colFirst, segment.getColumn(), segment.getText(), true);
 			}
 			if (colFirst == 0 && (getTerminalText().getLineMark(line) & ITerminalTextDataReadOnly.MARK_FAILED) != 0) {
 				// the prompt of a command that failed (OSC 133;D): a red bar at the left edge
@@ -136,7 +137,7 @@ public class TextLineRenderer implements ILinelRenderer {
 					len = Math.min(len, chars.length - offset);
 					if (len > 0) {
 						String text = new String(chars, offset, len);
-						drawText(gc, x, y, colFirst, offset, text);
+						drawText(gc, line, x, y, colFirst, offset, text);
 					}
 				}
 			}
@@ -169,10 +170,12 @@ public class TextLineRenderer implements ILinelRenderer {
 				// one it is on, as in xterm: half a glyph cannot be drawn reversed.
 				char[] chars = getTerminalText().getChars(row);
 				String line = chars == null ? "" : new String(chars); //$NON-NLS-1$
-				if (cursorColumn < line.length() && CharWidth.isSecondCell(line, cursorColumn)) {
+				if (cursorColumn < line.length()
+						&& (CharWidth.isSecondCell(line, cursorColumn) || isWideCluster(row, cursorColumn - 1))) {
 					cursorColumn--;
 				}
-				int cells = cursorColumn + 1 < line.length() && CharWidth.isSecondCell(line, cursorColumn + 1) ? 2 : 1;
+				int cells = cursorColumn + 1 < line.length() && CharWidth.isSecondCell(line, cursorColumn + 1)
+						|| isWideCluster(row, cursorColumn) ? 2 : 1;
 				TerminalStyle style = getTerminalText().getStyle(row, cursorColumn);
 				if (style == null) {
 					// TODO make the cursor color customizable
@@ -190,7 +193,7 @@ public class TextLineRenderer implements ILinelRenderer {
 				Rectangle clipping = gc.getClipping();
 				gc.setClipping(clipping.intersection(new Rectangle(x + (cursorColumn - colFirst) * getCellWidth(), y,
 						cells * getCellWidth(), getCellHeight())));
-				drawText(gc, x, y, colFirst, cursorColumn, text);
+				drawText(gc, row, x, y, colFirst, cursorColumn, text);
 				gc.setClipping(clipping);
 			}
 		}
@@ -201,15 +204,36 @@ public class TextLineRenderer implements ILinelRenderer {
 		return plugin != null && plugin.getPreferenceStore().getBoolean(ITerminalConstants.PREF_BAR_CURSOR);
 	}
 
-	private void drawText(GC gc, int x, int y, int colFirst, int col, String text) {
-		drawText(gc, x, y, colFirst, col, text, false);
+	/**
+	 * @return the grapheme cluster that starts in the cell, to be drawn whole over
+	 *         the cells it takes when they are no more than <code>room</code>; null
+	 *         when the cell is drawn as it is, the cluster composing into the one
+	 *         character it holds (an accent, Hangul jamo)
+	 */
+	private String clusterAt(int line, int col, int room) {
+		String cluster = getTerminalText().getCluster(line, col);
+		if (cluster == null || CharWidth.clusterCells(cluster) > room) {
+			return null;
+		}
+		String composed = Normalizer.normalize(cluster, Normalizer.Form.NFC);
+		return composed.codePointCount(0, composed.length()) == 1 ? null : cluster;
+	}
+
+	/** @return whether a cluster grown wide, such as a heart with VS16, starts in the cell */
+	private boolean isWideCluster(int line, int col) {
+		String cluster = col < 0 ? null : getTerminalText().getCluster(line, col);
+		return cluster != null && CharWidth.clusterCells(cluster) == 2;
+	}
+
+	private void drawText(GC gc, int line, int x, int y, int colFirst, int col, String text) {
+		drawText(gc, line, x, y, colFirst, col, text, false);
 	}
 
 	/**
 	 * @param filled the background of the text is already there, so it is drawn
 	 *            over it and leaves alone whatever reaches into its cells
 	 */
-	private void drawText(GC gc, int x, int y, int colFirst, int col, String text, boolean filled) {
+	private void drawText(GC gc, int line, int x, int y, int colFirst, int col, String text, boolean filled) {
 		int offset = (col - colFirst) * getCellWidth();
 		if (fStyleMap.isFontProportional()) {
 			// draw the background
@@ -218,12 +242,17 @@ public class TextLineRenderer implements ILinelRenderer {
 			int xx = x + offset;
 			for (int i = 0; i < text.length(); i++) {
 				char c = text.charAt(i);
-				int cells = cellsAt(text, i);
+				// a cluster is drawn whole, over the cells it takes
+				String cluster = clusterAt(line, col + i, text.length() - i);
+				int cells = cluster != null ? CharWidth.clusterCells(cluster) : cellsAt(text, i);
 				// a character beyond the BMP is drawn whole, both surrogates at once
-				int n = Character.charCount(text.codePointAt(i));
+				int n = cluster != null ? cells : Character.charCount(text.codePointAt(i));
 				// TODO why do I have to draw the background character by character??????
 				gc.fillRectangle(xx, y, cells * fStyleMap.getFontWidth(), fStyleMap.getFontHeight());
-				if (c != ' ' && c != '\000') {
+				if (cluster != null) {
+					gc.drawString(Normalizer.normalize(cluster, Normalizer.Form.NFC), fStyleMap.getCharOffset(c) + xx, y,
+							false);
+				} else if (c != ' ' && c != '\000') {
 					gc.drawString(text.substring(i, i + n), fStyleMap.getCharOffset(c) + xx, y, false);
 				}
 				xx += cells * fStyleMap.getFontWidth();
@@ -235,12 +264,22 @@ public class TextLineRenderer implements ILinelRenderer {
 			// font does not have is drawn from somewhere else and rarely does, and
 			// then everything after it on the line sits in the wrong column.
 			String drawn = withoutFillers(text);
-			if (gc.textExtent(drawn).x == text.length() * getCellWidth()) {
+			if (!hasCluster(line, col, text.length()) && gc.textExtent(drawn).x == text.length() * getCellWidth()) {
 				gc.drawString(drawn, x + offset, y, filled);
 			} else {
-				drawCellByCell(gc, x + offset, y, text, filled);
+				drawCellByCell(gc, line, col, x + offset, y, text, filled);
 			}
 		}
+	}
+
+	/** @return whether a cluster to be drawn whole starts in any of the cells */
+	private boolean hasCluster(int line, int col, int cells) {
+		for (int i = 0; i < cells; i++) {
+			if (clusterAt(line, col + i, cells - i) != null) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -248,7 +287,7 @@ public class TextLineRenderer implements ILinelRenderer {
 	 * matter what the font makes of it. A wide character is left to cover the cell
 	 * of the filler that follows it.
 	 */
-	private void drawCellByCell(GC gc, int x, int y, String text, boolean filled) {
+	private void drawCellByCell(GC gc, int line, int col, int x, int y, String text, boolean filled) {
 		// The whole run at once, because the characters are drawn over it one at a
 		// time and the cells between them would otherwise keep what was there before.
 		if (!filled) {
@@ -258,15 +297,18 @@ public class TextLineRenderer implements ILinelRenderer {
 		Font fallback = fStyleMap.getFallbackFont();
 		for (int i = 0; i < text.length();) {
 			// A character beyond the BMP is two chars in two cells, and has to be
-			// drawn whole: half of a surrogate pair is no character at all.
-			int n = Character.charCount(text.codePointAt(i));
+			// drawn whole: half of a surrogate pair is no character at all. So is a
+			// cluster, which the font may draw as one glyph (a flag, a family).
+			String cluster = clusterAt(line, col + i, text.length() - i);
+			int n = cluster != null ? CharWidth.clusterCells(cluster) : Character.charCount(text.codePointAt(i));
 			char c = text.charAt(i);
-			if (c != ' ' && c != '\000') {
-				String one = text.substring(i, i + n);
+			if (cluster != null || c != ' ' && c != '\000') {
+				String one = cluster != null ? Normalizer.normalize(cluster, Normalizer.Form.NFC) : text.substring(i, i + n);
 				// A character the terminal font has no glyph for is the reason this run is
 				// being drawn a cell at a time, and it is drawn better by a font that has
 				// one than by whatever the platform reaches for.
-				boolean missing = fallback != null && gc.textExtent(one).x != cellsAt(text, i) * getCellWidth();
+				int cells = cluster != null ? n : cellsAt(text, i);
+				boolean missing = fallback != null && gc.textExtent(one).x != cells * getCellWidth();
 				if (missing) {
 					gc.setFont(fallback);
 				}

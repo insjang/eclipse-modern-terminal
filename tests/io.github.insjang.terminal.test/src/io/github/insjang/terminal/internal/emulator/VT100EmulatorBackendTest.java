@@ -1826,4 +1826,171 @@ public class VT100EmulatorBackendTest {
 			}
 		}
 	}
+
+	@Test
+	public void testClusterEdits() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(8);
+		vt100.setDimensions(8, 10);
+		String heart = "\u2764\ufe0f";
+		String smile = "\ud83d\ude00";
+		// a mark with no composed form stays on a narrow character, which keeps one cell
+		vt100.setCursor(0, 0);
+		vt100.appendString("q\u0301|1\u20e3|");
+		assertEquals("q\u0301", term.getCluster(0, 0));
+		assertEquals("1\u20e3", term.getCluster(0, 2)); // a keycap without VS16 is narrow, as in Windows Terminal
+		assertEquals("q|1|", new String(term.getChars(0), 0, 4));
+		// a later mark composes with the marks already there: KA, acute, dakuten is drawn as GA;
+		// copied, it is what the program wrote
+		vt100.setCursor(1, 0);
+		vt100.appendString("\u30ab\u0301\u3099");
+		assertEquals('\u30ac', term.getChar(1, 0));
+		assertEquals("\u30ab\u0301\u3099", term.getCluster(1, 0));
+		// a joiner joins only what is written right after it
+		vt100.setCursor(2, 0);
+		vt100.appendString(smile);
+		vt100.setCursor(3, 0);
+		vt100.appendString(smile + "\u200d");
+		vt100.setCursor(2, 2);
+		vt100.appendString("x");
+		assertEquals('x', term.getChar(2, 2));
+		assertNull(term.getCluster(2, 0));
+		// in insert mode the second cell of a heart is made room for
+		vt100.setCursor(4, 0);
+		vt100.appendString("abc");
+		vt100.setCursor(4, 0);
+		vt100.setInsertMode(true);
+		vt100.appendString(heart);
+		vt100.setInsertMode(false);
+		assertEquals("\u2764\000abc", new String(term.getChars(4), 0, 5));
+		assertEquals(heart, term.getCluster(4, 0));
+		// inserting and deleting cells moves clusters with them
+		vt100.setCursor(4, 0);
+		vt100.insertCharacters(1);
+		assertEquals(heart, term.getCluster(4, 1));
+		vt100.deleteCharacters(1);
+		assertEquals(heart, term.getCluster(4, 0));
+		// a heart made wide on the last two cells waits to wrap, as any wide character does
+		vt100.setVT100LineWrapping(true);
+		vt100.setCursor(5, 8);
+		vt100.appendString(heart + "y");
+		assertEquals(heart, term.getCluster(5, 8));
+		assertEquals('y', term.getChar(6, 0));
+	}
+
+	@Test
+	public void testClusterBoundaries() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(8);
+		vt100.setDimensions(8, 20);
+		String smile = "\ud83d\ude00";
+		// UAX #29 GB11: after a joiner only a pictograph goes on, so x is a character of its own
+		vt100.setCursor(0, 0);
+		vt100.appendString(smile + "\u200dx");
+		assertEquals(smile + "\u200d", term.getCluster(0, 0));
+		assertEquals('x', term.getChar(0, 2));
+		// a skin tone goes on with any character, which then takes two cells, as in Windows Terminal
+		vt100.setCursor(1, 0);
+		vt100.appendString("a\ud83c\udffd|");
+		assertEquals("a\ud83c\udffd", term.getCluster(1, 0));
+		assertEquals('|', term.getChar(1, 2));
+		// a third regional indicator starts a flag of its own
+		vt100.setCursor(2, 0);
+		vt100.appendString("\ud83c\uddf0\ud83c\uddf7\ud83c\uddfa|");
+		assertEquals("\ud83c\uddf0\ud83c\uddf7", term.getCluster(2, 0));
+		assertEquals('|', term.getChar(2, 4));
+		// an Indic vowel sign keeps a cell of its own, where it is drawn: the columns are the same
+		vt100.setCursor(3, 0);
+		vt100.appendString("\u0915\u093f|");
+		assertNull(term.getCluster(3, 0));
+		assertEquals("\u0915\u093f|", new String(term.getChars(3), 0, 3));
+		// a selector goes onto the character just written, not onto a cluster before it
+		vt100.setCursor(4, 0);
+		vt100.appendString("q\u0301x\ufe0f|");
+		assertEquals("q\u0301", term.getCluster(4, 0));
+		assertEquals("x\ufe0f", term.getCluster(4, 1));
+		assertEquals('|', term.getChar(4, 3));
+		// a sequence of narrow pictographs with a joiner and a selector is one cluster, two cells
+		vt100.setCursor(5, 0);
+		vt100.appendString("\u26f9\u200d\u2642\ufe0f|");
+		assertEquals("\u26f9\u200d\u2642\ufe0f", term.getCluster(5, 0));
+		assertEquals('|', term.getChar(5, 2));
+		// a character on the last cell that a selector makes wide moves whole to the next line
+		vt100.setVT100LineWrapping(true);
+		vt100.setCursor(6, 19);
+		vt100.appendString("x\ufe0f|");
+		assertEquals('\000', term.getChar(6, 19));
+		assertEquals("x\ufe0f", term.getCluster(7, 0));
+		assertEquals('|', term.getChar(7, 2));
+		// a prefix sign keeps the character after it, which is drawn and copied with it
+		vt100.setCursor(3, 10);
+		vt100.appendString("a\u0600\u4e2d|");
+		assertEquals("\u0600\u4e2d", term.getCluster(3, 11));
+		assertEquals('\u4e2d', term.getChar(3, 11));
+		assertEquals('|', term.getChar(3, 13));
+		// a terminal one column wide has no second cell for a heart to grow into
+		vt100.setDimensions(8, 1);
+		vt100.setCursor(0, 0);
+		vt100.appendString("\u2764\ufe0f");
+		assertNull(term.getCluster(0, 0));
+		assertEquals('\u2764', term.getChar(0, 0));
+		vt100.setDimensions(8, 20);
+		// a cluster goes on in the next string written
+		vt100.setCursor(6, 0);
+		vt100.appendString(smile);
+		vt100.appendString("\u200d" + smile);
+		assertEquals(smile + "\u200d" + smile, term.getCluster(6, 0));
+	}
+
+	@Test
+	public void testClustersAcrossWritesAndWraps() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(4);
+		vt100.setDimensions(4, 4);
+		// a prefix sign and the character after it, written apart, still make one cluster
+		vt100.setCursor(0, 0);
+		vt100.appendString("\u0600");
+		vt100.appendString("\u4e2d");
+		assertEquals("\u0600\u4e2d", term.getCluster(0, 0));
+		// but not once the cursor has moved, even back to where it was
+		vt100.setCursor(0, 2);
+		vt100.appendString("\u0600");
+		vt100.setCursor(0, 0);
+		vt100.setCursor(0, 2);
+		vt100.appendString("x");
+		assertNull(term.getCluster(0, 2));
+		// with an immediate wrap, a mark after the last cell still goes onto it
+		vt100.setVT100LineWrapping(false);
+		vt100.setCursor(1, 0);
+		vt100.appendString("abce");
+		vt100.appendString("\u0301");
+		assertEquals('\u00e9', term.getChar(1, 3));
+		assertEquals("e\u0301", term.getCluster(1, 3));
+		assertEquals(0, vt100.getCursorColumn());
+		// and a character there made wide moves whole to the line it wrapped to
+		vt100.setCursor(2, 0);
+		vt100.appendString("abc\u2764");
+		vt100.appendString("\ufe0f|");
+		assertEquals('\000', term.getChar(2, 3));
+		assertEquals("\u2764\ufe0f", term.getCluster(3, 0));
+		assertEquals('|', term.getChar(3, 2));
+	}
+
+	@Test
+	public void testClusterGrowingWideScrollsWithIt() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(2);
+		vt100.setDimensions(2, 4);
+		vt100.setVT100LineWrapping(false);
+		// a heart grown wide on the last two cells of the bottom row wraps, which scrolls:
+		// the cluster is written before that, and goes up with its row
+		vt100.setCursor(1, 2);
+		vt100.appendString("\u2764\ufe0f");
+		assertEquals("\u2764\ufe0f", term.getCluster(0, 2));
+		assertNull(term.getCluster(1, 2));
+	}
 }

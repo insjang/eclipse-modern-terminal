@@ -9,6 +9,7 @@
  *******************************************************************************/
 package io.github.insjang.terminal.internal.model;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -218,9 +219,17 @@ public final class TerminalFind {
 			if (CharWidth.isFiller(row, col)) {
 				continue;
 			}
-			String cluster = col + 1 < row.length() ? data.getCluster(line, col) : null;
-			String s = cluster != null ? cluster : String.valueOf(row.charAt(col) == '\000' ? ' ' : row.charAt(col));
-			int last = cluster != null || col + 1 < row.length() && CharWidth.isFiller(row, col + 1) ? col + 1 : col;
+			String cluster = data.getCluster(line, col);
+			int cellsTaken = cluster == null ? 1 : CharWidth.clusterCells(cluster);
+			if (col + cellsTaken > row.length()) {
+				cluster = null;
+				cellsTaken = 1;
+			}
+			// a cluster is found as it is shown: an accent sent as a mark matches the accented letter
+			String s = cluster != null ? Normalizer.normalize(cluster, Normalizer.Form.NFC)
+					: String.valueOf(row.charAt(col) == '\000' ? ' ' : row.charAt(col));
+			int last = cluster != null ? col + cellsTaken - 1
+					: col + 1 < row.length() && CharWidth.isFiller(row, col + 1) ? col + 1 : col;
 			for (int i = 0; i < s.length(); i++) {
 				int at = text.length();
 				if (at == cells[0].length) {
@@ -234,7 +243,7 @@ public final class TerminalFind {
 				text.append(s.charAt(i));
 			}
 			if (cluster != null) {
-				col++;
+				col += cellsTaken - 1;
 			}
 		}
 		return cells;

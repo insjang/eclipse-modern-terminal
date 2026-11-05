@@ -258,7 +258,11 @@ public class TerminalTextDataStore implements ITerminalTextData {
 		if (clusters == null || clusters.isEmpty()) {
 			return;
 		}
-		for (int col = column - 1; col < column + len; col++) {
+		String before = clusters.get(column - 1);
+		if (before != null && CharWidth.clusterCells(before) == 2) {
+			clusters.remove(column - 1);
+		}
+		for (int col = column; col < column + len; col++) {
 			clusters.remove(col);
 		}
 	}
@@ -400,24 +404,31 @@ public class TerminalTextDataStore implements ITerminalTextData {
 
 	@Override
 	public void copyLine(ITerminalTextData source, int sourceLine, int destLine) {
-		fChars[destLine] = source.getChars(sourceLine);
+		char[] chars = source.getChars(sourceLine);
+		// read before writing: the source may be this very line
+		Map<Integer, String> clusters = null, links = null;
+		for (int col = 0; chars != null && col < chars.length; col++) {
+			String cluster = source.getCluster(sourceLine, col);
+			if (cluster != null) {
+				if (clusters == null) {
+					clusters = new HashMap<>();
+				}
+				clusters.put(col, cluster);
+			}
+			String link = source.getLink(sourceLine, col);
+			if (link != null) {
+				if (links == null) {
+					links = new HashMap<>();
+				}
+				links.put(col, link);
+			}
+		}
+		fChars[destLine] = chars;
 		fStyle[destLine] = source.getStyles(sourceLine);
 		fWrappedLines.set(destLine, source.isWrappedLine(sourceLine));
 		fMarks[destLine] = source.getLineMark(sourceLine);
-		fClusters[destLine] = null;
-		fLinks[destLine] = null;
-		if (fChars[destLine] != null) {
-			for (int col = 0; col < fChars[destLine].length; col++) {
-				String cluster = source.getCluster(sourceLine, col);
-				if (cluster != null) {
-					setCluster(destLine, col, cluster);
-				}
-				String link = source.getLink(sourceLine, col);
-				if (link != null) {
-					setLink(destLine, col, link);
-				}
-			}
-		}
+		fClusters[destLine] = clusters;
+		fLinks[destLine] = links;
 	}
 
 	@Override

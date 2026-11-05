@@ -175,4 +175,17 @@ public class TerminalFindTest {
 				() -> TerminalFind.next(data, p, null, true, System.nanoTime() + 200_000_000L));
 		assertTrue((System.nanoTime() - start) / 1000000 < 2000);
 	}
+
+	@Test
+	public void testClustersAreFoundAsShown() {
+		// an accent sent as a mark is found as the accented letter, and a heart made
+		// wide by VS16 covers both of its cells
+		ITerminalTextData data = terminal(20, "cafe\u0301 \u2764\ufe0f x");
+		List<Match> m = find(data, "caf\u00e9", true, false);
+		assertEquals(1, m.size());
+		assertEquals(new Match(0, 0, 0, 3), m.get(0));
+		m = find(data, "\u2764\ufe0f x", true, false);
+		assertEquals(1, m.size());
+		assertEquals(new Match(0, 5, 0, 8), m.get(0));
+	}
 }

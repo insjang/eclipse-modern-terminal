@@ -70,6 +70,30 @@ public final class CharWidth {
 		return isZeroWidth(codePoint) ? 0 : isWide(codePoint) ? 2 : 1;
 	}
 
+	/**
+	 * Cells a code point takes by itself: its width, except that a printable one
+	 * beyond the BMP takes two, as its two chars cannot share a cell.
+	 */
+	public static int cells(int codePoint) {
+		int width = of(codePoint);
+		return width != 0 && Character.charCount(codePoint) == 2 ? 2 : width;
+	}
+
+	/**
+	 * Cells a grapheme cluster takes, summed as Windows Terminal sums them: what its
+	 * code points take, VS16 (emoji presentation) counting as two, but at least one
+	 * and no more than two.
+	 */
+	public static int clusterCells(String cluster) {
+		int cells = 0;
+		for (int i = 0; i < cluster.length();) {
+			int codePoint = cluster.codePointAt(i);
+			cells += codePoint == 0xFE0F ? 2 : cells(codePoint);
+			i += Character.charCount(codePoint);
+		}
+		return Math.max(1, Math.min(2, cells));
+	}
+
 	/** @return the total display width of {@code s} */
 	public static int ofString(String s) {
 		return s.codePoints().map(CharWidth::of).sum();

@@ -15,6 +15,7 @@
 package io.github.insjang.terminal.internal.textcanvas;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 
@@ -403,15 +404,26 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			row2++;
 		}
 		row2++;
+		int width = fSnapshot.getWidth();
+		// each row as wide as the screen, so that an offset in the text is a row and a column
+		char[][] rows = new char[row2 - row1][];
 		String lineText = ""; //$NON-NLS-1$
 		for (int l = row1; l < row2; l++) {
 			char[] chars = fSnapshot.getChars(l);
 			if (chars == null) {
 				return;
 			}
-			lineText += String.valueOf(chars);
+			rows[l - row1] = Arrays.copyOf(chars, width);
+			char[] cells = rows[l - row1].clone();
+			for (int c = 0; c + 1 < width; c++) {
+				String cluster = fSnapshot.getCluster(l, c);
+				if (cluster != null && CharWidth.clusterCells(cluster) == 2 && CharWidth.of(cells[c]) == 1
+						&& cells[c + 1] == '\000') {
+					cells[c + 1] = cells[c]; // the second cell of a narrow character grown wide is part of it, not a gap
+				}
+			}
+			lineText += String.valueOf(cells);
 		}
-		int width = fSnapshot.getWidth();
 		int col1 = col + (line - row1) * width;
 		if (lineText.length() <= col1 || isBoundary(lineText, col1)) {
 			return;
@@ -431,8 +443,14 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			}
 		}
 		if (wordStart < wordEnd) {
+			StringBuilder word = new StringBuilder();
+			for (int p = wordStart; p < wordEnd; p = (p / width + 1) * width) {
+				int l = row1 + p / width;
+				int end = Math.min(wordEnd - (p / width) * width, width);
+				word.append(withClusters(fSnapshot, l, rows[l - row1], p % width, end));
+			}
 			fHoverRange = new TextRange(row1 + wordStart / width, row1 + (wordEnd - 1) / width + 1, (wordStart % width),
-					(wordEnd - 1) % width + 1, lineText.substring(wordStart, wordEnd).replace("\000", "")); //$NON-NLS-1$ //$NON-NLS-2$
+					(wordEnd - 1) % width + 1, word.toString().replace("\000", "")); //$NON-NLS-1$ //$NON-NLS-2$
 			if (DEBUG_HOVER) {
 				System.out.format("hover: %s   <- [%s,%s][%s,%s]\n", //$NON-NLS-1$
 						fHoverRange, col, line, wordStart, wordEnd);
@@ -458,40 +476,29 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 
 	// helper to sanitize text copied out of a snapshot
 	private static String scrubLine(String text) {
-		// get rid of the empty space at the end of the lines
-		// text=text.replaceAll("\000+$","");  //$NON-NLS-1$//$NON-NLS-2$
-		// <J2ME-CDC-1.1 version>
+		// get rid of the empty space at the end of the lines; null means space
 		int i = text.length() - 1;
 		while (i >= 0 && text.charAt(i) == '\000') {
 			i--;
 		}
-		text = text.substring(0, i + 1);
-		// </J2ME-CDC-1.1 version>
-		// null means space, unless it is the filler of a wide character
-		StringBuilder scrubbed = new StringBuilder(text.length());
-		for (int j = 0; j < text.length(); j++) {
-			char c = text.charAt(j);
-			if (c != '\000') {
-				scrubbed.append(c);
-			} else if (!CharWidth.isFiller(text, j)) {
-				scrubbed.append(' ');
-			}
-		}
-		return scrubbed.toString();
+		return text.substring(0, i + 1).replace('\000', ' ');
 	}
 
 	/**
-	 * The cells from <code>from</code> to <code>to</code> as text, with each two-cell
-	 * cluster given in full in place of the one character its cells hold.
+	 * The cells from <code>from</code> to <code>to</code> as text: each cluster given
+	 * in full in place of the one character its cells hold, the filler of a wide
+	 * character left out, and a cell never written given as a null.
 	 */
 	private static String withClusters(ITerminalTextDataReadOnly data, int line, char[] chars, int from, int to) {
 		StringBuilder text = new StringBuilder(to - from);
+		String cells = new String(chars);
 		for (int col = from; col < to; col++) {
-			String cluster = col + 1 < to ? data.getCluster(line, col) : null;
-			if (cluster != null) {
+			String cluster = data.getCluster(line, col);
+			int n = cluster == null ? 1 : CharWidth.clusterCells(cluster);
+			if (cluster != null && col + n <= to) {
 				text.append(cluster);
-				col++;
-			} else {
+				col += n - 1;
+			} else if (!CharWidth.isFiller(cells, col)) {
 				text.append(chars[col]);
 			}
 		}
@@ -503,7 +510,12 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			return false;
 		}
 		char[] chars = fSelectionSnapshot.getChars(line);
-		return chars != null && col < chars.length && CharWidth.isSecondCell(new String(chars), col);
+		if (chars == null || col >= chars.length) {
+			return false;
+		}
+		String cluster = fSelectionSnapshot.getCluster(line, col - 1);
+		return CharWidth.isSecondCell(new String(chars), col)
+				|| cluster != null && CharWidth.clusterCells(cluster) == 2;
 	}
 
 	/**
@@ -588,7 +600,7 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			char[] chars = snapshot.getChars(line);
 			String text;
 			if (chars != null) {
-				text = scrubLine(new String(chars)); // take care of NULs
+				text = scrubLine(withClusters(snapshot, line, chars, 0, chars.length)); // take care of NULs
 			} else {
 				text = ""; //$NON-NLS-1$ null arrays represent empty lines
 			}
