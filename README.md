@@ -25,7 +25,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | | Eclipse Terminal | Modern Terminal |
 |---|---|---|
 | Korean, Chinese, Japanese | counted as one column: lines break and the cursor drifts | two columns, as in every other terminal (East Asian Width) |
-| Emoji, combining marks | split or doubled | one grapheme cluster in its cells (ZWJ sequences, flags, skin tones, accents), as Ghostty and Windows Terminal count them; a preference counts code points as shells do (wcwidth), so editing emoji at a prompt keeps the cursor in place; programs asking for mode 2027 get whole clusters |
+| Emoji, combining marks | split or doubled | one grapheme cluster in its cells (ZWJ sequences, flags, skin tones, accents), as Ghostty and Windows Terminal count them; a preference counts code points as shells do (wcwidth), so editing emoji at a prompt keeps the cursor in place (over SSH; in a local terminal on Windows the console in between counts its own way, so leave it off there); programs asking for mode 2027 get whole clusters |
 | Full-screen programs (vim, less, htop, Claude Code) | draw over the scrollback, leave garbage behind | alternate screen buffer: the shell comes back as it was |
 | Mouse | ignored by programs | reported to programs that ask (click, wheel, drag; SGR mode) |
 | DEC modes, bracketed paste, hidden cursor, faint text | partly | supported |
