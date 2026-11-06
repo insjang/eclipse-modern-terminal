@@ -127,6 +127,12 @@ public class VT100Emulator implements ControlListener {
 	private static final int ANSISTATE_IGNORING_STRING = 9;
 
 	/**
+	 * After "CSI ? Ps $": DECRQM, a program asking whether a DEC private mode is set,
+	 * when the final character is 'p'.
+	 */
+	private static final int ANSISTATE_REQUESTING_MODE = 10;
+
+	/**
 	 * This field holds the current state of the Finite TerminalState Automaton (FSA)
 	 * that recognizes ANSI escape sequences.
 	 *
@@ -619,9 +625,11 @@ public class VT100Emulator implements ControlListener {
 					} else {
 						Logger.log("Ignoring unsupported control sequence: CSI >" + character); //$NON-NLS-1$
 					}
+				} else if (character == '$' && ansiMarker == '?') {
+					ansiState = ANSISTATE_REQUESTING_MODE;
 				} else if (character >= '\u0020' && character <= '\u002f'
 						|| character >= '\u003c' && character <= '\u003f') {
-					// an intermediate byte (as in DECRQM, "CSI ? Ps $ p") or a misplaced marker
+					// another intermediate byte or a misplaced marker
 					ansiState = ANSISTATE_IGNORING_COMMAND;
 				} else {
 					processAnsiParameterCharacter(character);
@@ -639,6 +647,16 @@ public class VT100Emulator implements ControlListener {
 					if (designatedCharset >= 0) {
 						lineDrawing[designatedCharset] = character == '0';
 					}
+				}
+				break;
+
+			case ANSISTATE_REQUESTING_MODE:
+				if (character == 'p') {
+					ansiState = ANSISTATE_INITIAL;
+					reportDecPrivateMode(getAnsiParameter(0));
+				} else {
+					ansiState = ANSISTATE_IGNORING_COMMAND;
+					pushBackChar(character);
 				}
 				break;
 
@@ -765,8 +783,27 @@ public class VT100Emulator implements ControlListener {
 		resetModes();
 	}
 
+	/**
+	 * DECRQM for the modes a program may ask about before it uses them; only
+	 * 2027 for now. The others go unanswered, as before.
+	 */
+	private void reportDecPrivateMode(int mode) {
+		if (mode == 2027) {
+			// 1: set, 2: reset
+			sendReply("\u001b[?2027;" + (text.isGraphemeMode() ? 1 : 2) + "$y"); //$NON-NLS-1$ //$NON-NLS-2$
+		} else {
+			Logger.log("Ignoring DECRQM for mode " + mode); //$NON-NLS-1$
+		}
+	}
+
+	/** @see IVT100EmulatorBackend#setLegacyWidth(boolean) */
+	public void setLegacyWidth(boolean legacy) {
+		text.setLegacyWidth(legacy);
+	}
+
 	/** what a full reset and a new connection put back besides the screen */
 	private void resetModes() {
+		text.setGraphemeMode(false);
 		text.setAutoWrap(true);
 		originMode = false;
 		lineDrawing[0] = false;
@@ -1776,6 +1813,11 @@ public class VT100Emulator implements ControlListener {
 			// Bracketed paste: pasted text is wrapped so a program can tell it from typing.
 			terminal.enableBracketedPaste(true);
 			break;
+		case 2027:
+			// Grapheme cluster mode: the program counts a cluster's cells whole, as this does
+			// unless the legacy width preference says otherwise
+			text.setGraphemeMode(true);
+			break;
 		case 1000: // report button press and release
 		case 1002: // also report drag
 		case 1003: // also report every move
@@ -1840,6 +1882,9 @@ public class VT100Emulator implements ControlListener {
 			break;
 		case 2004:
 			terminal.enableBracketedPaste(false);
+			break;
+		case 2027:
+			text.setGraphemeMode(false);
 			break;
 		case 1000:
 		case 1002:

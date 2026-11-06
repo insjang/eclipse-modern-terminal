@@ -26,7 +26,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | | Eclipse Terminal | Modern Terminal |
 |---|---|---|
 | 한글·중국어·일본어 | 1칸으로 계산: 줄이 깨지고 커서가 밀림 | 다른 터미널과 같이 2칸 (East Asian Width) |
-| 이모지·결합 문자 | 쪼개지거나 겹침 | 하나의 글자 묶음(grapheme cluster)으로 표시 (ZWJ 이모지, 국기, 피부색, 악센트) |
+| 이모지·결합 문자 | 쪼개지거나 겹침 | 하나의 글자 묶음(grapheme cluster)으로 표시 (ZWJ 이모지, 국기, 피부색, 악센트), Ghostty·Windows Terminal과 같은 방식; 설정으로 셸처럼 코드 포인트 단위로 셀 수 있음 (wcwidth: 프롬프트에서 이모지를 고쳐도 커서가 맞음), mode 2027을 켠 프로그램은 클러스터 단위 |
 | 전체 화면 프로그램 (vim, less, htop, Claude Code) | 스크롤 기록 위에 그려 잔상이 남음 | 대체 화면 버퍼: 종료하면 셸 화면이 그대로 돌아옴 |
 | 마우스 | 프로그램에 전달 안 됨 | 요청한 프로그램에 전달 (클릭, 휠, 드래그, SGR 방식) |
 | DEC 모드, 브래킷 붙여넣기, 커서 숨김, 흐린 글자 | 일부만 | 지원 |

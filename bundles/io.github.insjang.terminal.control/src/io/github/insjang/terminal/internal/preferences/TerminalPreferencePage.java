@@ -86,6 +86,8 @@ public class TerminalPreferencePage extends FieldEditorPreferencePage implements
 				getFieldEditorParent()));
 		addField(new BooleanFieldEditor(ITerminalConstants.PREF_CONFIRM_MULTILINE_PASTE,
 				TerminalMessages.CONFIRM_MULTILINE_PASTE, getFieldEditorParent()));
+		addField(new BooleanFieldEditor(ITerminalConstants.PREF_LEGACY_WIDTH, TerminalMessages.LEGACY_WIDTH,
+				getFieldEditorParent()));
 
 		addField(new IntegerFieldEditor(ITerminalConstants.PREF_BUFFERLINES, TerminalMessages.BUFFERLINES,
 				getFieldEditorParent()));

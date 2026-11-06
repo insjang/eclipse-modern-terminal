@@ -808,6 +808,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		boolean invert = fPreferenceStore.getBoolean(ITerminalConstants.PREF_INVERT_COLORS);
 		setBufferLineLimit(bufferLineLimit);
 		setInvertedColors(invert);
+		fTerminalText.setLegacyWidth(fPreferenceStore.getBoolean(ITerminalConstants.PREF_LEGACY_WIDTH));
 		onTerminalColorsChanged();
 		onTerminalFontChanged();
 	}

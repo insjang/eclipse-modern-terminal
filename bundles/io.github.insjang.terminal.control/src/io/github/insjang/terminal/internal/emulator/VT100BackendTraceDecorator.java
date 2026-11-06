@@ -215,6 +215,22 @@ public class VT100BackendTraceDecorator implements IVT100EmulatorBackend {
 	}
 
 	@Override
+	public void setLegacyWidth(boolean legacy) {
+		fBackend.setLegacyWidth(legacy);
+	}
+
+	@Override
+	public void setGraphemeMode(boolean on) {
+		fWriter.println("setGraphemeMode(" + on + ")"); //$NON-NLS-1$ //$NON-NLS-2$
+		fBackend.setGraphemeMode(on);
+	}
+
+	@Override
+	public boolean isGraphemeMode() {
+		return fBackend.isGraphemeMode();
+	}
+
+	@Override
 	public boolean isWrapPending() {
 		return fBackend.isWrapPending();
 	}

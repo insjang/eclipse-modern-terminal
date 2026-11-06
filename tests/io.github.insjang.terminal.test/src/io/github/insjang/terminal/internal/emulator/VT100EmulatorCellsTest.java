@@ -44,6 +44,7 @@ public class VT100EmulatorCellsTest {
 			term.setMaxHeight(6);
 			vt100.setDimensions(1 + random.nextInt(4), 1 + random.nextInt(6));
 			vt100.setVT100LineWrapping(random.nextBoolean());
+			vt100.setLegacyWidth(random.nextBoolean());
 			StringBuilder log = new StringBuilder();
 			for (int step = 0; step < 60; step++) {
 				String op = step(vt100, random);
@@ -63,26 +64,28 @@ public class VT100EmulatorCellsTest {
 			}
 			int columns = 2 + random.nextInt(6);
 			boolean deferred = random.nextBoolean();
-			String whole = cells(text.toString(), new int[0], columns, deferred);
+			boolean legacy = random.nextBoolean();
+			String whole = cells(text.toString(), new int[0], columns, deferred, legacy);
 			if (text.chars().noneMatch(c -> c == 0x200b || c == 0xfe0e || c == 0xfe0f)
 					&& !text.toString().contains("\u0600\u0600")) { //$NON-NLS-1$
 				// what is written comes back whole, but for what is kept out because it only hides text
-				assertEquals(escape(text.toString()), escape(copied(text.toString(), columns, deferred)),
+				assertEquals(escape(text.toString()), escape(copied(text.toString(), columns, deferred, legacy)),
 						"copied back"); //$NON-NLS-1$
 			}
 			int[] splits = random.ints(1 + random.nextInt(3), 0, text.length() + 1).sorted().toArray();
-			assertEquals(whole, cells(text.toString(), splits, columns, deferred),
+			assertEquals(whole, cells(text.toString(), splits, columns, deferred, legacy),
 					"split at " + java.util.Arrays.toString(splits) + " of " + escape(text.toString())); //$NON-NLS-1$ //$NON-NLS-2$
 		}
 	}
 
 	/** @return all the text, as copying it gives it back, after writing it alone */
-	private static String copied(String text, int columns, boolean deferred) {
+	private static String copied(String text, int columns, boolean deferred, boolean legacy) {
 		ITerminalTextData term = TerminalTextDataFactory.makeTerminalTextData();
 		VT100EmulatorBackend vt100 = new VT100EmulatorBackend(term);
 		term.setMaxHeight(20);
 		vt100.setDimensions(20, columns);
 		vt100.setVT100LineWrapping(deferred);
+		vt100.setLegacyWidth(legacy);
 		vt100.appendString(text);
 		ITerminalTextDataSnapshot snapshot = term.makeSnapshot();
 		snapshot.updateSnapshot(true);
@@ -91,12 +94,13 @@ public class VT100EmulatorCellsTest {
 		return all.substring(0, all.indexOf('\n') < 0 ? all.length() : all.indexOf('\n'));
 	}
 
-	private static String cells(String text, int[] splits, int columns, boolean deferred) {
+	private static String cells(String text, int[] splits, int columns, boolean deferred, boolean legacy) {
 		ITerminalTextData term = new TerminalTextDataStore();
 		VT100EmulatorBackend vt100 = new VT100EmulatorBackend(term);
 		term.setMaxHeight(8);
 		vt100.setDimensions(4, columns);
 		vt100.setVT100LineWrapping(deferred);
+		vt100.setLegacyWidth(legacy);
 		int from = 0;
 		for (int split : splits) {
 			vt100.appendString(text.substring(from, split));

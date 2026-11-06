@@ -311,6 +311,20 @@ public interface IVT100EmulatorBackend {
 	boolean isWrapPending();
 
 	/**
+	 * Counts the cells of a character one code point at a time, as wcwidth and the
+	 * shells using it do, instead of a grapheme cluster whole (the default).
+	 */
+	void setLegacyWidth(boolean legacy);
+
+	/**
+	 * Mode 2027: a program says it counts grapheme clusters whole, so they are
+	 * counted whole whatever {@link #setLegacyWidth(boolean)} says.
+	 */
+	void setGraphemeMode(boolean on);
+
+	boolean isGraphemeMode();
+
+	/**
 	 * Puts back a pending wrap, as restoring a saved cursor (DECRC) does; it only
 	 * holds with the cursor on the last column.
 	 */

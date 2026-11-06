@@ -331,13 +331,18 @@ public class TerminalTextDataStore implements ITerminalTextData {
 
 	@Override
 	public void setCluster(int line, int column, String cluster) {
+		setCluster(line, column, cluster, CharWidth.clusterCells(cluster));
+	}
+
+	@Override
+	public void setCluster(int line, int column, String cluster, int cells) {
 		if (fLayout[line] == null) {
 			fLayout[line] = new Layout();
 		}
 		Layout layout = fLayout[line];
 		layout.clusters.put(column, cluster);
 		// a cluster written over two cells, its second one filled, takes both
-		if (column + 1 < fWidth && CharWidth.clusterCells(cluster) == 2 && !layout.second.get(column)) {
+		if (column + 1 < fWidth && cells == 2 && !layout.second.get(column)) {
 			layout.second.set(column + 1);
 		}
 	}

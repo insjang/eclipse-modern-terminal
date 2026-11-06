@@ -51,6 +51,8 @@ public interface ITerminalConstants {
 	public static final String PREF_CLIPBOARD_WRITE = "TerminalPrefClipboardWrite"; //$NON-NLS-1$
 	/** Ask before pasting text with line breaks where the program has no bracketed paste. */
 	public static final String PREF_CONFIRM_MULTILINE_PASTE = "TerminalPrefConfirmMultilinePaste"; //$NON-NLS-1$
+	/** count character cells one code point at a time (wcwidth), not grapheme clusters whole */
+	public static final String PREF_LEGACY_WIDTH = "TerminalPrefLegacyWidth"; //$NON-NLS-1$
 	/**
 	 * @since 5.0
 	 */
@@ -65,6 +67,7 @@ public interface ITerminalConstants {
 	public static final boolean DEFAULT_CLOSE_ON_EXIT = true;
 	public static final boolean DEFAULT_CLIPBOARD_WRITE = true;
 	public static final boolean DEFAULT_CONFIRM_MULTILINE_PASTE = true;
+	public static final boolean DEFAULT_LEGACY_WIDTH = false;
 	/**
 	 * @since 5.0
 	 */

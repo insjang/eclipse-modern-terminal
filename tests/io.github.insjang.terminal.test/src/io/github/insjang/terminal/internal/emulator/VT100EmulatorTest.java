@@ -626,6 +626,26 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testWidthCountedWholeOrAsShellsCount() {
+		// a family (three emoji joined by ZWJ) and a heart made wide by VS16
+		String family = "\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67", heart = "\u2764\ufe0f";
+		// by default a cluster is counted whole: 2 + 2
+		run(family + heart);
+		assertCursorLocation(0, 4);
+		// legacy: code point by code point, as wcwidth and the shells: 2 + 0 + 2 + 0 + 2 and 1 + 0
+		emulator.setLegacyWidth(true);
+		run("\r\n" + family + heart);
+		assertAll(() -> assertCursorLocation(1, 7), () -> assertEquals(1, data.getCellWidth(1, 6)));
+		// mode 2027: the program counts whole, whatever the preference; DECRQM reports it
+		run("\033[?2027$p\033[?2027h\033[?2027$p\r\n" + family + heart);
+		assertAll(() -> assertCursorLocation(2, 4),
+				() -> assertEquals("\033[?2027;2$y\033[?2027;1$y", control.takeOutput()));
+		// reset, and a full reset, give the preference back
+		run("\033[?2027l\r\n" + heart + "\033[?2027h\033c" + heart);
+		assertAll(() -> assertCursorLocation(0, 1), () -> assertEquals(1, data.getCellWidth(0, 0)));
+	}
+
+	@Test
 	public void testDeviceAttributes() {
 		// DA1: a VT100 with advanced video, as xterm in VT100 mode; DA2: type 0, version 0
 		run("\033[c\033[0c\033[>c\033[>0c\033[1c");

@@ -145,6 +145,10 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private TerminalStyle fNormalStyle;
 	private boolean fVT100LineWrapping;
 	private boolean fAutoWrap = true;
+	/** the preference: count code points one at a time, as wcwidth does, not clusters whole */
+	private boolean fLegacyWidth;
+	/** mode 2027: a program asked for clusters counted whole, whatever the preference */
+	private boolean fGraphemeMode;
 	private ScrollRegion fScrollRegion = ScrollRegion.FULL_WINDOW;
 	/** the line of the last prompt (OSC 133;A) when it was marked, -1 for none; lines only move up since */
 	private int fPromptLine = -1;
@@ -767,7 +771,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 					continue;
 				}
 				String text = Character.toString(codePoint);
-				cells = CharWidth.clusterCells(text);
+				cells = cellsOf(text);
 				if (cells > room) {
 					if (!fAutoWrap && cells <= fColumns) {
 						// no wrap: the character goes in the last cells it fits in
@@ -801,6 +805,14 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	 */
 	private boolean[] clusterStarts(String before, String text) {
 		boolean[] starts = new boolean[text.length()];
+		if (fLegacyWidth && !fGraphemeMode) {
+			// as wcwidth: every code point that takes a cell starts one, the others go
+			// onto it, so a shell counting the same way puts its cursor where it is shown
+			for (int i = 0; i < starts.length; i += Character.charCount(text.codePointAt(i))) {
+				starts[i] = i == 0 && before.isEmpty() || CharWidth.cells(text.codePointAt(i)) > 0;
+			}
+			return starts;
+		}
 		int simple = before.isEmpty() || startsAlways(before.charAt(before.length() - 1)) ? 0 : -1;
 		while (simple >= 0 && simple < starts.length && startsAlways(text.charAt(simple))) {
 			starts[simple++] = true;
@@ -929,6 +941,39 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		return ALONE[c] == 1;
 	}
 
+	/**
+	 * Cells a cluster takes: counted whole (VS16 making it wide), or with the
+	 * legacy preference and no mode 2027, as its code points add up, as wcwidth does.
+	 */
+	private int cellsOf(String cluster) {
+		if (!fLegacyWidth || fGraphemeMode) {
+			return CharWidth.clusterCells(cluster);
+		}
+		int cells = cluster.codePoints().map(CharWidth::cells).sum();
+		return Math.max(1, Math.min(2, cells));
+	}
+
+	@Override
+	public void setLegacyWidth(boolean legacy) {
+		synchronized (fTerminal) {
+			fLegacyWidth = legacy;
+		}
+	}
+
+	@Override
+	public void setGraphemeMode(boolean on) {
+		synchronized (fTerminal) {
+			fGraphemeMode = on;
+		}
+	}
+
+	@Override
+	public boolean isGraphemeMode() {
+		synchronized (fTerminal) {
+			return fGraphemeMode;
+		}
+	}
+
 	private boolean breaks(String first, String second) {
 		fGraphemes.setText(first + second);
 		return fGraphemes.isBoundary(first.length());
@@ -1000,7 +1045,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		String text = fLastText + codePoint;
 		int cells = fTerminal.getCellWidth(line, col);
 		TerminalStyle style = fTerminal.getStyle(line, col);
-		if (CharWidth.clusterCells(text) <= cells || fColumns < 2) {
+		if (cellsOf(text) <= cells || fColumns < 2) {
 			put(line, col, text, cells, style);
 			fLastText = text; // in the same cells, with the cursor where it was
 			return toAbsoluteLine(fCursorLine);
@@ -1052,7 +1097,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		}
 		fTerminal.setChars(line, col, chars, 0, chars.length, style);
 		if (!text.equals(drawn)) {
-			fTerminal.setCluster(line, col, text);
+			fTerminal.setCluster(line, col, text, cells);
 		}
 		link(line, col, col + cells);
 	}
@@ -1105,7 +1150,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			int width = i + widths[i] <= n ? Math.max(widths[i], 1) : 1;
 			fTerminal.setChars(line, from + shift + i, chars, i, width, styles[i]);
 			if (clusters[i] != null) {
-				fTerminal.setCluster(line, from + shift + i, clusters[i]);
+				fTerminal.setCluster(line, from + shift + i, clusters[i], width);
 			}
 			i += width;
 		}

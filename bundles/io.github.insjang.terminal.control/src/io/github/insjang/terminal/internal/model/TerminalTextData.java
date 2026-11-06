@@ -387,6 +387,12 @@ public class TerminalTextData implements ITerminalTextData {
 	}
 
 	@Override
+	public void setCluster(int line, int column, String cluster, int cells) {
+		fData.setCluster(line, column, cluster, cells);
+		sendLineChangedToSnapshots(line);
+	}
+
+	@Override
 	public void clearWrappedLine(int line) {
 		fData.clearWrappedLine(line);
 		sendLineChangedToSnapshots(line);

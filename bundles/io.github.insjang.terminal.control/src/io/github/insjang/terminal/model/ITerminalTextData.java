@@ -165,6 +165,17 @@ public interface ITerminalTextData extends ITerminalTextDataReadOnly {
 	}
 
 	/**
+	 * Records the whole of a grapheme cluster drawn in the given number of cells
+	 * from column, one or two, as the writer counted them: the same cluster can
+	 * take one cell where code points are counted one at a time (wcwidth) and two
+	 * where it is counted whole.
+	 * @since 1.3
+	 */
+	default void setCluster(int line, int column, String cluster, int cells) {
+		setCluster(line, column, cluster);
+	}
+
+	/**
 	 * Says the line ends where it is drawn, undoing {@link #setWrappedLine(int)}.
 	 * A program that draws its own screen writes a line over and over, and what ran
 	 * on in one frame may end in the next.
