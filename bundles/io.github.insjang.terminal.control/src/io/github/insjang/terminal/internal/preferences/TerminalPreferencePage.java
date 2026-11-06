@@ -23,6 +23,7 @@ import org.eclipse.jface.preference.BooleanFieldEditor;
 import org.eclipse.jface.preference.FieldEditorPreferencePage;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.IntegerFieldEditor;
+import org.eclipse.jface.preference.RadioGroupFieldEditor;
 import io.github.insjang.terminal.internal.control.impl.TerminalMessages;
 import io.github.insjang.terminal.internal.control.impl.TerminalPlugin;
 import org.eclipse.ui.IWorkbench;
@@ -86,8 +87,11 @@ public class TerminalPreferencePage extends FieldEditorPreferencePage implements
 				getFieldEditorParent()));
 		addField(new BooleanFieldEditor(ITerminalConstants.PREF_CONFIRM_MULTILINE_PASTE,
 				TerminalMessages.CONFIRM_MULTILINE_PASTE, getFieldEditorParent()));
-		addField(new BooleanFieldEditor(ITerminalConstants.PREF_LEGACY_WIDTH, TerminalMessages.LEGACY_WIDTH,
-				getFieldEditorParent()));
+		// stored as the boolean it has always been: true counts code points
+		addField(new RadioGroupFieldEditor(ITerminalConstants.PREF_LEGACY_WIDTH, TerminalMessages.WIDTH, 1,
+				new String[][] { { TerminalMessages.WIDTH_CLUSTERS, Boolean.FALSE.toString() },
+						{ TerminalMessages.WIDTH_CODE_POINTS, Boolean.TRUE.toString() } },
+				getFieldEditorParent(), true));
 
 		addField(new IntegerFieldEditor(ITerminalConstants.PREF_BUFFERLINES, TerminalMessages.BUFFERLINES,
 				getFieldEditorParent()));
