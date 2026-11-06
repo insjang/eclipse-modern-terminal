@@ -1291,7 +1291,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			eraseWhole(line, fCursorColumn, end);
 			if (end == fColumns) {
 				// Nothing is left out to the margin, so the line ends before it, as
-				// erasing to the end of the line says (xterm, Windows Terminal).
+				// erasing to the end of the line says (xterm; Ghostty on any ECH).
 				fTerminal.clearWrappedLine(line);
 			}
 		}

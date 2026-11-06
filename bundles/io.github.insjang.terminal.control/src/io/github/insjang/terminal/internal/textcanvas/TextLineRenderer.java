@@ -224,7 +224,8 @@ public class TextLineRenderer implements ILinelRenderer {
 				gc.fillRectangle(xx, y, width * fStyleMap.getFontWidth(), fStyleMap.getFontHeight());
 				String drawn = Cells.drawn(data, line, c);
 				if (!drawn.isBlank()) {
-					gc.drawString(drawn, fStyleMap.getCharOffset(drawn.charAt(0)) + xx, y, false);
+					// placed by the character the cell shows, not a prefix written before it
+					gc.drawString(drawn, fStyleMap.getCharOffset(data.getChar(line, c)) + xx, y, false);
 				}
 				xx += width * fStyleMap.getFontWidth();
 				c += width;
