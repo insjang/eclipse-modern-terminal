@@ -9,7 +9,7 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 OUT=$HERE/build
 QUALIFIER=v$(date +%Y%m%d-%H%M%S)
 # Eclipse's plugins, minus its own terminal: nothing may compile against it by accident
-CP=$(find "$ECLIPSE/plugins" -maxdepth 1 -name '*.jar' ! -name 'org.eclipse.terminal.*' | sort | tr '\n' ':')
+CP=$( (find "$ECLIPSE/plugins" -maxdepth 1 -name '*.jar' ! -name 'org.eclipse.terminal.*'; find "$ECLIPSE/plugins" -maxdepth 1 -type d -name 'com.sun.jna_*') | sort | tr '\n' ':')
 BUNDLES="control view.core view.ui connector.process connector.local connector.ssh" # dependency order
 
 rm -rf "$OUT" && mkdir -p "$OUT"
@@ -20,7 +20,7 @@ for b in $BUNDLES; do
 	CP="$C:$CP"
 	rsync -a --include='*/' --exclude='*.java' --prune-empty-dirs "$SRC/src/" "$C/"
 	# the bin.includes of build.properties, without the manifest (rewritten below)
-	for f in plugin.xml plugin.properties .options README.txt about.html HelpContexts.xml contexts.xml icons OSGI-INF META-INF/p2.inf; do
+	for f in plugin.xml plugin.properties .options README.txt about.html about_files HelpContexts.xml contexts.xml icons os OSGI-INF META-INF/p2.inf; do
 		[ -e "$SRC/$f" ] && mkdir -p "$C/$(dirname "$f")" && cp -r "$SRC/$f" "$C/$f"
 	done
 	VER=$(sed -n 's/^Bundle-Version: //p' "$SRC/META-INF/MANIFEST.MF" | tr -d '\r' | sed "s/qualifier/$QUALIFIER/")

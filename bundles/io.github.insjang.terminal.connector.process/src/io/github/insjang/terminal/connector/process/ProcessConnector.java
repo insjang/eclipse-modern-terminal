@@ -35,6 +35,7 @@ import io.github.insjang.terminal.connector.ISettingsStore;
 import io.github.insjang.terminal.connector.ITerminalControl;
 import io.github.insjang.terminal.connector.NullSettingsStore;
 import io.github.insjang.terminal.connector.TerminalState;
+import io.github.insjang.terminal.connector.process.internal.ConsoleProcess;
 import io.github.insjang.terminal.connector.process.internal.Env;
 import io.github.insjang.terminal.connector.process.internal.Messages;
 import io.github.insjang.terminal.connector.process.internal.ProcessDestroyer;
@@ -52,6 +53,8 @@ public class ProcessConnector extends AbstractStreamsConnector {
 
 	// Reference to the PTY instance.
 	private PTY pty;
+	// the program in the console Windows Terminal ships, instead of a PTY of CDT's
+	private ConsoleProcess console;
 	// Reference to the launched process instance.
 	private Process process;
 	// Reference to the process monitor
@@ -96,6 +99,7 @@ public class ProcessConnector extends AbstractStreamsConnector {
 		super.connect(control);
 
 		pty = null;
+		console = null;
 		width = -1;
 		height = -1;
 
@@ -109,7 +113,12 @@ public class ProcessConnector extends AbstractStreamsConnector {
 			// No process -> create PTY on supported platforms and execute
 			// process image.
 			if (process == null) {
-				if (PTY.isSupported(PTY.Mode.TERMINAL)) {
+				// on Windows the console Windows Terminal ships, which counts character widths
+				// as the terminal does, where it is there; else a PTY of CDT's
+				boolean ownConsole = ConsoleProcess.isAvailable();
+				if (ownConsole) {
+					control.updateTerminalDimensions(); // the size the console starts with
+				} else if (PTY.isSupported(PTY.Mode.TERMINAL)) {
 					try {
 						pty = new PTY(PTY.Mode.TERMINAL);
 						control.updateTerminalDimensions();
@@ -144,7 +153,7 @@ public class ProcessConnector extends AbstractStreamsConnector {
 
 				isAnsiTerminal = getTermVariable(envp).startsWith("ansi"); //$NON-NLS-1$
 
-				if (pty != null) {
+				if (pty != null || ownConsole) {
 					// A PTY is available -> can use the ProcessFactory.
 
 					// Tokenize the command (ProcessFactory takes an array)
@@ -163,9 +172,22 @@ public class ProcessConnector extends AbstractStreamsConnector {
 						ttype = st.nextToken();
 					}
 
-					// Execute the process
-					process = ProcessFactory.getFactory().exec(argv.toArray(new String[argv.size()]), envp, workingDir,
-							pty);
+					if (ownConsole) {
+						try {
+							process = console = ConsoleProcess.start(argv, envp, workingDir, width > 0 ? width : 80,
+									height > 0 ? height : 24, glyphWidth());
+						} catch (IOException e) {
+							// e.g. a policy that does not let OpenConsole.exe run from the workspace:
+							// the console of Windows then, as before
+							UIPlugin.log("The console of Windows Terminal did not start; the one of Windows is used", e); //$NON-NLS-1$
+							pty = new PTY(PTY.Mode.TERMINAL);
+						}
+					}
+					if (process == null) {
+						// Execute the process
+						process = ProcessFactory.getFactory().exec(argv.toArray(new String[argv.size()]), envp,
+								workingDir, pty);
+					}
 				} else {
 					// No PTY -> just execute via the standard Java Runtime implementation.
 					process = Runtime.getRuntime().exec(command.toString(), envp, workingDir);
@@ -173,7 +195,8 @@ public class ProcessConnector extends AbstractStreamsConnector {
 			}
 
 			String lineSeparator = settings.getLineSeparator();
-			if (lineSeparator == null && pty == null) {
+			boolean terminal = pty != null || console != null;
+			if (lineSeparator == null && !terminal) {
 				lineSeparator = System.getProperty("line.separator"); //$NON-NLS-1$
 				if ("\r".equals(lineSeparator)) { //$NON-NLS-1$
 					lineSeparator = ILineSeparatorConstants.LINE_SEPARATOR_CR;
@@ -190,13 +213,13 @@ public class ProcessConnector extends AbstractStreamsConnector {
 
 			// Enable VT100 line wrapping if we are connected via pty
 			// And TERM is VT100 compatible
-			if (pty != null && !isAnsiTerminal) {
+			if (terminal && !isAnsiTerminal) {
 				control.setVT100LineWrapping(true);
 			}
 
 			// connect the streams
 			connectStreams(control, process.getOutputStream(), process.getInputStream(),
-					(pty == null ? process.getErrorStream() : null), settings.isLocalEcho(), lineSeparator);
+					(terminal ? null : process.getErrorStream()), settings.isLocalEcho(), lineSeparator);
 
 			// Set the terminal control state to CONNECTED
 			control.setState(TerminalState.CONNECTED);
@@ -221,6 +244,16 @@ public class ProcessConnector extends AbstractStreamsConnector {
 			// Open an error dialog
 			MessageDialog.openError(shell, Messages.ProcessConnector_error_title, msg);
 		}
+	}
+
+	/**
+	 * @return how the console counts character widths: as the terminal does, by the
+	 *         Character width preference
+	 */
+	private static int glyphWidth() {
+		boolean codePoints = Platform.getPreferencesService().getBoolean("io.github.insjang.terminal.control", //$NON-NLS-1$
+				"TerminalPrefLegacyWidth", false, null); //$NON-NLS-1$
+		return codePoints ? ConsoleProcess.WCSWIDTH : ConsoleProcess.GRAPHEMES;
 	}
 
 	private static String getTermVariable(String[] envp) {
@@ -298,6 +331,8 @@ public class ProcessConnector extends AbstractStreamsConnector {
 			height = newHeight;
 			if (pty != null) {
 				pty.setTerminalSize(newWidth, newHeight);
+			} else if (console != null) {
+				console.resize(newWidth, newHeight);
 			}
 		}
 	}

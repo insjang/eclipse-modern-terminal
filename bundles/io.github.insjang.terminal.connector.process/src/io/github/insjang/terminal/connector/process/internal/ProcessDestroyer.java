@@ -32,11 +32,12 @@ public final class ProcessDestroyer {
 	 * Destroys the given process, in the background if destroying it may block.
 	 */
 	public static void destroy(Process process) {
-		if (!(process instanceof Spawner)) {
+		if (!(process instanceof Spawner || process instanceof ConsoleProcess)) {
 			process.destroy();
 			return;
 		}
-		// Spawner.destroy() waits up to a second for a shell that ignores SIGTERM
+		// Spawner.destroy() waits up to a second for a shell that ignores SIGTERM, and
+		// closing a console waits for it to end its clients
 		Thread thread = new Thread(() -> {
 			try {
 				process.destroy();
