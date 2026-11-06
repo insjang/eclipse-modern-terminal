@@ -388,7 +388,7 @@ public class TextCanvas extends GridCanvas {
 		// where the pointer is now, not where the last move left it: a new click may have
 		// come in between
 		int past = p == null ? 0 : dragPast(p.y);
-		if (fDraggingStart == null || past == 0) {
+		if (p == null || fDraggingStart == null || past == 0) {
 			fDragScrolling = false;
 			return;
 		}
