@@ -1121,6 +1121,17 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testModesPastTheSixteenthAreDropped() {
+		// 17 modes: the first 16 are taken, the 17th is dropped, and the sequence does not
+		// stop the text after it
+		run("\u001b[?25l\u001b[?" + "2004;".repeat(16) + "25hx");
+		assertAll(() -> assertTrue(control.isBracketedPaste()), () -> assertFalse(control.isCursorShown()));
+		run("\u001b[?25h\u001b[?" + "2004;".repeat(16) + "25ly");
+		assertAll(() -> assertFalse(control.isBracketedPaste()), () -> assertTrue(control.isCursorShown()),
+				() -> assertTextEquals("xy"));
+	}
+
+	@Test
 	public void testFullResetEndsDecPrivateModes() {
 		run("\u001b[?25l\u001b[?2004h");
 		// ESC c (RIS) resets every mode a program set, as a new connection does

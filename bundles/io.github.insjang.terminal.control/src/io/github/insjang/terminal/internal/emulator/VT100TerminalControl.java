@@ -192,8 +192,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private final IPropertyChangeListener fFontListener = this::updateFont;
 	// set by the reader job, read by the display thread when pasting
 	private volatile boolean fBracketedPaste;
-	// asked for by the program (DECTCEM); kept on the control, as the canvas is new after a move
-	private volatile boolean fCursorHidden;
+	// asked for by the program (DECTCEM, mode 2026); kept on the control, as the canvas model is
+	// new after a move. Written with the model they are copied to under fModeLock, so a model
+	// made during a move cannot miss a change that the reader job makes meanwhile
+	private boolean fCursorHidden;
+	private boolean fSynchronizedOutput;
+	private final Object fModeLock = new Object();
 	private static final String PASTE_START = "\u001b[200~"; //$NON-NLS-1$
 	private static final String PASTE_END = "\u001b[201~"; //$NON-NLS-1$
 
@@ -786,8 +790,9 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			fClipboard.dispose();
 			fPollingTextCanvasModel.stopPolling();
 		}
-		// set on this terminal alone (Inverted colors in its menu): kept across a move
+		// set on this terminal alone (Inverted colors and Scroll Lock in its menu): kept across a move
 		boolean inverted = fCtlText != null && fCtlText.isInvertedColors();
+		boolean scrollLock = fCtlText != null && fCtlText.isScrollLock();
 		if (fWndParent != null && !fWndParent.isDisposed()) {
 			// terminal widget gets a new parent (DnD)
 			fWndParent.dispose();
@@ -810,12 +815,15 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			onTerminalColorsChanged();
 			onTerminalFontChanged();
 			setInvertedColors(inverted);
+			setScrollLock(scrollLock);
 		}
 		JFaceResources.getFontRegistry().addListener(fFontListener);
 		setupHelp(fWndParent, TerminalPlugin.HELP_VIEW);
 
 		if (!wasDisposed) {
 			fState = oldState;
+			// the new canvas starts with the cursor off: a connected terminal's cursor blinks
+			fCtlText.setCursorEnabled(isConnected());
 		}
 	}
 
@@ -955,8 +963,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		ITerminalTextDataSnapshot snapshot = fTerminalModel.makeSnapshot();
 		// TODO how to get the initial size correctly!
 		snapshot.updateSnapshot(false);
-		fPollingTextCanvasModel = new PollingTextCanvasModel(snapshot);
-		fPollingTextCanvasModel.setCursorHidden(fCursorHidden);
+		synchronized (fModeLock) {
+			PollingTextCanvasModel model = new PollingTextCanvasModel(snapshot);
+			model.setCursorHidden(fCursorHidden);
+			model.setSynchronizedOutput(fSynchronizedOutput);
+			fPollingTextCanvasModel = model;
+		}
 		fCtlText = new TextCanvas(fWndParent, fPollingTextCanvasModel, SWT.NONE,
 				new TextLineRenderer(() -> fCtlText, fPollingTextCanvasModel));
 
@@ -1814,16 +1826,21 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	@Override
 	public void showCursor(boolean show) {
-		fCursorHidden = !show;
-		if (fPollingTextCanvasModel != null) {
-			fPollingTextCanvasModel.setCursorHidden(!show);
+		synchronized (fModeLock) {
+			fCursorHidden = !show;
+			if (fPollingTextCanvasModel != null) {
+				fPollingTextCanvasModel.setCursorHidden(!show);
+			}
 		}
 	}
 
 	@Override
 	public void enableSynchronizedOutput(boolean redrawing) {
-		if (fPollingTextCanvasModel != null) {
-			fPollingTextCanvasModel.setSynchronizedOutput(redrawing);
+		synchronized (fModeLock) {
+			fSynchronizedOutput = redrawing;
+			if (fPollingTextCanvasModel != null) {
+				fPollingTextCanvasModel.setSynchronizedOutput(redrawing);
+			}
 		}
 	}
 

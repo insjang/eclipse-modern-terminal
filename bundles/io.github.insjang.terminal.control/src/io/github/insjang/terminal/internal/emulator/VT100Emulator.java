@@ -43,6 +43,7 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.function.IntConsumer;
 import java.util.Base64;
 import java.util.BitSet;
 import java.util.Locale;
@@ -1810,13 +1811,21 @@ public class VT100Emulator implements ControlListener {
 		text.eraseCharacters(getAnsiCount(0));
 	}
 
-	private void processDecPrivateCommand_h() {
-		// A program may set several modes at once: ncurses turns the mouse on with CSI ? 1006 ; 1000 h.
-		for (int i = 0; i <= nextAnsiParameter; i++) {
+	/**
+	 * Runs the action on each mode of a set or reset. Only the first 16 parameters are
+	 * stored, while every ';' is counted: the ones past them are dropped.
+	 */
+	private void forEachMode(IntConsumer action) {
+		for (int i = 0; i <= nextAnsiParameter && i < ansiParameters.length; i++) {
 			if (ansiParameters[i].length() > 0) { // an empty one names no mode
-				setDecPrivateMode(getAnsiParameter(i));
+				action.accept(getAnsiParameter(i));
 			}
 		}
+	}
+
+	private void processDecPrivateCommand_h() {
+		// A program may set several modes at once: ncurses turns the mouse on with CSI ? 1006 ; 1000 h.
+		forEachMode(this::setDecPrivateMode);
 	}
 
 	private void setDecPrivateMode(int param) {
@@ -1889,11 +1898,7 @@ public class VT100Emulator implements ControlListener {
 	}
 
 	private void processDecPrivateCommand_l() {
-		for (int i = 0; i <= nextAnsiParameter; i++) {
-			if (ansiParameters[i].length() > 0) { // an empty one names no mode
-				resetDecPrivateMode(getAnsiParameter(i));
-			}
-		}
+		forEachMode(this::resetDecPrivateMode);
 	}
 
 	private void resetDecPrivateMode(int param) {
