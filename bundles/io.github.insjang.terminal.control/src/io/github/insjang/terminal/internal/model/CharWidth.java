@@ -83,12 +83,12 @@ public final class CharWidth {
 	}
 
 	/**
-	 * Cells a code point takes by itself: its width, except that a printable one
-	 * beyond the BMP takes two, as its two chars cannot share a cell.
+	 * Cells a code point takes by itself: its width, beyond the BMP as well. A
+	 * narrow one there, such as a mathematical letter, takes one cell, which keeps
+	 * it as a cluster beside the line since its two chars cannot share the cell.
 	 */
 	public static int cells(int codePoint) {
-		int width = of(codePoint);
-		return width != 0 && Character.charCount(codePoint) == 2 ? 2 : width;
+		return of(codePoint);
 	}
 
 	/**

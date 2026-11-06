@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.github.insjang.terminal.internal.model.Cells;
 import io.github.insjang.terminal.internal.model.TerminalTextData;
 import io.github.insjang.terminal.internal.model.TerminalTextDataStore;
 import io.github.insjang.terminal.internal.model.TerminalTextTestHelper;
@@ -1440,7 +1441,7 @@ public class VT100EmulatorBackendTest {
 		vt100.setCursor(0, 1);
 		vt100.appendString("X");
 		assertTrue(term.isWrappedLine(0));
-		// erasing to the end of the line ends it there, as in xterm and Windows Terminal
+		// erasing to the end of the line ends it there, as in xterm and Ghostty
 		vt100.setCursor(0, 3);
 		vt100.eraseLineToEnd();
 		assertFalse(term.isWrappedLine(0));
@@ -1460,6 +1461,12 @@ public class VT100EmulatorBackendTest {
 		assertFalse(term.isWrappedLine(0));
 		assertEquals('a', term.getChar(0, 0));
 		assertEquals(0, term.getChar(0, 1));
+		// deleting characters pulls blanks in at the margin, so it ends the line too (xterm)
+		vt100.setCursor(0, 0);
+		vt100.appendString("abcdefg");
+		vt100.setCursor(0, 1);
+		vt100.deleteCharacters(1);
+		assertFalse(term.isWrappedLine(0));
 	}
 
 	@Test
@@ -1472,10 +1479,12 @@ public class VT100EmulatorBackendTest {
 		vt100.appendString("abc");
 		vt100.setCursorColumn(0);
 		vt100.setInsertMode(true);
-		// U+1D400 is one column wide, but its two chars still take two cells: insert room for both
+		// U+1D400 is one column wide and takes one cell, its two chars kept beside the line
 		vt100.appendString("\uD835\uDC00");
 		vt100.setInsertMode(false);
-		assertEquals("\uD835\uDC00abc", new String(term.getChars(0), 0, 5));
+		assertEquals("\uD835\uDC00", Cells.text(term, 0, 0));
+		assertEquals(1, term.getCellWidth(0, 0));
+		assertEquals("abc", new String(term.getChars(0), 1, 3));
 	}
 
 	@Test
@@ -1913,7 +1922,7 @@ public class VT100EmulatorBackendTest {
 		vt100.setCursor(2, 0);
 		vt100.appendString("\ud83c\uddf0\ud83c\uddf7\ud83c\uddfa|");
 		assertEquals("\ud83c\uddf0\ud83c\uddf7", term.getCluster(2, 0));
-		assertEquals('|', term.getChar(2, 4));
+		assertEquals('|', term.getChar(2, 3)); // a regional indicator alone is narrow
 		// an Indic vowel sign goes with its consonant: one cluster, drawn whole over two cells
 		vt100.setCursor(3, 0);
 		vt100.appendString("\u0915\u093f|");

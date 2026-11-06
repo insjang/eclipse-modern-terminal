@@ -635,6 +635,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			}
 			moveCells(line, col + n, fColumns, -n);
 			eraseCells(line, fColumns - n, fColumns);
+			// what reached the margin moved off it, so the line ends before it (xterm)
+			fTerminal.clearWrappedLine(line);
 		}
 	}
 
