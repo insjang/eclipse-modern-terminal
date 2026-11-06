@@ -56,6 +56,7 @@ import io.github.insjang.terminal.connector.Logger;
 import io.github.insjang.terminal.control.TerminalDirectory;
 import io.github.insjang.terminal.control.TerminalTitleRequestor;
 import io.github.insjang.terminal.internal.control.impl.ITerminalControlForText;
+import io.github.insjang.terminal.internal.model.CharWidth;
 import io.github.insjang.terminal.model.ITerminalTextData;
 import io.github.insjang.terminal.model.TerminalStyle;
 
@@ -178,13 +179,21 @@ public class VT100Emulator implements ControlListener {
 
 	/** G0 or G1, while an "ESC (" or "ESC )" waits for its final character; -1 for the others */
 	private int designatedCharset;
+	/** whether the set being designated has an intermediate byte in its name */
+	private boolean namedCharset;
 
-	/** what ESC 7 saved besides the cursor, one slot per screen as the cursor */
-	private final TerminalStyle[] savedStyle = new TerminalStyle[2];
-	private final boolean[] savedOriginMode = new boolean[2];
+	/**
+	 * What ESC 7 saved besides the cursor, one slot per screen as the cursor; and in a
+	 * third, what CSI ? 1049 h saved, the cursor of which the backend keeps: leaving
+	 * the alternate screen puts the normal screen's modes back without touching
+	 * what ESC 7 saved there.
+	 */
+	private static final int SCREEN_SWITCH = 2;
+	private final TerminalStyle[] savedStyle = new TerminalStyle[3];
+	private final boolean[] savedOriginMode = new boolean[3];
 	private final boolean[] savedWrapPending = new boolean[2];
-	private final boolean[][] savedLineDrawing = new boolean[2][2];
-	private final int[] savedInvokedCharset = new int[2];
+	private final boolean[][] savedLineDrawing = new boolean[3][2];
+	private final int[] savedInvokedCharset = new int[3];
 
 	/** the tab stops, one bit per column; one every 8 columns until a program sets its own */
 	private final BitSet tabStops = new BitSet();
@@ -286,12 +295,27 @@ public class VT100Emulator implements ControlListener {
 		return text.getBufferLineLimit();
 	}
 
+	/** what DECSC saves besides the cursor, put back: rendition, origin mode, character sets */
+	private void restoreModes(int screen) {
+		if (savedStyle[screen] != null) {
+			text.setStyle(savedStyle[screen]);
+		}
+		originMode = savedOriginMode[screen];
+		lineDrawing[0] = savedLineDrawing[screen][0];
+		lineDrawing[1] = savedLineDrawing[screen][1];
+		invokedCharset = savedInvokedCharset[screen];
+	}
+
 	private void saveCursor() {
 		int screen = alternateScreen ? 1 : 0;
 		savedCursorLine[screen] = relativeCursorLine();
 		savedCursorColumn[screen] = getCursorColumn();
 		savedWrapPending[screen] = text.isWrapPending();
-		// as DECSC: the rendition, the origin mode and the character sets go with the cursor
+		saveModes(screen);
+	}
+
+	/** as DECSC: the rendition, the origin mode and the character sets go with the cursor */
+	private void saveModes(int screen) {
 		savedStyle[screen] = text.getStyle();
 		savedOriginMode[screen] = originMode;
 		savedLineDrawing[screen][0] = lineDrawing[0];
@@ -301,13 +325,7 @@ public class VT100Emulator implements ControlListener {
 
 	private void restoreCursor() {
 		int screen = alternateScreen ? 1 : 0;
-		if (savedStyle[screen] != null) {
-			text.setStyle(savedStyle[screen]);
-		}
-		originMode = savedOriginMode[screen];
-		lineDrawing[0] = savedLineDrawing[screen][0];
-		lineDrawing[1] = savedLineDrawing[screen][1];
-		invokedCharset = savedInvokedCharset[screen];
+		restoreModes(screen);
 		int line = savedCursorLine[screen];
 		if (originMode) { // in origin mode the cursor comes back inside the region, as in xterm
 			line = Math.max(text.getScrollRegionTop(), Math.min(text.getScrollRegionBottom(), line));
@@ -484,7 +502,10 @@ public class VT100Emulator implements ControlListener {
 				case '.':
 				case '/':
 					ansiState = ANSISTATE_EXPECTING_CHARSET_DESIGNATION;
-					designatedCharset = character == '(' ? 0 : character == ')' ? 1 : -1;
+					// ESC - designates a 96-character set into G1: it replaces G1, but none of
+					// those sets is line drawing
+					designatedCharset = character == '(' ? 0 : character == ')' || character == '-' ? 1 : -1;
+					namedCharset = character == '-';
 					break;
 
 				case 'D':
@@ -637,15 +658,16 @@ public class VT100Emulator implements ControlListener {
 				break;
 
 			case ANSISTATE_EXPECTING_CHARSET_DESIGNATION:
-				if (character == '%') {
-					// a two character set name, none of them line drawing
-					designatedCharset = -1;
+				if (character >= '\u0020' && character <= '\u002f') {
+					// an intermediate byte: a set with a longer name (ESC ( % 5, ESC ( " 4),
+					// none of them line drawing
+					namedCharset = true;
 				} else {
 					ansiState = ANSISTATE_INITIAL;
 					// only DEC's special graphics differ from ASCII here; the national
-					// sets are taken as ASCII
+					// sets are taken as ASCII, and so is the slot a longer name designates
 					if (designatedCharset >= 0) {
-						lineDrawing[designatedCharset] = character == '0';
+						lineDrawing[designatedCharset] = character == '0' && !namedCharset;
 					}
 				}
 				break;
@@ -668,7 +690,9 @@ public class VT100Emulator implements ControlListener {
 				break;
 
 			case ANSISTATE_IGNORING_ESCAPE:
-				if (character >= '\u0030' && character < '\u007f') {
+				if (character >= '\u0020' && character <= '\u002f') {
+					escapeIntermediate = 0; // a second intermediate byte: no sequence we run
+				} else if (character >= '\u0030' && character < '\u007f') {
 					ansiState = ANSISTATE_INITIAL;
 					if (escapeIntermediate == '#' && character == '8') {
 						screenAlignmentTest();
@@ -822,7 +846,11 @@ public class VT100Emulator implements ControlListener {
 		tabStops.clear();
 		tabStopsColumns = 0;
 		lastGraphic = null;
-		// a later ESC 8 must not bring back a rendition or character set from before
+		// a later ESC 8 must not bring back a cursor, a pending wrap, a rendition or a
+		// character set from before: every slot is as if nothing had been saved
+		Arrays.fill(savedCursorLine, 0);
+		Arrays.fill(savedCursorColumn, 0);
+		Arrays.fill(savedWrapPending, false);
 		Arrays.fill(savedStyle, null);
 		Arrays.fill(savedOriginMode, false);
 		for (boolean[] saved : savedLineDrawing) {
@@ -1095,7 +1123,14 @@ public class VT100Emulator implements ControlListener {
 			// Repeat the preceding graphic character (REP)
 			if (lastGraphic != null) {
 				String c = lastGraphic;
-				displayNewText(c.repeat(Math.min(getAnsiCount(0), text.getLines() * text.getColumns())));
+				// past a screenful every line written is a line of c scrolled up: whole lines
+				// of them more change neither the screen nor the cursor, so a huge count
+				// costs no more than a screenful and a line. A line holds columns / width
+				// of them: a wide c leaves the last column of an odd width empty
+				int perLine = Math.max(1, text.getColumns() / Math.max(1, CharWidth.cells(c.codePointAt(0))));
+				int screen = text.getLines() * perLine;
+				int count = getAnsiCount(0);
+				displayNewText(c.repeat(count <= screen ? count : screen + (count - screen) % perLine));
 				lastGraphic = c;
 			}
 			break;
@@ -1810,7 +1845,13 @@ public class VT100Emulator implements ControlListener {
 			alternateScreen = true;
 			break;
 		case 1049:
-			// Save the cursor as DECSC does, then use Alternate Screen Buffer.
+			// Save the cursor as DECSC does, then use Alternate Screen Buffer: the
+			// rendition, the origin mode and the character sets go with it, as with ESC 7,
+			// but into a slot of their own, so that ESC 8 on the normal screen still
+			// brings back what ESC 7 saved there.
+			if (!alternateScreen) {
+				saveModes(SCREEN_SWITCH);
+			}
 			text.enableAlternateScreen(true, true);
 			alternateScreen = true;
 			break;
@@ -1883,9 +1924,15 @@ public class VT100Emulator implements ControlListener {
 			alternateScreen = false;
 			break;
 		case 1049:
-			// Use Normal Screen Buffer and restore the cursor saved on the way in.
+			// Use Normal Screen Buffer and restore the cursor saved on the way in, as
+			// DECRC does, with all that went with it.
+			boolean wasAlternate = alternateScreen;
 			text.enableAlternateScreen(false, true);
 			alternateScreen = false;
+			if (wasAlternate) {
+				// the backend has put the cursor back, where a resize meanwhile left it
+				restoreModes(SCREEN_SWITCH);
+			}
 			break;
 		case 1048:
 			// Restore cursor, as ESC 8 does.
@@ -2073,7 +2120,8 @@ public class VT100Emulator implements ControlListener {
 	private void processTab() {
 		ensureTabStops();
 		int next = tabStops.nextSetBit(getCursorColumn() + 1);
-		int column = next < 0 ? text.getColumns() - 1 : next;
+		// no stop ahead, or only ones a narrowed screen keeps past its margin: the margin
+		int column = next < 0 || next >= text.getColumns() ? text.getColumns() - 1 : next;
 		if (column != getCursorColumn()) { // staying put keeps a pending wrap, as in xterm
 			moveCursor(relativeCursorLine(), column);
 		}

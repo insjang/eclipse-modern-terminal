@@ -857,6 +857,89 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testAlternateScreenKeepsTheNormalScreensModes() {
+		// 1049 saves and restores as DECSC: line drawing and origin mode set on the
+		// alternate screen do not stay on the normal one
+		run(ALTERNATE_SCREEN_ON, "\033(0\033[?6h", ALTERNATE_SCREEN_OFF, "\033[1;1Hq");
+		assertAll(() -> assertTextEquals("q"), () -> assertCursorLocation(0, 1));
+	}
+
+	@Test
+	public void testLongerCharsetNamesAreNotLineDrawing() {
+		// ESC ( % 5 and ESC ( " 4 designate sets with longer names: G0 is no longer line drawing
+		run("\033(0q\033(%5q\033(0q\033(\"4q");
+		assertTextEquals("\u2500q\u2500q");
+	}
+
+	@Test
+	public void testOnlyEscHash8IsScreenAlignment() {
+		run("ab\033# 8c");
+		assertTextEquals("abc");
+	}
+
+	@Test
+	public void testFullResetForgetsTheSavedCursor() {
+		emulator.setVT100LineWrapping(true);
+		// a full row leaves a wrap pending; ESC 8 after a reset must not bring it back
+		run("w".repeat(WINDOW_COLUMNS), "\0337\033c\0338x");
+		assertAll(() -> assertTextEquals("x"), () -> assertCursorLocation(0, 1));
+	}
+
+	@Test
+	public void testRepeatPastAScreenful() {
+		data.setMaxHeight(1000);
+		// 1 + 1921 A's: 24 full rows and 2 more, the cursor after them
+		run("A\033[1921b");
+		assertAll(() -> assertEquals(2, data.getCursorColumn()),
+				() -> assertEquals('A', data.getChar(data.getCursorLine(), 1)));
+		// a huge count costs a screenful, and leaves the cursor where the whole count would
+		long start = System.nanoTime();
+		run("\033[2J\033[HA\033[99999b");
+		assertAll(() -> assertEquals(0, data.getCursorColumn()),
+				() -> assertTrue(System.nanoTime() - start < 5_000_000_000L));
+	}
+
+	@Test
+	public void testRepeatAWideCharacterPastAScreenfulOnAnOddWidth() {
+		emulator.setVT100LineWrapping(true);
+		emulator.setDimensions(5, 5);
+		// two per line, the last column left empty: 31 of them end one into the 16th line
+		run("\u4e2d\033[30b");
+		assertAll(() -> assertEquals(2, data.getCursorColumn()),
+				() -> assertEquals('\u4e2d', data.getChar(data.getCursorLine(), 0)),
+				() -> assertEquals('\u4e2d', data.getChar(data.getCursorLine() - 1, 2)));
+	}
+
+	@Test
+	public void testNinetySixCharacterSetReplacesG1() {
+		// ESC - designates into G1: the line drawing set before it is gone
+		run("\033)0\033-A\016q\017");
+		assertTextEquals("q");
+	}
+
+	@Test
+	public void testSavedCursorSurvivesTheAlternateScreen() {
+		// what ESC 7 saved on the normal screen is still there after a 1049 round trip
+		run("\033(0\033[3;4H\0337\033(B\033[H", ALTERNATE_SCREEN_ON, "\033(B\033[5;5H\0337", ALTERNATE_SCREEN_OFF,
+				"\0338q");
+		assertAll(() -> assertEquals('\u2500', data.getChar(2, 3)), () -> assertCursorLocation(2, 4));
+	}
+
+	@Test
+	public void testTabStopsPastANarrowedScreen() {
+		emulator.setVT100LineWrapping(true);
+		run("\t\r"); // the stops are set on 80 columns
+		emulator.setDimensions(WINDOW_LINES, 10);
+		// at the margin with a wrap pending, a TAB to a stop past it stays put and keeps
+		// the wrap: the next character goes on the next line
+		run("\033[1;1H" + "x".repeat(10), "\ty");
+		assertAll(() -> assertEquals(1, data.getCursorColumn()),
+				() -> assertEquals('y', data.getChar(data.getCursorLine(), 0)));
+		run("\033[1;1H" + "x".repeat(10), "\033[2Iz");
+		assertEquals('z', data.getChar(data.getCursorLine(), 0));
+	}
+
+	@Test
 	public void testLineEditsTabsAndSavedCursorAsInXterm() {
 		emulator.setVT100LineWrapping(true);
 		// IL and DL put the cursor on the left margin
