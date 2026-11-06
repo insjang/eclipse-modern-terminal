@@ -51,7 +51,7 @@ public class RunSelectionInTerminalHandler extends AbstractHandler {
 			return null;
 		}
 		// pasted (bracketed where the shell asked for it), then Enter outside the paste runs it
-		terminal.pasteString(text);
+		terminal.paste(text);
 		terminal.sendKey('\r');
 		view.getSite().getPage().bringToTop(view);
 		return null;

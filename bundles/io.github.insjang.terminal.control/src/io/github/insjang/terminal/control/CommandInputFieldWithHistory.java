@@ -326,7 +326,7 @@ public class CommandInputFieldWithHistory implements ICommandInputField {
 					// sent the way a terminal pastes: lines end with CR
 					String line = fInputField.getText().replace("\r\n", "\n"); //$NON-NLS-1$ //$NON-NLS-2$
 					// the line is pasted, but the return is typed: in a bracketed paste it would be text, not Enter
-					if (!terminal.isConnected() || !line.isEmpty() && !terminal.pasteString(line.replace('\n', '\r'))) {
+					if (!terminal.isConnected() || !line.isEmpty() && !terminal.paste(line)) {
 						return;
 					}
 					terminal.sendKey('\r');

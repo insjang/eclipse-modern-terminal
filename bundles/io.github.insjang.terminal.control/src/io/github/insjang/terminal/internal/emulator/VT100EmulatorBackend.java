@@ -117,7 +117,11 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	private String fLastText;
 	/** its first cell, and how many lines above the cursor it is: 1 after an immediate wrap */
 	private int fLastColumn, fLastLinesBack;
-	/** how often the cursor has been put somewhere, and how often when it was written */
+	/**
+	 * How many times anything but writing text has been done (a cursor move, an
+	 * erase, an edit, a scroll), and how many times when the cluster was written:
+	 * only what comes straight after it in the text can go on with it.
+	 */
 	private int fMoves, fAfterMoves;
 	/** whether a wrap was pending right after it */
 	private boolean fAfterPending;
@@ -169,6 +173,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void enableAlternateScreen(boolean enable, boolean cursor) {
+		endCluster();
 		synchronized (fTerminal) {
 			if (enable == (fNormalScreen != null)) {
 				// Already on the screen being asked for. Programs do ask twice.
@@ -287,6 +292,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void clearAll() {
+		endCluster();
 		synchronized (fTerminal) {
 			if (fNormalScreen != null) {
 				// Clearing while a full screen program shows clears what is behind it as
@@ -376,6 +382,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void insertCharacters(int charactersToInsert) {
+		endCluster();
 		if (charactersToInsert <= 0) {
 			return; // nothing moves, so no wide character may be broken either
 		}
@@ -396,6 +403,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void eraseToEndOfScreen() {
+		endCluster();
 		synchronized (fTerminal) {
 			eraseLineToEnd();
 			for (int line = toAbsoluteLine(fCursorLine + 1); line < toAbsoluteLine(fLines); line++) {
@@ -407,6 +415,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void eraseToCursor() {
+		endCluster();
 		synchronized (fTerminal) {
 			for (int line = toAbsoluteLine(0); line < toAbsoluteLine(fCursorLine); line++) {
 				eraseLine(line);
@@ -417,6 +426,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void eraseAll() {
+		endCluster();
 		synchronized (fTerminal) {
 			// What is on the screen goes into the history before it is erased, as in
 			// Windows Terminal and VTE, so that clearing the screen does not destroy
@@ -451,6 +461,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void eraseLine() {
+		endCluster();
 		synchronized (fTerminal) {
 			// a shell redrawing its prompt line keeps the prompt's mark
 			int line = toAbsoluteLine(fCursorLine);
@@ -554,6 +565,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void eraseLineToEnd() {
+		endCluster();
 		synchronized (fTerminal) {
 			int line = toAbsoluteLine(fCursorLine);
 			eraseWhole(line, fCursorColumn, fColumns);
@@ -611,6 +623,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void eraseLineToCursor() {
+		endCluster();
 		synchronized (fTerminal) {
 			eraseWhole(toAbsoluteLine(fCursorLine), 0, fCursorColumn + 1);
 		}
@@ -618,6 +631,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void insertLines(int n) {
+		endCluster();
 		synchronized (fTerminal) {
 			if (!isCusorInScrollingRegion()) {
 				return;
@@ -632,6 +646,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void deleteCharacters(int n) {
+		endCluster();
 		if (n <= 0) {
 			return; // nothing moves, so no wide character may be broken either
 		}
@@ -653,6 +668,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void deleteLines(int n) {
+		endCluster();
 		synchronized (fTerminal) {
 			if (!isCusorInScrollingRegion()) {
 				return;
@@ -977,6 +993,13 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		}
 	}
 
+	/** Whatever is done but writing text: the cluster written last is done with. */
+	private void endCluster() {
+		synchronized (fTerminal) { // a resize comes from the display thread
+			fMoves++;
+		}
+	}
+
 	private boolean breaks(String first, String second) {
 		fGraphemes.setText(first + second);
 		return fGraphemes.isBoundary(first.length());
@@ -1216,6 +1239,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void processNewline() {
+		endCluster();
 		synchronized (fTerminal) {
 			doNewline();
 		}
@@ -1232,6 +1256,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void processReverseLineFeed() {
+		endCluster();
 		synchronized (fTerminal) {
 			doReverseLineFeed();
 		}
@@ -1253,6 +1278,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void setCursor(int targetLine, int targetColumn) {
+		endCluster();
 		synchronized (fTerminal) {
 			setCursorLine(targetLine);
 			setCursorColumn(targetColumn);
@@ -1269,7 +1295,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			}
 			fCursorColumn = targetColumn;
 			fWrapPending = false;
-			fMoves++; // a cursor moved away and back no longer goes on with what it wrote
+			endCluster(); // a cursor moved away and back no longer goes on with what it wrote
 			// We make the assumption that nobody is changing the
 			// terminal cursor except this class!
 			// This assumption gives a huge performance improvement
@@ -1287,7 +1313,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			}
 			fCursorLine = targetLine;
 			fWrapPending = false;
-			fMoves++;
+			endCluster();
 			// We make the assumption that nobody is changing the
 			// terminal cursor except this class!
 			// This assumption gives a huge performance improvement
@@ -1357,6 +1383,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void fillScreen(char c) {
+		endCluster();
 		synchronized (fTerminal) {
 			char[] row = new char[fColumns];
 			Arrays.fill(row, c);
@@ -1387,6 +1414,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void scrollUp(int n) {
+		endCluster();
 		assert n > 0;
 		synchronized (fTerminal) {
 			int line = toAbsoluteLine(fScrollRegion.getTopLine());
@@ -1397,6 +1425,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void scrollDown(int n) {
+		endCluster();
 		assert n > 0;
 		synchronized (fTerminal) {
 			int line = toAbsoluteLine(fScrollRegion.getTopLine());
@@ -1407,6 +1436,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 
 	@Override
 	public void eraseCharacters(int n) {
+		endCluster();
 		if (n <= 0) {
 			return; // nothing is erased, so no wide character may be broken either
 		}

@@ -1031,6 +1031,13 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testEmptyDecPrivateModeNamesNoMode() {
+		// CSI ? 2004 ; h: the empty parameter is no mode, not 1 (application cursor keys)
+		run("\u001b[?2004;h");
+		assertAll(() -> assertTrue(control.isBracketedPaste()), () -> assertFalse(control.isApplicationCursorKeys()));
+	}
+
+	@Test
 	public void testFullResetEndsDecPrivateModes() {
 		run("\u001b[?25l\u001b[?2004h");
 		// ESC c (RIS) resets every mode a program set, as a new connection does

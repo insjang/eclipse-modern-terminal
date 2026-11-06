@@ -1778,7 +1778,9 @@ public class VT100Emulator implements ControlListener {
 	private void processDecPrivateCommand_h() {
 		// A program may set several modes at once: ncurses turns the mouse on with CSI ? 1006 ; 1000 h.
 		for (int i = 0; i <= nextAnsiParameter; i++) {
-			setDecPrivateMode(getAnsiParameter(i));
+			if (ansiParameters[i].length() > 0) { // an empty one names no mode
+				setDecPrivateMode(getAnsiParameter(i));
+			}
 		}
 	}
 
@@ -1847,7 +1849,9 @@ public class VT100Emulator implements ControlListener {
 
 	private void processDecPrivateCommand_l() {
 		for (int i = 0; i <= nextAnsiParameter; i++) {
-			resetDecPrivateMode(getAnsiParameter(i));
+			if (ansiParameters[i].length() > 0) { // an empty one names no mode
+				resetDecPrivateMode(getAnsiParameter(i));
+			}
 		}
 	}
 

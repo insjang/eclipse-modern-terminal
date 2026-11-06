@@ -520,7 +520,7 @@ public class TerminalsView extends ViewPart implements ITerminalsView, IShowInTa
 		Object processPath = properties == null ? null
 				: properties.get(ITerminalsConnectorConstants.PROP_PROCESS_PATH) instanceof String path ? path
 						: properties.get(ITerminalsConnectorConstants.PROP_SHELL);
-		terminal.pasteString(DroppedFiles.format(paths, processPath instanceof String s ? s : null,
+		terminal.paste(DroppedFiles.format(paths, processPath instanceof String s ? s : null,
 				Platform.OS_WIN32.equals(Platform.getOS())));
 		getSite().getPage().activate(this);
 		tabFolderManager.bringToTop(item);

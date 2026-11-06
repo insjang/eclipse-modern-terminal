@@ -487,10 +487,10 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			if (chars != null) {
 				int width = fSelectionSnapshot.getWidth();
 				int from = line == fSelectionStartLine ? Math.min(fSelectionStartCoumn, width) : 0;
-				int to = line == fSeletionEndLine && fSelectionEndColumn >= 0
-						? Math.min(fSelectionEndColumn + 1, width)
-						: width;
-				text = Cells.text(fSelectionSnapshot, line, from, to);
+				// a row selected to its end comes whole, with what a narrowed screen keeps past its margin
+				text = line == fSeletionEndLine && fSelectionEndColumn >= 0 && fSelectionEndColumn + 1 < width
+						? Cells.text(fSelectionSnapshot, line, from, Math.min(fSelectionEndColumn + 1, width))
+						: Cells.row(fSelectionSnapshot, line, from);
 			} else {
 				text = ""; //$NON-NLS-1$
 			}
@@ -551,7 +551,7 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 			char[] chars = snapshot.getChars(line);
 			String text;
 			if (chars != null) {
-				text = Cells.text(snapshot, line, 0, snapshot.getWidth());
+				text = Cells.row(snapshot, line, 0);
 			} else {
 				text = ""; //$NON-NLS-1$ null arrays represent empty lines
 			}

@@ -268,6 +268,9 @@ public class TerminalTextDataStore implements ITerminalTextData {
 	 * null, the two halves of a surrogate pair) takes two.
 	 */
 	private void layOut(int line, int column, int len) {
+		if (len == 0) {
+			return; // nothing written, so nothing laid out anew either
+		}
 		Layout layout = fLayout[line];
 		char[] chars = fChars[line];
 		int end = column + len;

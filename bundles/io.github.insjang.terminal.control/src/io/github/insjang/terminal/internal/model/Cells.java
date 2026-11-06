@@ -39,6 +39,15 @@ public final class Cells {
 	 *         character and for a cell never written
 	 */
 	public static String text(ITerminalTextDataReadOnly data, int line, int col) {
+		return text(data, line, col, false);
+	}
+
+	/**
+	 * @param pastMargin whether the text goes on past the margin, where a narrowed
+	 *            screen keeps what it no longer shows: a pair the margin cuts is whole
+	 *            there
+	 */
+	private static String text(ITerminalTextDataReadOnly data, int line, int col, boolean pastMargin) {
 		if (data.getCellWidth(line, col) == 0) {
 			return ""; //$NON-NLS-1$
 		}
@@ -46,15 +55,38 @@ public final class Cells {
 		if (cluster != null) {
 			return cluster;
 		}
-		char c = data.getChar(line, col);
+		char c = charAt(data, line, col);
 		if (c == '\000') {
 			return ""; //$NON-NLS-1$
 		}
-		if (Character.isHighSurrogate(c) && data.getCellWidth(line, col) == 2) {
-			return new String(new char[] { c, data.getChar(line, col + 1) });
+		if (Character.isHighSurrogate(c) && (data.getCellWidth(line, col) == 2
+				|| pastMargin && Character.isLowSurrogate(charAt(data, line, col + 1)))) {
+			return new String(new char[] { c, charAt(data, line, col + 1) });
 		}
 		// half a pair, its other half cut off by a narrowed screen, is no character
 		return Character.isSurrogate(c) ? "\uFFFD" : String.valueOf(c); //$NON-NLS-1$
+	}
+
+	/**
+	 * @return the char in the cell, also one a narrowed screen keeps past its margin
+	 *         (0 where there is none)
+	 */
+	private static char charAt(ITerminalTextDataReadOnly data, int line, int col) {
+		if (col < data.getWidth()) {
+			return data.getChar(line, col);
+		}
+		char[] chars = data.getChars(line);
+		return chars != null && col < chars.length ? chars[col] : 0;
+	}
+
+	/**
+	 * The text of a whole row, also what a narrowed screen keeps past its margin and
+	 * shows again when it widens.
+	 */
+	public static String row(ITerminalTextDataReadOnly data, int line, int from) {
+		char[] chars = data.getChars(line);
+		int to = Math.max(data.getWidth(), chars == null ? 0 : chars.length);
+		return text(data, line, from, to, to > data.getWidth());
 	}
 
 	/**
@@ -115,13 +147,17 @@ public final class Cells {
 	 * end of the range are left out.
 	 */
 	public static String text(ITerminalTextDataReadOnly data, int line, int from, int to) {
+		return text(data, line, from, to, false);
+	}
+
+	private static String text(ITerminalTextDataReadOnly data, int line, int from, int to, boolean pastMargin) {
 		StringBuilder text = new StringBuilder(to - from);
 		int written = 0;
 		for (int col = from; col < to; col++) {
 			if (data.getCellWidth(line, col) == 0) {
 				continue;
 			}
-			String c = text(data, line, col);
+			String c = text(data, line, col, pastMargin);
 			if (c.isEmpty()) {
 				text.append(' ');
 			} else {

@@ -22,9 +22,14 @@ import static io.github.insjang.terminal.model.TerminalColor.GREEN;
 import static io.github.insjang.terminal.model.TerminalColor.WHITE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.Set;
 
 import io.github.insjang.terminal.internal.model.Cells;
 import io.github.insjang.terminal.internal.model.TerminalTextData;
@@ -2147,4 +2152,43 @@ public class VT100EmulatorBackendTest {
 		assertEquals('x', term.getChar(1, 1));
 		assertEquals(2, vt100.getCursorColumn());
 	}
+
+	/**
+	 * Only text can go on with the cluster written last: every other public command,
+	 * one added later as well, ends it, and what is written after it is not joined
+	 * to it however it left the cursor.
+	 */
+	@Test
+	public void testEveryCommandButWritingEndsTheCluster() throws Exception {
+		// settings that change no cell and move no cursor; a resize that changes the
+		// screen ends the cluster itself, one that changes nothing leaves it
+		Set<String> text = Set.of("appendString", "setStyle", "setDefaultStyle", "setInsertMode",
+				"setVT100LineWrapping", "setScrollRegion", "setBufferLineLimit", "setLink", "setShellMark",
+				"setLegacyWidth", "setGraphemeMode", "setAutoWrap", "setWrapPending");
+		int checked = 0;
+		for (Method method : VT100EmulatorBackend.class.getDeclaredMethods()) {
+			if (!Modifier.isPublic(method.getModifiers()) || method.getReturnType() != void.class
+					|| text.contains(method.getName())) {
+				continue;
+			}
+			Object[] args = new Object[method.getParameterCount()];
+			for (int i = 0; i < args.length; i++) {
+				Class<?> type = method.getParameterTypes()[i];
+				args[i] = type == int.class ? (Object) 1
+						: type == boolean.class ? (Object) false : type == char.class ? (Object) 'E' : null;
+			}
+			ITerminalTextData term = makeITerminalTextData();
+			VT100EmulatorBackend vt100 = new VT100EmulatorBackend(term);
+			term.setMaxHeight(5);
+			vt100.setDimensions(5, 10);
+			vt100.setCursor(0, 0);
+			vt100.appendString("\u0600"); // a prefix: x right after it would join it
+			method.invoke(vt100, args);
+			vt100.appendString("x");
+			assertNotEquals("\u0600x", Cells.text(term, 0, 0), method.getName());
+			checked++;
+		}
+		assertTrue(checked >= 19, "commands checked: " + checked);
+	}
+
 }

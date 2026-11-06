@@ -670,6 +670,9 @@ abstract public class AbstractITerminalTextDataTest {
 		assertNull(term.getCluster(1, 2));
 		term.setCluster(1, 2, heart);
 		assertEquals(heart, term.getCluster(1, 2));
+		// writing nothing, even at its second cell, leaves it as it is
+		term.setChars(1, 3, new char[0], null);
+		assertEquals(heart, term.getCluster(1, 2));
 		// writing either of its cells forgets a cluster
 		term.setChar(1, 3, 'X', null);
 		assertNull(term.getCluster(1, 2));

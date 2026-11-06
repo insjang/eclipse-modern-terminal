@@ -163,7 +163,13 @@ public class MockTerminalControlForText implements ITerminalControlForText {
 
 	@Override
 	public void enableApplicationCursorKeys(boolean enable) {
-		// a full reset (ESC c) turns them off; nothing to record here
+		applicationCursorKeys = enable;
+	}
+
+	private boolean applicationCursorKeys;
+
+	public boolean isApplicationCursorKeys() {
+		return applicationCursorKeys;
 	}
 
 }

@@ -183,4 +183,33 @@ public class TextCanvasModelTest {
 		model.expandHoverSelectionAt(0, 0);
 		assertEquals("\u4e2d\u0301", model.getHoverSelectionText());
 	}
+
+	@Test
+	public void testCopyKeepsWhatANarrowedScreenHolds() {
+		TerminalTextData data = new TerminalTextData();
+		data.setDimensions(1, 6);
+		data.setChars(0, 0, "abcde\ud55c".toCharArray(), null);
+		data.setDimensions(1, 3);
+		ITerminalTextDataSnapshot snapshot = data.makeSnapshot();
+		snapshot.updateSnapshot(true);
+		AbstractTextCanvasModel model = new AbstractTextCanvasModel(snapshot) {
+		};
+		// the row comes whole, as it does again when the screen widens
+		assertEquals("abcde\ud55c", model.getAllText());
+		model.setSelection(0, 0, 0, 2);
+		assertEquals("abcde\ud55c", model.getSelectedText());
+		// a selection that ends inside the screen ends there
+		model.setSelection(0, 0, 0, 1);
+		assertEquals("ab", model.getSelectedText());
+		// a pair the margin cuts comes whole, though the screen shows no half of it
+		TerminalTextData pair = new TerminalTextData();
+		pair.setDimensions(1, 4);
+		pair.setChars(0, 0, "ab\ud83d\ude00".toCharArray(), null);
+		pair.setDimensions(1, 3);
+		ITerminalTextDataSnapshot narrowed = pair.makeSnapshot();
+		narrowed.updateSnapshot(true);
+		assertEquals("ab\ud83d\ude00", new AbstractTextCanvasModel(narrowed) {
+		}.getAllText());
+	}
+
 }

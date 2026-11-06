@@ -322,7 +322,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		if (strText != null && !confirmPaste(strText)) {
 			return;
 		}
-		pasteString(strText);
+		paste(strText);
 	}
 
 	/**
@@ -364,10 +364,19 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		if (strText == null) {
 			return false;
 		}
-		// a stream connector that echoes locally converts line breaks itself
-		// (InputStreamMonitor), from what it was always given
+		sendString(strText);
+		return true;
+	}
+
+	@Override
+	public boolean paste(String text) {
+		if (!isConnected() || text == null || text.isEmpty()) {
+			return false; // nothing to paste: no empty brackets either
+		}
+		// a connector that echoes locally (a stream, telnet without remote echo) gets the
+		// text as it always did: InputStreamMonitor converts the line breaks of a stream
 		ITerminalConnector connector = getTerminalConnector();
-		sendString(connector != null && connector.isLocalEcho() ? strText : pasteText(strText, fBracketedPaste));
+		sendString(connector != null && connector.isLocalEcho() ? text : pasteText(text, fBracketedPaste));
 		return true;
 	}
 
