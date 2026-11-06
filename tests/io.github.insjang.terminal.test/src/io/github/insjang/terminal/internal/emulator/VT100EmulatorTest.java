@@ -1031,6 +1031,14 @@ public class VT100EmulatorTest {
 	}
 
 	@Test
+	public void testFullResetEndsDecPrivateModes() {
+		run("\u001b[?25l\u001b[?2004h");
+		// ESC c (RIS) resets every mode a program set, as a new connection does
+		run("\u001bc");
+		assertAll(() -> assertTrue(control.isCursorShown()), () -> assertFalse(control.isBracketedPaste()));
+	}
+
+	@Test
 	public void testResetStateEndsMouseModes() {
 		run("\u001b[?1002;1006;1004h\u001b[?2026h");
 		assertAll(() -> assertEquals(1002, control.getMouseMode()), () -> assertTrue(control.isSgrMouseEncoding()),

@@ -565,8 +565,10 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 	/**
 	 * Erasing either half of a wide character erases all of it, in the same
 	 * background as the rest of the range.
+	 *
+	 * @return where the erase ended, past a wide character it took whole
 	 */
-	private void eraseWhole(int line, int from, int to) {
+	private int eraseWhole(int line, int from, int to) {
 		if (from < fColumns) {
 			from = Cells.start(fTerminal, line, from);
 		}
@@ -574,6 +576,7 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 			to++; // the range ends inside a character: all of it goes
 		}
 		eraseCells(line, from, to);
+		return to;
 	}
 
 	/**
@@ -1410,8 +1413,8 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 		synchronized (fTerminal) {
 			int line = toAbsoluteLine(fCursorLine);
 			int end = n >= fColumns - fCursorColumn ? fColumns : fCursorColumn + n;
-			eraseWhole(line, fCursorColumn, end);
-			if (end == fColumns) {
+			// a wide character the erase ends in is erased whole, maybe up to the margin
+			if (eraseWhole(line, fCursorColumn, end) == fColumns) {
 				// Nothing is left out to the margin, so the line ends before it, as
 				// erasing to the end of the line says (xterm; Ghostty on any ECH).
 				fTerminal.clearWrappedLine(line);

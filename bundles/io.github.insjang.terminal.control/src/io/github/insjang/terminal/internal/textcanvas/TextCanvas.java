@@ -66,7 +66,6 @@ public class TextCanvas extends GridCanvas {
 	private boolean fScrollLock;
 	private Point fDraggingStart;
 	/** -1 above the top, 1 below the bottom, 0 while the pointer is inside */
-	private int fDragPast;
 	private boolean fDragScrolling;
 	private static final int DRAG_SCROLL_INTERVAL = 60;
 	private Point fDraggingEnd;
@@ -317,8 +316,7 @@ public class TextCanvas extends GridCanvas {
 			}
 			if (fDraggingStart != null) {
 				// Dragging past an edge keeps the lines beyond it coming into view.
-				fDragPast = e.y < 0 ? -1 : e.y >= getClientArea().height ? 1 : 0;
-				if (fDragPast != 0 && !fDragScrolling) {
+				if (dragPast(e.y) != 0 && !fDragScrolling) {
 					fDragScrolling = true;
 					getDisplay().timerExec(DRAG_SCROLL_INTERVAL, this::dragScroll);
 				}
@@ -380,13 +378,21 @@ public class TextCanvas extends GridCanvas {
 		fCellCanvasModel.expandHoverSelectionAt(-1, -1);
 	}
 
+	/** @return -1 above the canvas, 1 below it, 0 on it */
+	private int dragPast(int y) {
+		return y < 0 ? -1 : y >= getClientArea().height ? 1 : 0;
+	}
+
 	private void dragScroll() {
-		if (isDisposed() || fDraggingStart == null || fDragPast == 0) {
+		Point p = isDisposed() ? null : toControl(getDisplay().getCursorLocation());
+		// where the pointer is now, not where the last move left it: a new click may have
+		// come in between
+		int past = p == null ? 0 : dragPast(p.y);
+		if (fDraggingStart == null || past == 0) {
 			fDragScrolling = false;
 			return;
 		}
-		scrollYDelta(fDragPast * getCellHeight());
-		Point p = toControl(getDisplay().getCursorLocation());
+		scrollYDelta(past * getCellHeight());
 		extendSelection(screenPointToCell(p.x, p.y));
 		redraw();
 		getDisplay().timerExec(DRAG_SCROLL_INTERVAL, this::dragScroll);

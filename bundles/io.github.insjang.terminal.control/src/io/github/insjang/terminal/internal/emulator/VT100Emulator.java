@@ -801,8 +801,18 @@ public class VT100Emulator implements ControlListener {
 		text.setLegacyWidth(legacy);
 	}
 
-	/** what a full reset and a new connection put back besides the screen */
+	/**
+	 * What a full reset and a new connection put back besides the screen: the modes a
+	 * program asked for end with it, so a program that hid the cursor and was cut off
+	 * does not leave the next shell without one.
+	 */
 	private void resetModes() {
+		terminal.showCursor(true);
+		terminal.enableBracketedPaste(false);
+		terminal.enableMouseReporting(0);
+		terminal.enableSgrMouseEncoding(false);
+		terminal.enableFocusReporting(false);
+		terminal.enableSynchronizedOutput(false); // or the screen would stay frozen
 		text.setGraphemeMode(false);
 		text.setAutoWrap(true);
 		originMode = false;
@@ -2260,14 +2270,6 @@ public class VT100Emulator implements ControlListener {
 		text.setScrollRegion(-1, -1);
 		text.setInsertMode(false);
 		resetModes();
-		// the modes a program asked for end with its connection: a program that
-		// hid the cursor and was cut off must not leave the next shell without one
-		terminal.showCursor(true);
-		terminal.enableBracketedPaste(false);
-		terminal.enableMouseReporting(0);
-		terminal.enableSgrMouseEncoding(false);
-		terminal.enableFocusReporting(false);
-		terminal.enableSynchronizedOutput(false); // or the screen would stay frozen
 	}
 
 	//	public OutputStream getOutputStream() {

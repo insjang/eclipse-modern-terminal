@@ -1467,6 +1467,13 @@ public class VT100EmulatorBackendTest {
 		vt100.setCursor(0, 1);
 		vt100.deleteCharacters(1);
 		assertFalse(term.isWrappedLine(0));
+		// erasing the first cell of a wide character at the margin erases it whole, to the margin
+		vt100.setCursor(0, 0);
+		vt100.appendString("abc\ud55cfg");
+		assertTrue(term.isWrappedLine(0));
+		vt100.setCursor(0, 3);
+		vt100.eraseCharacters(1);
+		assertFalse(term.isWrappedLine(0));
 	}
 
 	@Test

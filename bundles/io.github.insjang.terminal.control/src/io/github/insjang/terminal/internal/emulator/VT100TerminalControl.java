@@ -190,7 +190,10 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	 */
 	private final IPropertyChangeListener fPreferenceListener = this::updatePreferences;
 	private final IPropertyChangeListener fFontListener = this::updateFont;
-	private boolean fBracketedPaste;
+	// set by the reader job, read by the display thread when pasting
+	private volatile boolean fBracketedPaste;
+	// asked for by the program (DECTCEM); kept on the control, as the canvas is new after a move
+	private volatile boolean fCursorHidden;
 	private static final String PASTE_START = "\u001b[200~"; //$NON-NLS-1$
 	private static final String PASTE_END = "\u001b[201~"; //$NON-NLS-1$
 
@@ -199,7 +202,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	 */
 	volatile private Job fJob;
 
-	private PollingTextCanvasModel fPollingTextCanvasModel;
+	// replaced on the display thread when the tab moves, read by the reader job in showCursor
+	private volatile PollingTextCanvasModel fPollingTextCanvasModel;
 
 	/**
 	 * In some circumstances (e.g PowerShell on Windows) the backspace
@@ -360,7 +364,10 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		if (strText == null) {
 			return false;
 		}
-		sendString(pasteText(strText, fBracketedPaste));
+		// a stream connector that echoes locally converts line breaks itself
+		// (InputStreamMonitor), from what it was always given
+		ITerminalConnector connector = getTerminalConnector();
+		sendString(connector != null && connector.isLocalEcho() ? strText : pasteText(strText, fBracketedPaste));
 		return true;
 	}
 
@@ -940,6 +947,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		// TODO how to get the initial size correctly!
 		snapshot.updateSnapshot(false);
 		fPollingTextCanvasModel = new PollingTextCanvasModel(snapshot);
+		fPollingTextCanvasModel.setCursorHidden(fCursorHidden);
 		fCtlText = new TextCanvas(fWndParent, fPollingTextCanvasModel, SWT.NONE,
 				new TextLineRenderer(() -> fCtlText, fPollingTextCanvasModel));
 
@@ -1797,6 +1805,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	@Override
 	public void showCursor(boolean show) {
+		fCursorHidden = !show;
 		if (fPollingTextCanvasModel != null) {
 			fPollingTextCanvasModel.setCursorHidden(!show);
 		}
