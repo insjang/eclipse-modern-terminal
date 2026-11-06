@@ -10,13 +10,15 @@
 package io.github.insjang.terminal.internal.emulator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
+import org.eclipse.swt.graphics.Point;
 import org.junit.jupiter.api.Test;
 
 /** How a mouse event is spelled for the program, in xterm's two encodings. */
 public class MouseReportTest {
 
-	private static final String CSI = "[";
+	private static final String CSI = "\u001b[";
 
 	@Test
 	public void testSgrEncoding() {
@@ -40,5 +42,21 @@ public class MouseReportTest {
 		// a release says only that some button came up
 		assertEquals(CSI + "M" + (char) 35 + (char) 42 + (char) 37,
 				VT100TerminalControl.mouseReport(false, 0, 5, 10, false));
+		// no room past column or row 223: nothing is reported, as in xterm
+		assertEquals("", VT100TerminalControl.mouseReport(false, 0, 5, 224, true));
+		assertEquals("", VT100TerminalControl.mouseReport(false, 0, 224, 10, true));
+	}
+
+	@Test
+	public void testCellsOnTheScreen() {
+		// 100 lines of text, the last 24 of them the screen: line 76 is its first line
+		assertEquals(new Point(1, 1), VT100TerminalControl.onScreen(new Point(0, 76), 100, 24, 80));
+		assertEquals(new Point(10, 24), VT100TerminalControl.onScreen(new Point(9, 99), 100, 24, 80));
+		// the history above it is not the program's
+		assertNull(VT100TerminalControl.onScreen(new Point(0, 75), 100, 24, 80));
+		// the strip under the last line and the margin right of the last column are the last ones
+		assertEquals(new Point(80, 24), VT100TerminalControl.onScreen(new Point(85, 100), 100, 24, 80));
+		// no history: the text is the screen
+		assertEquals(new Point(3, 2), VT100TerminalControl.onScreen(new Point(2, 1), 24, 24, 80));
 	}
 }

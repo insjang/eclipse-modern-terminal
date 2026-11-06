@@ -92,6 +92,7 @@ import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.graphics.Font;
+import org.eclipse.swt.graphics.Point;
 import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -179,11 +180,14 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	private final EditActionAccelerators editActionAccelerators = new EditActionAccelerators();
 
-	private boolean fApplicationCursorKeys;
-	private int fMouseMode;
-
-	private int fLastReportedLine, fLastReportedColumn;
-	private boolean fSgrMouseEncoding;
+	// set by the reader job, read by the display thread on a key press
+	private volatile boolean fApplicationCursorKeys;
+	// set by the reader job, read by the display thread on the mouse and on focus
+	private volatile int fMouseMode;
+	private volatile boolean fSgrMouseEncoding;
+	private volatile boolean fFocusReporting;
+	// the cell a move was last reported in; reset by the reader job with the mode
+	private volatile int fLastReportedLine, fLastReportedColumn;
 
 	/**
 	 * Listens to changes in the preferences
@@ -972,6 +976,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		fCtlText = new TextCanvas(fWndParent, fPollingTextCanvasModel, SWT.NONE,
 				new TextLineRenderer(() -> fCtlText, fPollingTextCanvasModel));
 
+		fCtlText.setMouseWheelHandler(this::reportMouseWheel);
+		fCtlText.setMouseButtonHandler(new MouseReporter());
 		fCtlText.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 		fCtlText.addResizeHandler((lines, columns) -> fTerminalText.setDimensions(lines, columns));
 		fCtlText.addMouseListener(new MouseAdapter() {
@@ -1021,8 +1027,6 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		}
 
 		PlatformUI.getWorkbench().getHelpSystem().setHelp(parent, id);
-		getCtlText().setMouseWheelHandler(this::reportMouseWheel);
-		getCtlText().setMouseButtonHandler(new MouseReporter());
 	}
 
 	@Override
@@ -1730,8 +1734,9 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	 *
 	 * @return whether the program was told, in which case the canvas stays put
 	 */
-	private boolean reportMouseWheel(int count, int modifiers, int line, int column) {
-		if (fMouseMode == 0 || count == 0 || !isConnected()) {
+	private boolean reportMouseWheel(int count, int modifiers, Point cell) {
+		Point at = onScreen(cell);
+		if (fMouseMode == 0 || count == 0 || at == null || !isConnected()) {
 			return false;
 		}
 		int button = (count > 0 ? 64 : 65) + modifiers; // up, down
@@ -1739,7 +1744,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		int notches = Math.max(1, Math.abs(count) / 3);
 		StringBuilder report = new StringBuilder();
 		for (int i = 0; i < notches; i++) {
-			report.append(mouseReport(button, line, column, true));
+			report.append(mouseReport(button, at.y, at.x, true));
 		}
 		sendString(report.toString());
 		return true;
@@ -1753,20 +1758,33 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	 */
 	private class MouseReporter implements TextCanvas.IMouseButtonHandler {
 		@Override
-		public boolean mouseButton(int button, int modifiers, int line, int column, boolean pressed) {
-			if (fMouseMode == 0 || button < 1 || button > 3 || !isConnected()) {
+		public boolean mouseButton(int button, int modifiers, Point cell, boolean pressed) {
+			Point at = onScreen(cell);
+			// a release is reported wherever it happens: its press was
+			if (fMouseMode == 0 || button < 1 || button > 3 || (at == null && pressed) || !isConnected()) {
 				return false;
 			}
-			sendString(mouseReport(button - 1 + modifiers, line, column, pressed));
+			if (at == null) {
+				at = new Point(Math.max(1, Math.min(cell.x + 1, fPollingTextCanvasModel.getTerminalText().getWidth())), 1);
+			}
+			sendString(mouseReport(button - 1 + modifiers, at.y, at.x, pressed));
+			if (pressed) {
+				// the press takes the terminal's selection away (the canvas clears it once
+				// this returns): the view's copy must know, after that
+				fDisplay.asyncExec(fTerminalListener::setTerminalSelectionChanged);
+			}
 			return true;
 		}
 
 		@Override
-		public boolean mouseMoved(int button, int modifiers, int line, int column) {
+		public boolean mouseMoved(int button, int modifiers, Point cell) {
+			Point at = onScreen(cell);
 			// 1002 is only interested while a button is held, 1003 in every move.
-			if (fMouseMode < 1002 || (fMouseMode == 1002 && button == 0) || !isConnected()) {
+			if (fMouseMode < 1002 || (fMouseMode == 1002 && button == 0) || at == null || !isConnected()) {
 				return false;
 			}
+			int line = at.y;
+			int column = at.x;
 			if (line == fLastReportedLine && column == fLastReportedColumn) {
 				return true; // still the same cell, and a cell is all the program is told
 			}
@@ -1776,8 +1794,6 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			return true;
 		}
 	}
-
-	private boolean fFocusReporting;
 
 	@Override
 	public void enableFocusReporting(boolean enable) {
@@ -1791,8 +1807,36 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private void reportFocus(boolean gained) {
 		// nobody to tell once the connection is gone, and no stream to tell it on
 		if (fFocusReporting && isConnected()) {
-			sendString(gained ? "[I" : "[O"); //$NON-NLS-1$ //$NON-NLS-2$
+			sendString(gained ? "\u001b[I" : "\u001b[O"); //$NON-NLS-1$ //$NON-NLS-2$
 		}
+	}
+
+	/**
+	 * @return where a cell of the text is on the screen a program sees, as column and
+	 *         line counted from one; null for a line of the history above it, which the
+	 *         user scrolled back to and the program knows nothing of. Below the last line
+	 *         (the strip under it) is the last line.
+	 */
+	private Point onScreen(Point cell) {
+		// the height of what the canvas shows, which the cell is from, not of the text the
+		// reader is writing ahead of it
+		ITerminalTextDataReadOnly shown = fPollingTextCanvasModel.getTerminalText();
+		return onScreen(cell, shown.getHeight(), fTerminalText.getLines(), shown.getWidth());
+	}
+
+	/**
+	 * Where a cell of the text is on the screen a program sees, as in {@link #onScreen(Point)}.
+	 *
+	 * @param height      the lines of the text, history included
+	 * @param screenLines the lines of the screen, the last of the text
+	 * @param width       the columns of the screen
+	 */
+	public static Point onScreen(Point cell, int height, int screenLines, int width) {
+		int line = cell.y - (height - screenLines) + 1;
+		if (line < 1) {
+			return null;
+		}
+		return new Point(Math.max(1, Math.min(cell.x + 1, width)), Math.min(line, screenLines));
 	}
 
 	private String mouseReport(int button, int line, int column, boolean pressed) {
@@ -1805,6 +1849,10 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		}
 		// The older spelling has no room past column 223 and no way to say which
 		// button came up, so a release is reported as button 3, meaning "some button".
+		// Past 223 nothing is reported, as in xterm.
+		if (column > 223 || line > 223) {
+			return ""; //$NON-NLS-1$
+		}
 		return "\u001b[M" + (char) (32 + (pressed ? button : 3)) + (char) (32 + column) //$NON-NLS-1$
 				+ (char) (32 + line);
 	}

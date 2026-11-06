@@ -289,6 +289,11 @@ public class VT100Emulator implements ControlListener {
 		text.setBufferLineLimit(bufferLineLimit);
 	}
 
+	/** @return the lines of the screen, which are the last lines of the text */
+	public int getLines() {
+		return text.getLines();
+	}
+
 	/**
 	 * @see IVT100EmulatorBackend#getBufferLineLimit()
 	 */
