@@ -1104,13 +1104,76 @@ public class VT100EmulatorTest {
 		assertEquals(500, data.getMaxHeight());
 	}
 
+	/**
+	 * Both resets, ESC c and the one before a connection, forget everything a program
+	 * set: with every DEC private mode (1 to 9999) and ANSI mode set, then with every
+	 * one reset, and the other state a program can change, a reset emulator must look
+	 * and act as a new one. A mode added later is covered without touching this test.
+	 */
+	@Test
+	public void testResetsForgetEverythingAProgramSet() {
+		List<Object> fresh = probe();
+		for (char mode : new char[] { 'h', 'l' }) {
+			for (String reset : new String[] { "ESC c", "resetState" }) {
+				before();
+				StringBuilder set = new StringBuilder();
+				for (int n = 1; n < 10000; n++) {
+					set.append("\u001b[?").append(n).append(mode);
+				}
+				for (int n = 1; n < 100; n++) {
+					set.append("\u001b[").append(n).append(mode);
+				}
+				set.append("\u001b[5;10r\u001b[1;31;4m\u001b(0\u001b)0\u000e\u001b]8;;https://example.com/\u0007");
+				set.append("\u001b[3g\u001b[1;5H\u001bH\u001b[2;3H\u001b7\u001b[1;9Hq");
+				run(set.toString());
+				if (reset.equals("ESC c")) {
+					run("\u001bc");
+				} else {
+					emulator.resetState();
+				}
+				assertEquals(fresh, probe(), "CSI ? n " + mode + ", then " + reset);
+			}
+		}
+	}
+
+	/** What the emulator shows and tells the control after some text: its state, as far as it shows */
+	private List<Object> probe() {
+		run("\u001b[2J\u001b[H\u001b[3b", "aq\u4e2d\ud83d\udc68\u200d\ud83d\udc69\u200d\ud83d\udc67\tb",
+				"\u001b[1;" + (WINDOW_COLUMNS - 1) + "Hxyz", "\u001b[3;1Hcd\u001b[3;1He",
+				"\u001b[" + WINDOW_LINES + ";1H\n\n", "\u001b8s");
+		List<Object> state = new ArrayList<>();
+		for (int line = 0; line < data.getHeight(); line++) {
+			state.add(line + ": " + new String(data.getChars(line) == null ? new char[0] : data.getChars(line)));
+			for (int column = 0; column < data.getWidth(); column++) {
+				state.add(data.getStyle(line, column));
+				state.add(data.getLink(line, column));
+			}
+		}
+		state.add("cursor " + data.getCursorLine() + "," + data.getCursorColumn());
+		for (java.lang.reflect.Method getter : MockTerminalControlForText.class.getDeclaredMethods()) {
+			Class<?> type = getter.getReturnType();
+			if (getter.getParameterCount() == 0 && (type == boolean.class || type == int.class)) {
+				try {
+					state.add(getter.getName() + " " + getter.invoke(control));
+				} catch (ReflectiveOperationException e) {
+					throw new AssertionError(e);
+				}
+			}
+		}
+		return state;
+	}
+
 	@Test
 	public void testResetStateEndsDecPrivateModes() {
-		run("\u001b[?25l\u001b[?2004h");
-		assertAll(() -> assertFalse(control.isCursorShown()), () -> assertTrue(control.isBracketedPaste()));
-		// the connection ends while the program has them set; the next one starts clean
+		run("\u001b[?25l\u001b[?2004h\u001b[?1h\u001b]8;;https://example.com/\u0007");
+		assertAll(() -> assertFalse(control.isCursorShown()), () -> assertTrue(control.isBracketedPaste()),
+				() -> assertTrue(control.isApplicationCursorKeys()));
+		// the connection ends while the program has them set, a link open too; the next one starts clean
 		emulator.resetState();
-		assertAll(() -> assertTrue(control.isCursorShown()), () -> assertFalse(control.isBracketedPaste()));
+		run("x");
+		assertAll(() -> assertTrue(control.isCursorShown()), () -> assertFalse(control.isBracketedPaste()),
+				() -> assertFalse(control.isApplicationCursorKeys()),
+				() -> assertNull(data.getLink(data.getCursorLine(), data.getCursorColumn() - 1)));
 	}
 
 	@Test

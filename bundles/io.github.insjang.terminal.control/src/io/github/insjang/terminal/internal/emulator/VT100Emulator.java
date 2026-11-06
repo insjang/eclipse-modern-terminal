@@ -803,8 +803,6 @@ public class VT100Emulator implements ControlListener {
 		text.setCursor(0, 0);
 		text.setScrollRegion(-1, -1);
 		text.setInsertMode(false);
-		terminal.enableApplicationCursorKeys(false);
-		text.setLink(null);
 		resetModes();
 	}
 
@@ -834,11 +832,13 @@ public class VT100Emulator implements ControlListener {
 	private void resetModes() {
 		terminal.showCursor(true);
 		terminal.enableBracketedPaste(false);
+		terminal.enableApplicationCursorKeys(false);
 		terminal.enableMouseReporting(0);
 		terminal.enableSgrMouseEncoding(false);
 		terminal.enableFocusReporting(false);
 		terminal.enableSynchronizedOutput(false); // or the screen would stay frozen
 		text.setGraphemeMode(false);
+		text.setLink(null); // a link a program opened and did not close
 		text.setAutoWrap(true);
 		originMode = false;
 		lineDrawing[0] = false;
