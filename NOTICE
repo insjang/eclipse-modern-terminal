@@ -9,3 +9,10 @@ so that it installs beside the Eclipse Terminal.
 
 The original copyright notices are kept in each file.
 Licensed under the Eclipse Public License 2.0 (see LICENSE). SPDX-License-Identifier: EPL-2.0
+
+Third-party content
+
+The bundle io.github.insjang.terminal.connector.process contains os/win32/{x86_64,aarch64}/conpty.dll and
+OpenConsole.exe from the NuGet package Microsoft.Windows.Console.ConPTY 1.25.260930003
+(https://github.com/microsoft/terminal), unmodified, under the MIT License
+(about_files/conpty-LICENSE.txt in that bundle). Copyright (c) Microsoft Corporation.

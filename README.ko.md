@@ -26,7 +26,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | | Eclipse Terminal | Modern Terminal |
 |---|---|---|
 | 한글·중국어·일본어 | 1칸으로 계산: 줄이 깨지고 커서가 밀림 | 다른 터미널과 같이 2칸 (East Asian Width) |
-| 이모지·결합 문자 | 쪼개지거나 겹침 | 하나의 글자 묶음(grapheme cluster)으로 표시 (ZWJ 이모지, 국기, 피부색, 악센트), Ghostty·Windows Terminal과 같은 방식; 설정으로 셸처럼 코드 포인트 단위로 셀 수 있음 (wcwidth: 프롬프트에서 이모지를 고쳐도 커서가 맞음, SSH 연결에서; Windows 로컬 터미널은 중간의 콘솔이 따로 세므로 끈 채로 쓸 것), mode 2027을 켠 프로그램은 클러스터 단위 |
+| 이모지·결합 문자 | 쪼개지거나 겹침 | 하나의 글자 묶음(grapheme cluster)으로 표시 (ZWJ 이모지, 국기, 피부색, 악센트), Ghostty·Windows Terminal과 같은 방식; 설정으로 셸처럼 코드 포인트 단위로 셀 수 있음 (wcwidth: 프롬프트에서 이모지를 고쳐도 커서가 맞음, SSH 연결과 Windows 로컬 터미널에서, 콘솔도 같은 방식으로 셈), mode 2027을 켠 프로그램은 클러스터 단위 |
 | 전체 화면 프로그램 (vim, less, htop, Claude Code) | 스크롤 기록 위에 그려 잔상이 남음 | 대체 화면 버퍼: 종료하면 셸 화면이 그대로 돌아옴 |
 | 마우스 | 프로그램에 전달 안 됨 | 요청한 프로그램에 전달 (클릭, 휠, 드래그, SGR 방식) |
 | DEC 모드, 브래킷 붙여넣기, 커서 숨김, 흐린 글자 | 일부만 | 지원 |
@@ -47,6 +47,8 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | SFTP | 없음 | Files 뷰: 탐색, 전송, 원격 파일을 Eclipse에서 편집, 셸 폴더 따라가기 |
 
 - 로컬 셸 (cmd, PowerShell, Git Bash, WSL 배포판은 시작 시 자동 감지)과 SSH 지원
+- Windows 로컬 셸은 Windows Terminal이 쓰는 콘솔(OpenConsole 1.25, 동봉)에서 실행, 콘솔도 터미널과 같은 방식으로 글자 폭을 셈
+  - 이 콘솔을 불러오거나 시작하지 못하면 이전처럼 Windows 콘솔을 씀
 
 ## 요구 사항
 
@@ -253,5 +255,6 @@ ECLIPSE=/path/to/eclipse ./build.sh site       # build/site 에 p2 업데이트 
   - upstream에 제안한 PR 2894, 2899~2905, 2973, 2979의 변경과 이후 추가 기능 포함
 - 패키지명은 `org.eclipse.terminal`에서 `io.github.insjang.terminal`로 변경
 - Eclipse Public License 2.0, [LICENSE](LICENSE)와 [NOTICE](NOTICE) 참고
+- 동봉한 `conpty.dll`, `OpenConsole.exe` (Windows x86_64, aarch64)는 Microsoft NuGet 패키지 Microsoft.Windows.Console.ConPTY 1.25.260930003 원본 그대로, MIT 라이선스 ([conpty-LICENSE.txt](bundles/io.github.insjang.terminal.connector.process/about_files/conpty-LICENSE.txt))
 
 AI(Claude Code)의 도움을 받아 개발.

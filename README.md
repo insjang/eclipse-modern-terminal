@@ -25,7 +25,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | | Eclipse Terminal | Modern Terminal |
 |---|---|---|
 | Korean, Chinese, Japanese | counted as one column: lines break and the cursor drifts | two columns, as in every other terminal (East Asian Width) |
-| Emoji, combining marks | split or doubled | one grapheme cluster in its cells (ZWJ sequences, flags, skin tones, accents), as Ghostty and Windows Terminal count them; a preference counts code points as shells do (wcwidth), so editing emoji at a prompt keeps the cursor in place (over SSH; in a local terminal on Windows the console in between counts its own way, so leave it off there); programs asking for mode 2027 get whole clusters |
+| Emoji, combining marks | split or doubled | one grapheme cluster in its cells (ZWJ sequences, flags, skin tones, accents), as Ghostty and Windows Terminal count them; a preference counts code points as shells do (wcwidth), so editing emoji at a prompt keeps the cursor in place (over SSH, and in local terminals on Windows, whose console counts the same way); programs asking for mode 2027 get whole clusters |
 | Full-screen programs (vim, less, htop, Claude Code) | draw over the scrollback, leave garbage behind | alternate screen buffer: the shell comes back as it was |
 | Mouse | ignored by programs | reported to programs that ask (click, wheel, drag; SGR mode) |
 | DEC modes, bracketed paste, hidden cursor, faint text | partly | supported |
@@ -46,6 +46,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | SFTP | none | Files view: browse, transfer, edit remote files in Eclipse, follows the shell's folder; local tabs show local folders |
 
 Local shells (cmd, PowerShell, Git Bash, WSL distributions, detected on start) and SSH.
+On Windows, local shells run in the console that Windows Terminal ships (OpenConsole 1.25, bundled), so the console counts character widths as the terminal does; where it does not load or start, the Windows console is used as before.
 
 ## Requirements
 
@@ -256,5 +257,6 @@ JDK 21 or later and bash (WSL works).
 Forked from [eclipse-platform/eclipse.platform](https://github.com/eclipse-platform/eclipse.platform) `terminal/` at ea81a95, with the changes proposed upstream in pull requests 2894, 2899 to 2905, 2973 and 2979, and more since.
 Packages are renamed from `org.eclipse.terminal` to `io.github.insjang.terminal`.
 Eclipse Public License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
+The bundled `conpty.dll` and `OpenConsole.exe` (Windows, x86_64 and aarch64) are from Microsoft's NuGet package Microsoft.Windows.Console.ConPTY 1.25.260930003, unmodified, under the MIT License ([conpty-LICENSE.txt](bundles/io.github.insjang.terminal.connector.process/about_files/conpty-LICENSE.txt)).
 
 Developed with the help of AI (Claude Code).
