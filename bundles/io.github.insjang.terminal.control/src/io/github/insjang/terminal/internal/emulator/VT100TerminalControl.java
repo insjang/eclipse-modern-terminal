@@ -999,6 +999,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		fFocusListener = new TerminalFocusListener();
 
 		getCtlText().addKeyListener(fKeyHandler);
+		// Shift+Tab is a key for the program (back tab, see keyPressed), not a move of the focus out of the terminal
+		getCtlText().addTraverseListener(e -> {
+			if (e.detail == SWT.TRAVERSE_TAB_PREVIOUS && (e.stateMask & SWT.MODIFIER_MASK) == SWT.SHIFT) {
+				e.doit = false;
+			}
+		});
 		getCtlText().addFocusListener(fFocusListener);
 		// Registered after the canvas' own handler, so the selection it just finished
 		// is the one that gets copied. A click that selects nothing copies nothing,
@@ -1430,6 +1436,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			// see javadoc on convertBackspace for details
 			if (convertBackspace && !ctrlKeyPressed && character == '\b') {
 				character = 0x7f;
+			}
+
+			// Shift+Tab sends back tab (CSI Z), as xterm and Windows Terminal do: Claude Code and OpenCode switch modes with it
+			if (character == '\t' && (event.stateMask & SWT.MODIFIER_MASK) == SWT.SHIFT) {
+				sendString("\u001b[Z"); //$NON-NLS-1$
+				return;
 			}
 
 			// Shift+Enter sends ESC CR, as Alt+Enter does: a new line in Claude Code, Codex and the like, as on the web
