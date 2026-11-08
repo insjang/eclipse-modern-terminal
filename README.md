@@ -30,6 +30,7 @@ It is a fork of the Eclipse Terminal and installs beside it as its own view, **M
 | Mouse | ignored by programs | reported to programs that ask (click, wheel, drag; SGR mode) |
 | DEC modes, bracketed paste, hidden cursor, faint text | partly | supported |
 | Shift+Enter | runs the line | a new line in Claude Code, Codex and the like, as on the web |
+| Shift+Tab | not sent as back tab (on Windows it moves the focus away) | sent to the program (back tab): Claude Code and OpenCode switch modes |
 | Paste with a line break | runs it at once | asks first where the shell has not turned on bracketed paste, a single line ending in a line break too (a preference); bracketed paste cannot be ended early by the text |
 | Command input field | one line | several lines (Shift+Enter), history kept |
 | Tabs | one row per view | drag a tab to an edge to split the view; the layout comes back after a restart; Ctrl+Tab goes to the tab used before, across the split, like Ctrl+F6 between editors (hold Ctrl and press Tab again to go further back) |
