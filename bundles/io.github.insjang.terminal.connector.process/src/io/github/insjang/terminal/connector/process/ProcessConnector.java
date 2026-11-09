@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 import org.eclipse.cdt.utils.pty.PTY;
 import org.eclipse.cdt.utils.spawner.ProcessFactory;
@@ -57,6 +58,8 @@ public class ProcessConnector extends AbstractStreamsConnector {
 	private ConsoleProcess console;
 	// Reference to the launched process instance.
 	private Process process;
+	/** the exit code of a process that ended by itself */
+	private volatile OptionalInt exitCode = OptionalInt.empty();
 	// Reference to the process monitor
 	private ProcessMonitor monitor;
 
@@ -274,6 +277,14 @@ public class ProcessConnector extends AbstractStreamsConnector {
 
 	@Override
 	public void doDisconnect() {
+		// a process that ended by itself: a failure shows its code, as Windows Terminal does, and keeps the tab
+		if (process != null && !process.isAlive()) {
+			exitCode = OptionalInt.of(process.exitValue());
+			if (exitCode.getAsInt() != 0) {
+				fControl.displayTextInTerminal("[process exited with code " + exitCode.getAsInt() + "]"); //$NON-NLS-1$ //$NON-NLS-2$
+			}
+		}
+
 		// Stop monitoring the process
 		if (monitor != null) {
 			monitor.dispose();
@@ -302,6 +313,11 @@ public class ProcessConnector extends AbstractStreamsConnector {
 
 		// Set the terminal control state to CLOSED.
 		fControl.setState(TerminalState.CLOSED);
+	}
+
+	@Override
+	public OptionalInt getExitCode() {
+		return exitCode;
 	}
 
 	@Override

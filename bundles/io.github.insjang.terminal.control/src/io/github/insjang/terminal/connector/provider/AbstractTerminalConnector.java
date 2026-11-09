@@ -13,6 +13,8 @@
  *******************************************************************************/
 package io.github.insjang.terminal.connector.provider;
 
+import java.util.OptionalInt;
+
 import java.io.OutputStream;
 import java.util.Optional;
 
@@ -45,6 +47,19 @@ public abstract class AbstractTerminalConnector {
 	 *             required libraries, for instance).
 	 */
 	public void initialize() throws Exception {
+	}
+
+	/**
+	 * The exit code of the program this connector ran, once that program has
+	 * ended by itself. A terminal whose program failed keeps its tab open, as
+	 * Windows Terminal does, so the error can be read.
+	 *
+	 * @return the exit code; empty while the program runs, after a disconnect,
+	 *         and for connectors that run no program
+	 * @since 1.1
+	 */
+	public OptionalInt getExitCode() {
+		return OptionalInt.empty();
 	}
 
 	/**

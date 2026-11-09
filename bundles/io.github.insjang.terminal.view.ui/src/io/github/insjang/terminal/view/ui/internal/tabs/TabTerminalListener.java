@@ -11,6 +11,8 @@
  *******************************************************************************/
 package io.github.insjang.terminal.view.ui.internal.tabs;
 
+import io.github.insjang.terminal.control.ITerminalViewControl;
+import io.github.insjang.terminal.connector.provider.AbstractTerminalConnector;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -95,6 +97,15 @@ public class TabTerminalListener implements ITerminalListener {
 	}
 
 	/**
+	 * @return whether the program of the tab's terminal ended with an exit code other than 0
+	 */
+	static boolean failed(CTabItem item) {
+		return item.getData() instanceof ITerminalViewControl terminal && terminal.getTerminalConnector() != null
+				&& terminal.getTerminalConnector().getAdapter(AbstractTerminalConnector.class) instanceof AbstractTerminalConnector c
+				&& c.getExitCode().orElse(0) != 0;
+	}
+
+	/**
 	 * Returns the associated parent tab item.
 	 *
 	 * @return The parent tab item.
@@ -119,9 +130,10 @@ public class TabTerminalListener implements ITerminalListener {
 
 		// Run asynchronously in the display thread
 		item.getDisplay().asyncExec(() -> {
-			// the shell ended (Ctrl+D, exit): the tab goes; a connection that never came up stays, to show why
-			if (TerminalState.CLOSED.equals(state) && wasConnected && !item.isDisposed() && TerminalPlugin.getDefault()
-					.getPreferenceStore().getBoolean(ITerminalConstants.PREF_CLOSE_ON_EXIT)) {
+			// the shell ended (Ctrl+D, exit): the tab goes; a connection that never came up stays, to show why,
+			// and so does a program that failed (exit code not 0), as in Windows Terminal: wsl.exe that cannot start
+			if (TerminalState.CLOSED.equals(state) && wasConnected && !item.isDisposed() && !failed(item)
+					&& TerminalPlugin.getDefault().getPreferenceStore().getBoolean(ITerminalConstants.PREF_CLOSE_ON_EXIT)) {
 				item.dispose();
 				return;
 			}
