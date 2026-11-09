@@ -32,6 +32,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | DEC 모드, 브래킷 붙여넣기, 커서 숨김, 흐린 글자 | 일부만 | 지원 |
 | Shift+Enter | 바로 실행 | Claude Code·Codex 등에서 줄바꿈 (웹과 같은 습관) |
 | Shift+Tab | 백탭으로 전달 안 됨 (Windows에서는 포커스가 밖으로 이동) | 프로그램에 전달 (백탭): Claude Code·OpenCode 모드 전환 |
+| 그 밖의 수식키 | Delete, Ctrl+Alt, Ctrl+숫자의 수식키가 빠짐 | xterm과 같이 전달: Codex에서 Ctrl+Delete·Alt+Delete로 단어 지우기, WSL의 Codex에서 Ctrl+Alt+V로 그림 붙여넣기, vim에서 Ctrl+6. 전체 화면 프로그램(Codex, Claude Code, vim) 안에서는 Alt·Ctrl+화살표도 프로그램으로 |
 | 줄바꿈이 든 붙여넣기 | 바로 실행 | 셸이 브래킷 붙여넣기를 켜지 않았으면 먼저 확인, 끝에 줄바꿈 하나만 있는 한 줄도 (설정으로 끄기), 붙여넣은 글자가 브래킷 붙여넣기를 일찍 끝낼 수 없음 |
 | 명령 입력창 | 한 줄 | 여러 줄 (Shift+Enter), 기록 유지 |
 | 탭 | 뷰마다 한 줄 | 탭을 가장자리로 끌어 화면 분할, 재시작 후 배치 복원, Ctrl+Tab으로 직전에 쓴 탭으로 이동 (분할 칸 포함, 편집기의 Ctrl+F6처럼 Ctrl을 누른 채 Tab을 더 누르면 더 이전 탭) |
