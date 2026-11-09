@@ -162,7 +162,12 @@ public class VT100Emulator implements ControlListener {
 	private final int[] savedCursorColumn = new int[2];
 
 	/** whether a program asked for the alternate screen (47, 1047 or 1049) */
-	private boolean alternateScreen;
+	private volatile boolean alternateScreen;
+
+	/** @return whether a program shows the alternate screen, as full screen programs do */
+	public boolean isAlternateScreen() {
+		return alternateScreen;
+	}
 
 	/**
 	 * Origin mode (DECOM, CSI ? 6 h): line numbers in cursor positions and reports
