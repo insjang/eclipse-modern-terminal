@@ -66,6 +66,15 @@ public class LinkPolicyTest {
 	}
 
 	@Test
+	public void aUrlWithSomethingGluedToItsFrontOpensFromItsScheme() {
+		// Claude Code puts an icon right before the URLs it prints
+		assertEquals("https://claude.ai/artifact/1a", LinkPolicy.fromScheme("\u29c9https://claude.ai/artifact/1a"));
+		assertEquals("HTTP://e.com", LinkPolicy.fromScheme("URL:HTTP://e.com"));
+		assertEquals("https://e.com", LinkPolicy.fromScheme("https://e.com"));
+		assertEquals("src/a.txt", LinkPolicy.fromScheme("src/a.txt"));
+	}
+
+	@Test
 	public void questionsShowTheRealTarget() {
 		// a Cyrillic e in the host, a right-to-left override in the path
 		String shown = LinkPolicy.display("https://\u0435xample.com/\u202ecod.exe");

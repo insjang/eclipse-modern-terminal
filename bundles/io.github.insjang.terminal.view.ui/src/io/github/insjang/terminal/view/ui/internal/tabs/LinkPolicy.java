@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -82,6 +83,18 @@ public final class LinkPolicy {
 	}
 
 	/** @return whether the text is an http or https URL, in any case */
+	/**
+	 * @param word the text under the mouse
+	 * @return the web address in it from its scheme on, when something is glued to
+	 *         its front (an icon, a bullet, "URL:"), or the text as it is
+	 */
+	public static String fromScheme(String word) {
+		Matcher m = SCHEME.matcher(word);
+		return m.find() ? word.substring(m.start()) : word;
+	}
+
+	private static final Pattern SCHEME = Pattern.compile("(?i)https?://"); //$NON-NLS-1$
+
 	public static boolean isWeb(String s) {
 		return s.regionMatches(true, 0, "http://", 0, 7) || s.regionMatches(true, 0, "https://", 0, 8); //$NON-NLS-1$ //$NON-NLS-2$
 	}

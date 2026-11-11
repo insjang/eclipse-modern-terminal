@@ -114,7 +114,9 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		String hover = terminal.getHoverSelection();
 		// a hyperlink a program put there (OSC 8) wins over the text under the mouse
 		String link = terminalText.getLink(line, column);
-		String textToOpen = link != null ? LinkPolicy.target(link, localHostName()) : hover;
+		// a URL with an icon glued to its front, as Claude Code prints them, opens from its scheme
+		String textToOpen = link != null ? LinkPolicy.target(link, localHostName())
+				: hover != null ? LinkPolicy.fromScheme(hover) : null;
 		// a link whose text says something else is shown before it is opened, file links too
 		if (link != null && textToOpen != null && LinkPolicy.confirm(link, textToOpen, hover)
 				&& !MessageDialog.openQuestion(site.getShell(), Messages.OpenLink_title,
