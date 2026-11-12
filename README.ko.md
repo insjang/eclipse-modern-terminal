@@ -35,8 +35,8 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 | 그 밖의 수식키 | Delete, Ctrl+Alt, Ctrl+숫자의 수식키가 빠짐 | xterm과 같이 전달: Codex에서 Ctrl+Delete·Alt+Delete로 단어 지우기, WSL의 Codex에서 Ctrl+Alt+V로 그림 붙여넣기, vim에서 Ctrl+6. 전체 화면 프로그램(Codex, Claude Code, vim) 안에서는 Alt·Ctrl+화살표도 프로그램으로 |
 | 줄바꿈이 든 붙여넣기 | 바로 실행 | 셸이 브래킷 붙여넣기를 켜지 않았으면 먼저 확인, 끝에 줄바꿈 하나만 있는 한 줄도 (설정으로 끄기), 붙여넣은 글자가 브래킷 붙여넣기를 일찍 끝낼 수 없음 |
 | 명령 입력창 | 한 줄 | 여러 줄 (Shift+Enter), 기록 유지 |
-| 탭 | 뷰마다 한 줄 | 탭을 가장자리로 끌어 화면 분할, 재시작 후 배치 복원, Ctrl+Tab으로 직전에 쓴 탭으로 이동 (분할 칸 포함, 편집기의 Ctrl+F6처럼 Ctrl을 누른 채 Tab을 더 누르면 더 이전 탭) |
-| Ctrl+클릭 | URL과 단순 파일 경로 | 괄호·따옴표·백틱 안 경로, Windows 절대 경로, WSL 경로(`/mnt/c/...`, `/home/...`), 한글 경로도 열기 |
+| 탭 | 뷰마다 한 줄 | 탭을 가장자리로 끌어 화면 분할, 재시작 후 배치 복원, Ctrl+Tab으로 직전에 쓴 탭으로 이동 (분할 칸 포함, 편집기의 Ctrl+F6처럼 Ctrl을 누른 채 Tab을 더 누르면 더 이전 탭), 실패로 끝난 프로그램의 탭은 종료 코드와 함께 남음 (Windows Terminal과 같음) |
+| Ctrl+클릭 | URL과 단순 파일 경로 | 괄호·따옴표·백틱 안 경로, Windows 절대 경로, WSL 경로(`/mnt/c/...`, `/home/...`), 한글 경로, 앞에 아이콘이나 글자가 붙은 URL(Claude Code 출력)도 열기 |
 | 하이퍼링크 (OSC 8) | 무시 | Ctrl+클릭으로 열기: `ls --hyperlink`, gcc 등, http·https·로컬 파일 링크만, 2048자 이하, 버퍼에 동시에 다른 링크 1000개까지, 보이는 글자와 다른 곳을 가리키는 링크는 주소를 먼저 보여 줌 (Ctrl+클릭 절 참고) |
 | 파일 끌어 놓기 | 지원 안 함 | 경로 입력, 셸에 맞게 따옴표 처리 (bash, cmd, PowerShell) |
 | 색 | 글자색을 시스템에서 가져옴: 다크 테마에서 거의 검정 | Tango 기반, Eclipse 테마에 맞춤, Tango Dark·Light·Classic 프리셋 |
