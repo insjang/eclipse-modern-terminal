@@ -535,6 +535,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			} catch (InterruptedException e) {
 			}
 		}
+		// the screen a program was drawing when cut off is shown by the last poll
+		enableSynchronizedOutput(false);
 		fPollingTextCanvasModel.stopPolling();
 	}
 

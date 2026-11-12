@@ -26,19 +26,40 @@ public class PollingTextCanvasModel extends AbstractTextCanvasModel {
 	 */
 	private static final int REDRAW_GRACE = 200;
 	int fPollInterval = -1;
-	private volatile long fRedrawingUntil;
+	private boolean fRedrawing;
+	// when the view held back the first time since it last looked, or 0
+	private long fHeldBackSince;
 
 	/**
 	 * A program that draws a screen in pieces can say where a screen begins and
 	 * ends, and while it is between the two the view leaves it alone rather than
 	 * catching it half drawn.
+	 *
+	 * @param redrawing whether a screen is being drawn
 	 */
-	public void setSynchronizedOutput(boolean redrawing) {
-		fRedrawingUntil = redrawing ? System.currentTimeMillis() + REDRAW_GRACE : 0;
+	public synchronized void setSynchronizedOutput(boolean redrawing) {
+		fRedrawing = redrawing;
 	}
 
-	private boolean mayLook() {
-		return fRedrawingUntil == 0 || System.currentTimeMillis() > fRedrawingUntil;
+	/**
+	 * Looks at the text unless a screen is being drawn. Every caller comes here,
+	 * the polls and a scroll or resize alike. The view is held back for at most
+	 * {@link #REDRAW_GRACE} since it last looked, however many screens begin
+	 * meanwhile.
+	 */
+	@Override
+	public void update() {
+		synchronized (this) {
+			long now = System.currentTimeMillis();
+			if (fRedrawing && fHeldBackSince == 0) {
+				fHeldBackSince = now;
+			}
+			if (fRedrawing && now - fHeldBackSince < REDRAW_GRACE) {
+				return;
+			}
+			fHeldBackSince = 0;
+		}
+		super.update();
 	}
 
 	/**
@@ -64,9 +85,7 @@ public class PollingTextCanvasModel extends AbstractTextCanvasModel {
 			Display.getDefault().timerExec(fPollInterval, new Runnable() {
 				@Override
 				public void run() {
-					if (mayLook()) {
-						update();
-					}
+					update();
 					Display.getDefault().timerExec(fPollInterval, this);
 				}
 			});
