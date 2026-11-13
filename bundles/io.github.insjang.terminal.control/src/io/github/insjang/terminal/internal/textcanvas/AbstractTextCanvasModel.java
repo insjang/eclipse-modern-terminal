@@ -105,7 +105,7 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 	}
 
 	protected void updateSnapshot() {
-		if (!fInUpdate && fSnapshot.isOutOfDate()) {
+		if (!fInUpdate && isOutOfDate()) {
 			fInUpdate = true;
 			try {
 				if (!takeSnapshot()) {
@@ -141,6 +141,11 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 				fInUpdate = false;
 			}
 		}
+	}
+
+	/** @return whether the snapshot the view paints is behind the terminal text */
+	protected boolean isOutOfDate() {
+		return fSnapshot.isOutOfDate();
 	}
 
 	/**

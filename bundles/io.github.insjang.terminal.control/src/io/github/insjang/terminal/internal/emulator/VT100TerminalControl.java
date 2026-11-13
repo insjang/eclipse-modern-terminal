@@ -1813,6 +1813,10 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 				at = new Point(Math.max(1, Math.min(cell.x + 1, fPollingTextCanvasModel.getTerminalText().getWidth())), 1);
 			}
 			sendBytes(mouseReportBytes(mouseReport(button - 1 + modifiers, at.y, at.x, pressed)));
+			// the program now knows the pointer is here: a drag after this press, or
+			// after one that ended elsewhere, is reported from here on
+			fLastReportedLine = at.y;
+			fLastReportedColumn = at.x;
 			if (pressed) {
 				// the press takes the terminal's selection away (the canvas clears it once
 				// this returns): the view's copy must know, after that

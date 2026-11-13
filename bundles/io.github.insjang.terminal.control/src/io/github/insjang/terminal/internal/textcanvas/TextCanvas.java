@@ -201,8 +201,10 @@ public class TextCanvas extends GridCanvas {
 				fCellCanvasModel.setSelection(-1, -1, -1, -1);
 				fCellCanvasModel.expandHoverSelectionAt(-1, -1);
 				fDraggingStart = null;
-				// a later shift-drag starts from here, with no selection to hold it
+				// a later shift-drag starts from here: the anchor, kept apart too, as
+				// the model gives no anchor while nothing is selected
 				fReportedClick = cell(event.x, event.y);
+				fCellCanvasModel.setSelectionAnchor(fReportedClick);
 				break;
 			case SWT.MouseUp:
 				// a release goes wherever its press went, however the keyboard stands by then
