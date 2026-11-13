@@ -42,24 +42,23 @@ public class PollingTextCanvasModel extends AbstractTextCanvasModel {
 	}
 
 	/**
-	 * Looks at the text unless a screen is being drawn. Every caller comes here,
-	 * the polls and a scroll or resize alike. The view is held back for at most
-	 * {@link #REDRAW_GRACE} since it last looked, however many screens begin
-	 * meanwhile.
+	 * Copies the text unless a screen is being drawn. Every look at the text
+	 * comes here, the polls and a scroll or resize alike, and the check and the
+	 * copy are one step, so a screen cannot begin between them. The view is held
+	 * back for at most {@link #REDRAW_GRACE} since it last looked, however many
+	 * screens begin meanwhile.
 	 */
 	@Override
-	public void update() {
-		synchronized (this) {
-			long now = System.currentTimeMillis();
-			if (fRedrawing && fHeldBackSince == 0) {
-				fHeldBackSince = now;
-			}
-			if (fRedrawing && now - fHeldBackSince < REDRAW_GRACE) {
-				return;
-			}
-			fHeldBackSince = 0;
+	protected synchronized boolean takeSnapshot() {
+		long now = System.currentTimeMillis();
+		if (fRedrawing && fHeldBackSince == 0) {
+			fHeldBackSince = now;
 		}
-		super.update();
+		if (fRedrawing && now - fHeldBackSince < REDRAW_GRACE) {
+			return false;
+		}
+		fHeldBackSince = 0;
+		return super.takeSnapshot();
 	}
 
 	/**

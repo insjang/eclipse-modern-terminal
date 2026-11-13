@@ -9,6 +9,7 @@
  *******************************************************************************/
 package io.github.insjang.terminal.internal.emulator;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
@@ -42,9 +43,23 @@ public class MouseReportTest {
 		// a release says only that some button came up
 		assertEquals(CSI + "M" + (char) 35 + (char) 42 + (char) 37,
 				VT100TerminalControl.mouseReport(false, 0, 5, 10, false));
+		// with the keys held kept, as in the press: alt and left up is 3 + 8
+		assertEquals(CSI + "M" + (char) (32 + 11) + (char) 42 + (char) 37,
+				VT100TerminalControl.mouseReport(false, 0 + 8, 5, 10, false));
+		assertEquals(CSI + "M" + (char) (32 + 19) + (char) 42 + (char) 37,
+				VT100TerminalControl.mouseReport(false, 2 + 16, 5, 10, false));
 		// no room past column or row 223: nothing is reported, as in xterm
 		assertEquals("", VT100TerminalControl.mouseReport(false, 0, 5, 224, true));
 		assertEquals("", VT100TerminalControl.mouseReport(false, 0, 224, 10, true));
+	}
+
+	@Test
+	public void testReportsAreBytes() {
+		// column 100 is the one byte 132, not the two UTF-8 would make of it
+		assertArrayEquals(new byte[] { 27, '[', 'M', 32, (byte) 132, 37 },
+				VT100TerminalControl.mouseReportBytes(VT100TerminalControl.mouseReport(false, 0, 5, 100, true)));
+		assertArrayEquals("\u001b[<0;100;5M".getBytes(java.nio.charset.StandardCharsets.US_ASCII),
+				VT100TerminalControl.mouseReportBytes(VT100TerminalControl.mouseReport(true, 0, 5, 100, true)));
 	}
 
 	@Test

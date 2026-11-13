@@ -50,6 +50,7 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.SocketException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
@@ -628,14 +629,16 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	protected void sendString(String string) {
 		Logger.log(string);
-		try {
-			// Send the string after converting it to an array of bytes using the
-			// platform's default character encoding.
-			//
-			// TODO: Find a way to force this to use the ISO Latin-1 encoding.
-			// TODO: handle Encoding Errors in a better way
+		// Send the string after converting it to an array of bytes using the
+		// platform's default character encoding.
+		//
+		// TODO: handle Encoding Errors in a better way
+		sendBytes(string.getBytes(fCharset));
+	}
 
-			getOutputStream().write(string.getBytes(fCharset));
+	private void sendBytes(byte[] bytes) {
+		try {
+			getOutputStream().write(bytes);
 			getOutputStream().flush();
 		} catch (SocketException socketException) {
 			displayTextInTerminal(socketException.getMessage());
@@ -1788,7 +1791,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		for (int i = 0; i < notches; i++) {
 			report.append(mouseReport(button, at.y, at.x, true));
 		}
-		sendString(report.toString());
+		sendBytes(mouseReportBytes(report.toString()));
 		return true;
 	}
 
@@ -1809,7 +1812,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			if (at == null) {
 				at = new Point(Math.max(1, Math.min(cell.x + 1, fPollingTextCanvasModel.getTerminalText().getWidth())), 1);
 			}
-			sendString(mouseReport(button - 1 + modifiers, at.y, at.x, pressed));
+			sendBytes(mouseReportBytes(mouseReport(button - 1 + modifiers, at.y, at.x, pressed)));
 			if (pressed) {
 				// the press takes the terminal's selection away (the canvas clears it once
 				// this returns): the view's copy must know, after that
@@ -1832,7 +1835,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			}
 			fLastReportedLine = line;
 			fLastReportedColumn = column;
-			sendString(mouseReport((button == 0 ? 3 : button - 1) + 32 + modifiers, line, column, true));
+			sendBytes(mouseReportBytes(mouseReport((button == 0 ? 3 : button - 1) + 32 + modifiers, line, column, true)));
 			return true;
 		}
 	}
@@ -1890,13 +1893,25 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			return "\u001b[<" + button + ';' + column + ';' + line + (pressed ? 'M' : 'm'); //$NON-NLS-1$
 		}
 		// The older spelling has no room past column 223 and no way to say which
-		// button came up, so a release is reported as button 3, meaning "some button".
-		// Past 223 nothing is reported, as in xterm.
+		// button came up, so a release is reported as button 3, meaning "some button",
+		// with the keys held as in a press. Past 223 nothing is reported, as in xterm.
 		if (column > 223 || line > 223) {
 			return ""; //$NON-NLS-1$
 		}
-		return "\u001b[M" + (char) (32 + (pressed ? button : 3)) + (char) (32 + column) //$NON-NLS-1$
+		return "\u001b[M" + (char) (32 + (pressed ? button : button | 3)) + (char) (32 + column) //$NON-NLS-1$
 				+ (char) (32 + line);
+	}
+
+	/**
+	 * A report is bytes, not text: the older spelling puts a column or line past 95
+	 * in one byte of 128 or more, which the terminal's encoding (UTF-8, say) would
+	 * turn into two. The SGR spelling is ASCII, the same either way.
+	 *
+	 * @param report a report as {@link #mouseReport(boolean, int, int, int, boolean)} spells it
+	 * @return the bytes the program is sent
+	 */
+	public static byte[] mouseReportBytes(String report) {
+		return report.getBytes(StandardCharsets.ISO_8859_1);
 	}
 
 	@Override

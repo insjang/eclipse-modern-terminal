@@ -81,6 +81,8 @@ public class TextCanvas extends GridCanvas {
 	private int fReportedButtons;
 	// whether the last press went to the program: its double-click and context menu are its too
 	private boolean fPressReported;
+	// the last click the program took: where a shift-drag starts while nothing is selected
+	private Point fReportedClick;
 
 	private enum SelectionMode {
 		NONE, DRAG, WORD, LINE
@@ -199,6 +201,8 @@ public class TextCanvas extends GridCanvas {
 				fCellCanvasModel.setSelection(-1, -1, -1, -1);
 				fCellCanvasModel.expandHoverSelectionAt(-1, -1);
 				fDraggingStart = null;
+				// a later shift-drag starts from here, with no selection to hold it
+				fReportedClick = cell(event.x, event.y);
 				break;
 			case SWT.MouseUp:
 				// a release goes wherever its press went, however the keyboard stands by then
@@ -275,11 +279,15 @@ public class TextCanvas extends GridCanvas {
 					fHasSelection = false;
 					if ((e.stateMask & SWT.SHIFT) != 0) {
 						Point anchor = fCellCanvasModel.getSelectionAnchor();
+						if (anchor == null) {
+							anchor = fReportedClick;
+						}
 						if (anchor != null) {
 							fDraggingStart = anchor;
 						}
 					} else {
 						fCellCanvasModel.setSelectionAnchor(fDraggingStart);
+						fReportedClick = null;
 					}
 					fDraggingEnd = null;
 				}
