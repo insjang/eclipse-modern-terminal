@@ -356,10 +356,9 @@ public class TextCanvas extends GridCanvas {
 			}
 		});
 		addMouseMoveListener(e -> {
-			int held = heldButton(e.stateMask);
+			int held = heldButton(e.stateMask, fReportedButtons);
 			// a button held down is a drag of the program's only if its press was the program's
-			if (fDraggingStart == null && (held == 0 || (fReportedButtons & 1 << held) != 0)
-					&& wouldReport(e.stateMask)
+			if (fDraggingStart == null && held >= 0 && wouldReport(e.stateMask)
 					&& fButtonHandler.mouseMoved(held, modifiers(e.stateMask), cell(e.x, e.y))) {
 				return;
 			}
@@ -773,9 +772,23 @@ public class TextCanvas extends GridCanvas {
 		return ((stateMask & SWT.ALT) != 0 ? 8 : 0) | ((stateMask & SWT.CTRL) != 0 ? 16 : 0);
 	}
 
-	private static int heldButton(int stateMask) {
-		return (stateMask & SWT.BUTTON1) != 0 ? 1 : (stateMask & SWT.BUTTON2) != 0 ? 2
-				: (stateMask & SWT.BUTTON3) != 0 ? 3 : 0;
+	/**
+	 * @param reported the buttons whose press went to the program, as bits 1 &lt;&lt; button
+	 * @return the first button held whose press went to the program; 0 when none is
+	 *         held, -1 when every button held is the terminal's
+	 */
+	static int heldButton(int stateMask, int reported) {
+		int[] masks = { SWT.BUTTON1, SWT.BUTTON2, SWT.BUTTON3 };
+		boolean held = false;
+		for (int button = 1; button <= 3; button++) {
+			if ((stateMask & masks[button - 1]) != 0) {
+				held = true;
+				if ((reported & 1 << button) != 0) {
+					return button;
+				}
+			}
+		}
+		return held ? -1 : 0;
 	}
 
 	public void setMouseWheelHandler(IMouseWheelHandler handler) {

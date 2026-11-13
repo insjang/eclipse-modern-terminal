@@ -189,8 +189,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private volatile boolean fFocusReporting;
 	// the cell a move was last reported in; reset by the reader job with the mode
 	private volatile int fLastReportedLine, fLastReportedColumn;
-	// lines the wheel moved that make no whole notch yet, up positive; display thread only
-	private int fWheelLines;
+	// lines the wheel moved that make no whole notch yet, up positive; reset with the mode
+	private volatile int fWheelLines;
 
 	/**
 	 * Listens to changes in the preferences
@@ -1765,7 +1765,9 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	@Override
 	public void enableMouseReporting(int mode) {
 		fMouseMode = mode;
+		// what was told of the mouse before belongs to the program that asked then
 		fLastReportedLine = fLastReportedColumn = -1;
+		fWheelLines = 0;
 	}
 
 	@Override
