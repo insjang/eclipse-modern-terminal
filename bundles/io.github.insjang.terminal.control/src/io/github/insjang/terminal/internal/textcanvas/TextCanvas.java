@@ -281,8 +281,9 @@ public class TextCanvas extends GridCanvas {
 					fHasSelection = false;
 					if ((e.stateMask & SWT.SHIFT) != 0) {
 						Point anchor = fCellCanvasModel.getSelectionAnchor();
-						if (anchor == null) {
-							anchor = fReportedClick;
+						if (anchor == null && fReportedClick != null
+								&& fReportedClick.y < fCellCanvasModel.getTerminalText().getHeight()) {
+							anchor = fReportedClick; // unless the text was cleared below it since
 						}
 						if (anchor != null) {
 							fDraggingStart = anchor;
@@ -355,8 +356,11 @@ public class TextCanvas extends GridCanvas {
 			}
 		});
 		addMouseMoveListener(e -> {
-			if (fDraggingStart == null && wouldReport(e.stateMask)
-					&& fButtonHandler.mouseMoved(heldButton(e.stateMask), modifiers(e.stateMask), cell(e.x, e.y))) {
+			int held = heldButton(e.stateMask);
+			// a button held down is a drag of the program's only if its press was the program's
+			if (fDraggingStart == null && (held == 0 || (fReportedButtons & 1 << held) != 0)
+					&& wouldReport(e.stateMask)
+					&& fButtonHandler.mouseMoved(held, modifiers(e.stateMask), cell(e.x, e.y))) {
 				return;
 			}
 			if (fDraggingStart != null) {
@@ -901,6 +905,7 @@ public class TextCanvas extends GridCanvas {
 	 */
 	public void clearSelection() {
 		fCellCanvasModel.setSelection(-1, -1, -1, -1);
+		fReportedClick = null;
 	}
 
 	/**

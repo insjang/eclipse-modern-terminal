@@ -189,6 +189,8 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private volatile boolean fFocusReporting;
 	// the cell a move was last reported in; reset by the reader job with the mode
 	private volatile int fLastReportedLine, fLastReportedColumn;
+	// lines the wheel moved that make no whole notch yet, up positive; display thread only
+	private int fWheelLines;
 
 	/**
 	 * Listens to changes in the preferences
@@ -1785,8 +1787,17 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			return false;
 		}
 		int button = (count > 0 ? 64 : 65) + modifiers; // up, down
-		// SWT counts lines; a notch is three of them.
-		int notches = Math.max(1, Math.abs(count) / 3);
+		// SWT counts lines; a notch is three of them, however the events split them,
+		// and what is left over counts toward the next one in the same direction.
+		if (Integer.signum(count) != Integer.signum(fWheelLines)) {
+			fWheelLines = 0;
+		}
+		fWheelLines += count;
+		int notches = Math.abs(fWheelLines) / 3;
+		fWheelLines %= 3;
+		if (notches == 0) {
+			return true; // the program's, told once the lines make a notch
+		}
 		StringBuilder report = new StringBuilder();
 		for (int i = 0; i < notches; i++) {
 			report.append(mouseReport(button, at.y, at.x, true));
