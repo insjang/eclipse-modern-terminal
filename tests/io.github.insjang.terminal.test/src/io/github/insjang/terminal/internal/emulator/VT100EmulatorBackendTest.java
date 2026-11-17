@@ -2191,4 +2191,49 @@ public class VT100EmulatorBackendTest {
 		assertTrue(checked >= 19, "commands checked: " + checked);
 	}
 
+	@Test
+	public void testAClusterMovedKeepsTheCellsItWasWrittenIn() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(2);
+		vt100.setDimensions(2, 1);
+		String heart = "\u2764\ufe0f";
+		vt100.setCursor(0, 0);
+		vt100.appendString(heart); // one column: written in one cell
+		vt100.setDimensions(2, 3);
+		vt100.setCursor(0, 0);
+		vt100.insertCharacters(1);
+		// moved, it keeps the one cell it was written in, and its selector
+		assertEquals(heart, term.getCluster(0, 1));
+		assertEquals(1, term.getCellWidth(0, 1));
+		vt100.setCursor(0, 2);
+		vt100.appendString("x");
+		assertEquals(heart, term.getCluster(0, 1));
+	}
+
+	@Test
+	public void testHangulJamoExtendedBCombine() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(1);
+		vt100.setDimensions(1, 10);
+		vt100.setCursor(0, 0);
+		vt100.appendString("a\ud7b0x");
+		assertEquals('x', term.getChar(0, 1));
+	}
+
+	@Test
+	public void testHalfAPairCutOffIsDrawnAlikeEitherWay() {
+		ITerminalTextData term = makeITerminalTextData();
+		IVT100EmulatorBackend vt100 = makeBakend(term);
+		term.setMaxHeight(2);
+		vt100.setDimensions(2, 4);
+		vt100.setCursor(0, 0);
+		vt100.appendString("ab\ud83d\ude00");
+		vt100.setDimensions(2, 3);
+		String cells = "" + term.getChar(0, 0) + term.getChar(0, 1) + term.getChar(0, 2);
+		// the run and the cell drawn alone show the same: no half pair
+		assertEquals("ab\ufffd", io.github.insjang.terminal.internal.model.Cells.drawn(term, 0, 0, cells));
+		assertEquals("\ufffd", io.github.insjang.terminal.internal.model.Cells.drawn(term, 0, 2));
+	}
 }

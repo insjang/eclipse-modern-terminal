@@ -20,16 +20,9 @@ import io.github.insjang.terminal.model.ITerminalTextDataSnapshot;
  */
 public class PollingTextCanvasModel extends AbstractTextCanvasModel {
 	private static final int DEFAULT_POLL_INTERVAL = 50;
-	/**
-	 * How long a program is given to finish a screen it said it was drawing. A
-	 * program that says so and then stops must not leave the view frozen.
-	 */
-	private static final int REDRAW_GRACE = 200;
 	int fPollInterval = -1;
-	private boolean fRedrawing;
-	// whether the view held back since it last looked, and since when (System.nanoTime)
-	private boolean fHeldBack;
-	private long fHeldBackSince;
+	// synchronized output: whether the view leaves the text alone for now
+	private RedrawHold fHold = new RedrawHold();
 	// where a scroll or resize moved the view, or -1: applied with the next copy, as moving
 	// the window over a snapshot held back would show its lines in the wrong places
 	private int fWindowStart = -1, fWindowSize;
@@ -41,33 +34,36 @@ public class PollingTextCanvasModel extends AbstractTextCanvasModel {
 	 *
 	 * @param redrawing whether a screen is being drawn
 	 */
-	public synchronized void setSynchronizedOutput(boolean redrawing) {
-		fRedrawing = redrawing;
+	public void setSynchronizedOutput(boolean redrawing) {
+		fHold.setRedrawing(redrawing);
+	}
+
+	/**
+	 * @param hold the terminal's, which every model it makes shares, so that one made
+	 *             after a move holds as the one before did
+	 */
+	public synchronized void setRedrawHold(RedrawHold hold) {
+		fHold = hold;
 	}
 
 	/**
 	 * Copies the text unless a screen is being drawn. Every look at the text
 	 * comes here, the polls and a scroll or resize alike, and the check and the
-	 * copy are one step, so a screen cannot begin between them. The view is held
-	 * back for at most {@link #REDRAW_GRACE} ms since it last looked, however many
-	 * screens begin meanwhile, on a clock that does not move with the time of day.
+	 * copy are one step, so a screen cannot begin between them. How long the view
+	 * is held back is the {@link RedrawHold}'s to decide.
 	 */
 	@Override
 	protected synchronized boolean takeSnapshot() {
-		long now = System.nanoTime();
-		if (fRedrawing && !fHeldBack) {
-			fHeldBack = true;
-			fHeldBackSince = now;
+		synchronized (fHold) {
+			if (fHold.holds(System.nanoTime())) {
+				return false;
+			}
+			if (fWindowStart >= 0) {
+				getSnapshot().setInterestWindow(fWindowStart, fWindowSize);
+				fWindowStart = -1;
+			}
+			return super.takeSnapshot();
 		}
-		if (fRedrawing && now - fHeldBackSince < REDRAW_GRACE * 1_000_000L) {
-			return false;
-		}
-		fHeldBack = false;
-		if (fWindowStart >= 0) {
-			getSnapshot().setInterestWindow(fWindowStart, fWindowSize);
-			fWindowStart = -1;
-		}
-		return super.takeSnapshot();
 	}
 
 	@Override

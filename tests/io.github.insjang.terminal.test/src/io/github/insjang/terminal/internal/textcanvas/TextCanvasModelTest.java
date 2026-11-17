@@ -212,4 +212,24 @@ public class TextCanvasModelTest {
 		}.getAllText());
 	}
 
+	@Test
+	public void testSynchronizedOutputHoldsTheViewBackForAWhile() {
+		long ms = 1_000_000L;
+		RedrawHold hold = new RedrawHold();
+		assertEquals(false, hold.holds(0));
+		hold.setRedrawing(true);
+		assertEquals(true, hold.holds(1000 * ms));
+		// a new screen begun meanwhile does not hold the view back longer
+		hold.setRedrawing(false);
+		hold.setRedrawing(true);
+		assertEquals(true, hold.holds(1150 * ms));
+		assertEquals(false, hold.holds(1250 * ms));
+		// a program that begins a screen and never ends it holds the view back once: the
+		// mode ends with the grace, and the screens after it show at once
+		assertEquals(false, hold.holds(1300 * ms));
+		hold.setRedrawing(true);
+		assertEquals(true, hold.holds(2000 * ms));
+		hold.setRedrawing(false);
+		assertEquals(false, hold.holds(2010 * ms));
+	}
 }

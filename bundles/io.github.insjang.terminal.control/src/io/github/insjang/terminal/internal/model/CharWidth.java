@@ -93,8 +93,8 @@ public final class CharWidth {
 
 	/**
 	 * Cells a grapheme cluster takes, summed as Windows Terminal sums them: what its
-	 * code points take, VS16 (emoji presentation) counting as two, but at least one
-	 * and no more than two.
+	 * code points take, VS16 (emoji presentation) counting as two whatever it follows,
+	 * but at least one and no more than two.
 	 */
 	public static int clusterCells(String cluster) {
 		int cells = 0;
@@ -112,9 +112,11 @@ public final class CharWidth {
 	}
 
 	private static boolean isZeroWidth(int codePoint) {
-		// Hangul conjoining jamo vowels and trailing consonants: EAW lists them as
-		// neutral, but they combine into the leading consonant before them.
-		if (codePoint >= 0x1160 && codePoint <= 0x11FF) {
+		// Hangul conjoining jamo vowels and trailing consonants, and their extension B:
+		// EAW lists them as neutral, but they combine into the leading consonant before
+		// them. Which characters are marks is Java's Unicode version, older than the
+		// table of wide ones: a mark added since takes one cell.
+		if (codePoint >= 0x1160 && codePoint <= 0x11FF || codePoint >= 0xD7B0 && codePoint <= 0xD7FF) {
 			return true;
 		}
 		switch (Character.getType(codePoint)) {

@@ -120,6 +120,7 @@ import io.github.insjang.terminal.internal.preferences.ITerminalConstants;
 import io.github.insjang.terminal.internal.preferences.TerminalColorPresets;
 import io.github.insjang.terminal.internal.textcanvas.PipedInputStream;
 import io.github.insjang.terminal.internal.textcanvas.PollingTextCanvasModel;
+import io.github.insjang.terminal.internal.textcanvas.RedrawHold;
 import io.github.insjang.terminal.internal.textcanvas.TextCanvas;
 import io.github.insjang.terminal.internal.textcanvas.TextLineRenderer;
 import io.github.insjang.terminal.internal.model.ShellMarks;
@@ -195,11 +196,12 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	private final IPropertyChangeListener fFontListener = this::updateFont;
 	// set by the reader job, read by the display thread when pasting
 	private volatile boolean fBracketedPaste;
-	// asked for by the program (DECTCEM, mode 2026); kept on the control, as the canvas model is
-	// new after a move. Written with the model they are copied to under fModeLock, so a model
-	// made during a move cannot miss a change that the reader job makes meanwhile
+	// asked for by the program (DECTCEM); kept on the control, as the canvas model is new after a
+	// move. Written with the model it is copied to under fModeLock, so a model made during a move
+	// cannot miss a hide or show that the reader job makes meanwhile
 	private boolean fCursorHidden;
-	private boolean fSynchronizedOutput;
+	// synchronized output (mode 2026), shared by every model made for the canvas
+	private final RedrawHold fRedrawHold = new RedrawHold();
 	private final Object fModeLock = new Object();
 	private static final String PASTE_START = "\u001b[200~"; //$NON-NLS-1$
 	private static final String PASTE_END = "\u001b[201~"; //$NON-NLS-1$
@@ -738,17 +740,24 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	}
 
 	/**
-	 * SWT reports AltGr as Ctrl+Alt, with the character AltGr types. A real Ctrl+Alt
-	 * gives a control character instead, which keeps its Alt as in xterm: ESC before
-	 * it, so Ctrl+Alt+V reaches Codex as itself.
+	 * Whether Alt puts ESC before what a key sends, as xterm does. SWT reports AltGr as
+	 * Ctrl+Alt, with the character AltGr types, which goes out as it is. A real Ctrl+Alt
+	 * on a key that types gives a control character instead, which keeps its Alt: ESC
+	 * before it, so Ctrl+Alt+V reaches Codex as itself. Backspace, Enter, Tab and Esc
+	 * are no such keys: Windows gives their control character with AltGr still held
+	 * too, and they keep sending only that.
 	 *
+	 * @param stateMask the modifiers of the key event
+	 * @param keyCode   the key of the key event
+	 * @param character the character SWT reports
 	 * @return whether the character goes out with ESC before it
 	 */
-	public static boolean altSendsEscape(int stateMask, char character) {
+	public static boolean altSendsEscape(int stateMask, int keyCode, char character) {
 		if ((stateMask & SWT.ALT) == 0) {
 			return false;
 		}
-		return (stateMask & SWT.CTRL) == 0 || character < '\u0020' || character == '\u007f';
+		boolean typingKey = keyCode >= '\u0020' && keyCode < '\u007f';
+		return (stateMask & SWT.CTRL) == 0 || typingKey && (character < '\u0020' || character == '\u007f');
 	}
 
 	protected void sendChar(char chKey, boolean altKeyPressed) {
@@ -1008,7 +1017,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		synchronized (fModeLock) {
 			PollingTextCanvasModel model = new PollingTextCanvasModel(snapshot);
 			model.setCursorHidden(fCursorHidden);
-			model.setSynchronizedOutput(fSynchronizedOutput);
+			model.setRedrawHold(fRedrawHold);
 			fPollingTextCanvasModel = model;
 		}
 		fCtlText = new TextCanvas(fWndParent, fPollingTextCanvasModel, SWT.NONE,
@@ -1235,11 +1244,9 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 			boolean onlyCtrlKeyPressed = modifierKeys == SWT.CTRL;
 			boolean macCmdKeyPressed = (event.stateMask & SWT.COMMAND) != 0;
 
-			// To fix SPR 110341, we consider the Alt key to be pressed only when the
-			// Control key is _not_ also pressed.  This works around a bug in SWT where,
-			// on European keyboards, the AltGr key being pressed appears to us as Control
-			// + Alt being pressed simultaneously.
-			boolean altKeyPressed = altSendsEscape(event.stateMask, character);
+			// AltGr, which SWT reports as Ctrl+Alt (SPR 110341), types its character
+			// without ESC; see altSendsEscape
+			boolean altKeyPressed = altSendsEscape(event.stateMask, event.keyCode, character);
 
 			//if (!isConnected()) {
 			if (fState == TerminalState.CLOSED) {
@@ -1987,12 +1994,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	@Override
 	public void enableSynchronizedOutput(boolean redrawing) {
-		synchronized (fModeLock) {
-			fSynchronizedOutput = redrawing;
-			if (fPollingTextCanvasModel != null) {
-				fPollingTextCanvasModel.setSynchronizedOutput(redrawing);
-			}
-		}
+		fRedrawHold.setRedrawing(redrawing);
 	}
 
 	@Override

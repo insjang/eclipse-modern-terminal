@@ -124,18 +124,9 @@ public final class Cells {
 			if (col + width > to) {
 				return null;
 			}
-			String cluster = data.getCluster(line, col);
-			char c = cells.charAt(col - from);
-			if (cluster != null) {
-				drawn.append(Normalizer.normalize(cluster, Normalizer.Form.NFC));
-			} else if (c == '\000') {
-				drawn.append(' ');
-			} else {
-				drawn.append(c);
-				if (width == 2 && Character.isHighSurrogate(c)) {
-					drawn.append(cells.charAt(col - from + 1));
-				}
-			}
+			// what one cell draws, so the run and the cells drawn one by one agree
+			String text = drawn(data, line, col);
+			drawn.append(text.isEmpty() ? " " : text); //$NON-NLS-1$
 			col += width;
 		}
 		return drawn.toString();

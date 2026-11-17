@@ -1071,14 +1071,17 @@ public class VT100EmulatorTest {
 
 	@Test
 	public void testAltSendsEscape() {
-		assertTrue(VT100TerminalControl.altSendsEscape(SWT.ALT, 'f'));
-		assertTrue(VT100TerminalControl.altSendsEscape(SWT.ALT | SWT.SHIFT, 'F'));
+		assertTrue(VT100TerminalControl.altSendsEscape(SWT.ALT, 'f', 'f'));
+		assertTrue(VT100TerminalControl.altSendsEscape(SWT.ALT | SWT.SHIFT, 'f', 'F'));
 		// a real Ctrl+Alt+V gives a control character and keeps its Alt
-		assertTrue(VT100TerminalControl.altSendsEscape(SWT.CTRL | SWT.ALT, '\u0016'));
+		assertTrue(VT100TerminalControl.altSendsEscape(SWT.CTRL | SWT.ALT, 'v', '\u0016'));
 		// AltGr+Q on a German keyboard: Ctrl+Alt with the '@' it types, no ESC
-		assertFalse(VT100TerminalControl.altSendsEscape(SWT.CTRL | SWT.ALT, '@'));
-		assertFalse(VT100TerminalControl.altSendsEscape(SWT.CTRL, '\u0016'));
-		assertFalse(VT100TerminalControl.altSendsEscape(0, 'f'));
+		assertFalse(VT100TerminalControl.altSendsEscape(SWT.CTRL | SWT.ALT, 'q', '@'));
+		// AltGr still held on Backspace or Enter: their control character alone, as before
+		assertFalse(VT100TerminalControl.altSendsEscape(SWT.CTRL | SWT.ALT, SWT.BS, '\b'));
+		assertFalse(VT100TerminalControl.altSendsEscape(SWT.CTRL | SWT.ALT, SWT.CR, '\r'));
+		assertFalse(VT100TerminalControl.altSendsEscape(SWT.CTRL, 'v', '\u0016'));
+		assertFalse(VT100TerminalControl.altSendsEscape(0, 'f', 'f'));
 	}
 
 	@Test
@@ -1338,5 +1341,52 @@ public class VT100EmulatorTest {
 		emulator.setBufferLineLimit(emulator.getBufferLineLimit()); // read and written back
 		run(ALTERNATE_SCREEN_OFF);
 		assertEquals(1000, data.getMaxHeight());
+	}
+
+	@Test
+	public void testEscEndsAnOscStringAsItEndsTheOthers() {
+		// an ESC that is not an ST drops the command and starts a new sequence: the SGR
+		// runs instead of showing as text
+		run("\033]0;T\033[1mX");
+		assertTextEquals("X");
+		// and ESC 7 after it saves the cursor, ESC 8 brings it back
+		run("\033]0;U\0337AB\0338C");
+		assertTextEquals("XCB");
+		// the controls in a string are dropped, an empty or short one is ignored
+		run("\033]0;a\nb\007\033]\007\033]0\007D");
+		assertEquals(List.of("ab"), control.getAllTitles());
+		assertTextEquals("XCD");
+	}
+
+	@Test
+	public void testSoftResetPutsBackTheModes() {
+		// DECSTR: auto wrap back on, origin mode and margins off
+		run("\033[?7l\033[2;4r\033[?6h\033[!p", CURSOR_POSITION(1, 1), "X");
+		assertCursorLocation(0, 1);
+		run(CURSOR_POSITION(1, WINDOW_COLUMNS), "YZ");
+		assertTextEquals("X" + " ".repeat(WINDOW_COLUMNS - 2) + "Y", "Z");
+		// with parameters or another intermediate it is not DECSTR
+		run("\033[?7l\033[1!p\033[!!p", CURSOR_POSITION(3, WINDOW_COLUMNS), "UV");
+		assertTextEquals("X" + " ".repeat(WINDOW_COLUMNS - 2) + "Y", "Z", " ".repeat(WINDOW_COLUMNS - 1) + "V");
+	}
+
+	@Test
+	public void testRepeatOnlyRightAfterTheCharacter() {
+		// any sequence between the character and REP leaves nothing to repeat
+		run("A\0337\033[3b", "\r\nB\033[?25h\033[3b", "\r\nC\033]0;x\007\033[3b", "\r\nD\033(0\033(B\033[3b");
+		assertTextEquals("A", "B", "C", "D");
+		// REP after REP repeats again
+		run("\r\nE\033[1b\033[1b");
+		assertTextEquals("A", "B", "C", "D", "EEE");
+	}
+
+	@Test
+	public void testTabStopsClearedStayClearedOnWiderScreens() {
+		emulator.setDimensions(WINDOW_LINES, 20);
+		run("\033[3g");
+		emulator.setDimensions(WINDOW_LINES, 40);
+		// no stop left: the tab goes to the last column
+		run("\tX");
+		assertTextEquals(" ".repeat(39) + "X");
 	}
 }

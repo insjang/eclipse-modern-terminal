@@ -93,6 +93,7 @@ public class VT100Emulator implements ControlListener {
 	 * This is a character processing state: We've seen a '[?' after an escape
 	 * character. Expecting a parameter character or a command character next.
 	 */
+	private static final int ANSISTATE_EXPECTING_OS_COMMAND_END = 6;
 	private static final int ANSISTATE_EXPECTING_DEC_PRIVATE_COMMAND = 4;
 
 	/**
@@ -105,7 +106,6 @@ public class VT100Emulator implements ControlListener {
 	 * For cases where the OSC (OS Command) ends with a multi-byte ST (i.e. ESC \)
 	 * we use this extra state.
 	 */
-	private static final int ANSISTATE_EXPECTING_OS_COMMAND_END = 6;
 
 	/**
 	 * This is a character processing state: a control sequence we do not support
@@ -153,13 +153,6 @@ public class VT100Emulator implements ControlListener {
 	 * display text to the user.
 	 */
 	final private IVT100EmulatorBackend text;
-	/**
-	 * The cursor saved by "ESC 7" (and CSI ? 1048 h) for "ESC 8", one slot per screen
-	 * as in xterm: [0] on the normal screen, [1] on the alternate one, so a full screen
-	 * program saving its cursor does not overwrite the one the shell saved.
-	 */
-	private final int[] savedCursorLine = new int[2];
-	private final int[] savedCursorColumn = new int[2];
 
 	/** whether a program asked for the alternate screen (47, 1047 or 1049) */
 	private volatile boolean alternateScreen;
@@ -189,27 +182,46 @@ public class VT100Emulator implements ControlListener {
 	private boolean namedCharset;
 
 	/**
-	 * What ESC 7 saved besides the cursor, one slot per screen as the cursor; and in a
-	 * third, what CSI ? 1049 h saved, the cursor of which the backend keeps: leaving
-	 * the alternate screen puts the normal screen's modes back without touching
-	 * what ESC 7 saved there.
+	 * What DECSC (ESC 7) saves, all of it together: the cursor, a pending wrap, the
+	 * rendition, the origin mode and the character sets. Saved whole and restored
+	 * whole, so that nothing of it can be left behind by a reset.
+	 */
+	private record Saved(int line, int column, boolean wrapPending, TerminalStyle style, boolean originMode,
+			boolean lineDrawing0, boolean lineDrawing1, int invokedCharset) {
+	}
+
+	/** what ESC 8 brings back when nothing was saved: the home position and the defaults */
+	private static final Saved NOTHING_SAVED = new Saved(0, 0, false, null, false, false, false, 0);
+
+	/**
+	 * The slots of ESC 7, one per screen as in xterm: [0] on the normal screen, [1] on
+	 * the alternate one, so a full screen program saving its cursor does not overwrite
+	 * the one the shell saved; and [2], what CSI ? 1049 h saved, the cursor of which
+	 * the backend keeps: leaving the alternate screen puts the normal screen's modes
+	 * back without touching what ESC 7 saved there. Null for nothing saved.
 	 */
 	private static final int SCREEN_SWITCH = 2;
-	private final TerminalStyle[] savedStyle = new TerminalStyle[3];
-	private final boolean[] savedOriginMode = new boolean[3];
-	private final boolean[] savedWrapPending = new boolean[2];
-	private final boolean[][] savedLineDrawing = new boolean[3][2];
-	private final int[] savedInvokedCharset = new int[3];
+	private final Saved[] saved = new Saved[3];
 
 	/** the tab stops, one bit per column; one every 8 columns until a program sets its own */
 	private final BitSet tabStops = new BitSet();
 	private int tabStopsColumns;
+	/** whether a program cleared every stop (TBC 3): the columns the terminal gains then get none */
+	private boolean programTabStops;
 
-	/** the last character written, which REP (CSI Ps b) repeats; null after anything else */
+	/** the last character written; null after anything else */
 	private String lastGraphic;
+	/** what REP (CSI Ps b) repeats: the last character written before the ESC of its sequence */
+	private String repeatable;
 
 	/** the private marker of the control sequence being read, '?' or '>' */
 	private char ansiMarker;
+
+	/**
+	 * the intermediate byte of the control sequence being ignored, when it is its only
+	 * byte besides the final one, as the '!' of DECSTR (CSI ! p); 0 otherwise
+	 */
+	private char csiIntermediate;
 
 	/** the first intermediate byte of the escape being read, as the '#' of "ESC # 8" */
 	private char escapeIntermediate;
@@ -306,43 +318,46 @@ public class VT100Emulator implements ControlListener {
 		return text.getBufferLineLimit();
 	}
 
+	/** @return the ESC 7 slot of the screen in use */
+	private int cursorSlot() {
+		return alternateScreen ? 1 : 0;
+	}
+
+	private void save(int slot) {
+		saved[slot] = new Saved(relativeCursorLine(), getCursorColumn(), text.isWrapPending(), text.getStyle(),
+				originMode, lineDrawing[0], lineDrawing[1], invokedCharset);
+	}
+
+	/** @return what the slot holds, or the defaults when nothing was saved there */
+	private Saved saved(int slot) {
+		return saved[slot] != null ? saved[slot] : NOTHING_SAVED;
+	}
+
 	/** what DECSC saves besides the cursor, put back: rendition, origin mode, character sets */
-	private void restoreModes(int screen) {
-		if (savedStyle[screen] != null) {
-			text.setStyle(savedStyle[screen]);
+	private void restoreModes(int slot) {
+		Saved s = saved(slot);
+		if (s.style() != null) {
+			text.setStyle(s.style());
 		}
-		originMode = savedOriginMode[screen];
-		lineDrawing[0] = savedLineDrawing[screen][0];
-		lineDrawing[1] = savedLineDrawing[screen][1];
-		invokedCharset = savedInvokedCharset[screen];
+		originMode = s.originMode();
+		lineDrawing[0] = s.lineDrawing0();
+		lineDrawing[1] = s.lineDrawing1();
+		invokedCharset = s.invokedCharset();
 	}
 
 	private void saveCursor() {
-		int screen = alternateScreen ? 1 : 0;
-		savedCursorLine[screen] = relativeCursorLine();
-		savedCursorColumn[screen] = getCursorColumn();
-		savedWrapPending[screen] = text.isWrapPending();
-		saveModes(screen);
-	}
-
-	/** as DECSC: the rendition, the origin mode and the character sets go with the cursor */
-	private void saveModes(int screen) {
-		savedStyle[screen] = text.getStyle();
-		savedOriginMode[screen] = originMode;
-		savedLineDrawing[screen][0] = lineDrawing[0];
-		savedLineDrawing[screen][1] = lineDrawing[1];
-		savedInvokedCharset[screen] = invokedCharset;
+		save(cursorSlot());
 	}
 
 	private void restoreCursor() {
-		int screen = alternateScreen ? 1 : 0;
-		restoreModes(screen);
-		int line = savedCursorLine[screen];
+		Saved s = saved(cursorSlot());
+		restoreModes(cursorSlot());
+		int line = s.line();
 		if (originMode) { // in origin mode the cursor comes back inside the region, as in xterm
 			line = Math.max(text.getScrollRegionTop(), Math.min(text.getScrollRegionBottom(), line));
 		}
-		moveCursor(line, savedCursorColumn[screen]);
-		text.setWrapPending(savedWrapPending[screen]);
+		moveCursor(line, s.column());
+		text.setWrapPending(s.wrapPending());
 	}
 
 	public void setDimensions(int lines, int cols) {
@@ -462,7 +477,7 @@ public class VT100Emulator implements ControlListener {
 				ansiState = ANSISTATE_INITIAL;
 				continue;
 			}
-			if ((character < '\u0020' || character == '\u007f') && isInSequence()) {
+			if (isControl(character) && isInSequence()) {
 				if (character == '\u001b') {
 					ansiState = ANSISTATE_ESCAPE;
 				} else {
@@ -471,11 +486,18 @@ public class VT100Emulator implements ControlListener {
 				continue;
 			}
 
+			if (ansiState == ANSISTATE_INITIAL && isControl(character)) {
+				// the one place a character stops being the last one written: a control, or
+				// the ESC of a sequence, which may be the REP repeating it
+				repeatable = lastGraphic;
+				lastGraphic = null;
+			}
+
 			switch (ansiState) {
 			case ANSISTATE_INITIAL:
 				if (character == '\u001b') {
 					ansiState = ANSISTATE_ESCAPE; // Escape.
-				} else if (character < '\u0020' || character == '\u007f') {
+				} else if (isControl(character)) {
 					processControlCharacter(character);
 				} else {
 					processNonControlCharacters(character);
@@ -491,6 +513,7 @@ public class VT100Emulator implements ControlListener {
 					ansiState = ANSISTATE_EXPECTING_PARAMETER_OR_COMMAND;
 					nextAnsiParameter = 0;
 					ansiMarker = 0;
+					csiIntermediate = 0;
 
 					// Erase the parameter strings in preparation for optional
 					// parameter characters.
@@ -580,7 +603,7 @@ public class VT100Emulator implements ControlListener {
 					break;
 
 				default:
-					if (character >= '\u0020' && character <= '\u002f') {
+					if (isIntermediate(character)) {
 						ansiState = ANSISTATE_IGNORING_ESCAPE;
 						escapeIntermediate = character;
 					} else {
@@ -594,7 +617,7 @@ public class VT100Emulator implements ControlListener {
 			case ANSISTATE_EXPECTING_PARAMETER_OR_COMMAND:
 				// characters `<=>?` mark private commands, before any parameter; DEC's
 				// '?' ones and the '>' of the secondary device attributes are supported
-				if (character >= '\u003c' && character <= '\u003f') {
+				if (isPrivateMarker(character)) {
 					boolean first = nextAnsiParameter == 0 && ansiParameters[0].length() == 0;
 					if (first && (character == '?' || character == '>')) {
 						ansiState = ANSISTATE_EXPECTING_DEC_PRIVATE_COMMAND;
@@ -608,26 +631,27 @@ public class VT100Emulator implements ControlListener {
 				// Parameters can appear after the '[' in an escape sequence, but they
 				// are optional.
 
-				if (character >= '\u0040' && character < '\u007f') {
+				if (isFinal(character)) {
 					ansiState = ANSISTATE_INITIAL;
 					processAnsiCommandCharacter(character);
-				} else if (character >= '\u0020' && character <= '\u002f') {
-					// an intermediate byte: none of the commands we support has one
+				} else if (isIntermediate(character)) {
+					// an intermediate byte: of the commands with one, only DECSTR is run
 					ansiState = ANSISTATE_IGNORING_COMMAND;
+					boolean noParameters = nextAnsiParameter == 0 && ansiParameters[0].length() == 0;
+					csiIntermediate = noParameters ? character : 0;
 				} else {
 					processAnsiParameterCharacter(character);
 				}
 				break;
 
 			case ANSISTATE_EXPECTING_OS_COMMAND:
-				// A BEL (\u0007) or ESC \ ('\e\\') character marks the end of the OSC sequence.
-
+				// BEL or ST (ESC \\) ends it; the other controls in it are dropped
 				if (character == '\u0007') {
 					ansiState = ANSISTATE_INITIAL;
 					processAnsiOsCommand();
 				} else if (character == '\u001b') {
 					ansiState = ANSISTATE_EXPECTING_OS_COMMAND_END;
-				} else if (ansiOsCommand.length() <= osCommandLimit()) {
+				} else if (!isControl(character) && ansiOsCommand.length() <= osCommandLimit()) {
 					ansiOsCommand.append(character);
 				}
 				break;
@@ -647,7 +671,7 @@ public class VT100Emulator implements ControlListener {
 				// Parameters can appear after the '[?' in an escape sequence, but they
 				// are optional.
 
-				if (character >= '\u0040' && character < '\u007f') {
+				if (isFinal(character)) {
 					ansiState = ANSISTATE_INITIAL;
 					if (ansiMarker == '?') {
 						processDecPrivateCommandCharacter(character);
@@ -659,8 +683,8 @@ public class VT100Emulator implements ControlListener {
 					}
 				} else if (character == '$' && ansiMarker == '?') {
 					ansiState = ANSISTATE_REQUESTING_MODE;
-				} else if (character >= '\u0020' && character <= '\u002f'
-						|| character >= '\u003c' && character <= '\u003f') {
+				} else if (isIntermediate(character)
+						|| isPrivateMarker(character)) {
 					// another intermediate byte or a misplaced marker
 					ansiState = ANSISTATE_IGNORING_COMMAND;
 				} else {
@@ -669,7 +693,7 @@ public class VT100Emulator implements ControlListener {
 				break;
 
 			case ANSISTATE_EXPECTING_CHARSET_DESIGNATION:
-				if (character >= '\u0020' && character <= '\u002f') {
+				if (isIntermediate(character)) {
 					// an intermediate byte: a set with a longer name (ESC ( % 5, ESC ( " 4),
 					// none of them line drawing
 					namedCharset = true;
@@ -694,14 +718,20 @@ public class VT100Emulator implements ControlListener {
 				break;
 
 			case ANSISTATE_IGNORING_COMMAND:
-				if (character >= '\u0040' && character < '\u007f') {
+				if (isFinal(character)) {
 					ansiState = ANSISTATE_INITIAL;
-					Logger.log("Ignoring unsupported control sequence ending in '" + character + "'"); //$NON-NLS-1$ //$NON-NLS-2$
+					if (csiIntermediate == '!' && character == 'p') {
+						softReset(); // DECSTR
+					} else {
+						Logger.log("Ignoring unsupported control sequence ending in '" + character + "'"); //$NON-NLS-1$ //$NON-NLS-2$
+					}
+				} else {
+					csiIntermediate = 0; // more than CSI ! p
 				}
 				break;
 
 			case ANSISTATE_IGNORING_ESCAPE:
-				if (character >= '\u0020' && character <= '\u002f') {
+				if (isIntermediate(character)) {
 					escapeIntermediate = 0; // a second intermediate byte: no sequence we run
 				} else if (character >= '\u0030' && character < '\u007f') {
 					ansiState = ANSISTATE_INITIAL;
@@ -733,6 +763,26 @@ public class VT100Emulator implements ControlListener {
 		}
 	}
 
+	/** @return whether it is a C0 control or DEL, which no sequence or text holds */
+	private static boolean isControl(char c) {
+		return c < '\u0020' || c == '\u007f';
+	}
+
+	/** @return whether it is an intermediate byte, between the start and the end of a sequence */
+	private static boolean isIntermediate(char c) {
+		return c >= '\u0020' && c <= '\u002f';
+	}
+
+	/** @return whether it is a final byte, which ends a control sequence */
+	private static boolean isFinal(char c) {
+		return c >= '\u0040' && c <= '\u007e';
+	}
+
+	/** @return whether it is a private marker, which can open a control sequence's parameters */
+	private static boolean isPrivateMarker(char c) {
+		return c >= '\u003c' && c <= '\u003f';
+	}
+
 	/**
 	 * @return whether we are inside an escape or control sequence, where a control
 	 *         character runs without ending it. Strings (OSC and the ignored ones)
@@ -750,7 +800,6 @@ public class VT100Emulator implements ControlListener {
 	 * among them, are dropped, as xterm does, rather than shown.
 	 */
 	private void processControlCharacter(char character) {
-		lastGraphic = null;
 		switch (character) {
 		case '\u0007':
 			processBEL(); // BEL (Control-G)
@@ -811,8 +860,6 @@ public class VT100Emulator implements ControlListener {
 		text.setStyle(text.getDefaultStyle());
 		text.eraseAll();
 		text.setCursor(0, 0);
-		text.setScrollRegion(-1, -1);
-		text.setInsertMode(false);
 		resetModes();
 	}
 
@@ -835,39 +882,46 @@ public class VT100Emulator implements ControlListener {
 	}
 
 	/**
+	 * A soft reset (DECSTR, CSI ! p), as xterm does it: the modes a program changes
+	 * go back to their defaults, the screen and the history stay. A full reset does
+	 * all of this and more.
+	 */
+	private void softReset() {
+		text.setAutoWrap(true);
+		text.setInsertMode(false);
+		text.setScrollRegion(-1, -1);
+		text.setStyle(text.getDefaultStyle());
+		originMode = false;
+		lineDrawing[0] = false;
+		lineDrawing[1] = false;
+		invokedCharset = 0;
+		saved[cursorSlot()] = null;
+		terminal.showCursor(true);
+		terminal.enableApplicationCursorKeys(false);
+	}
+
+	/**
 	 * What a full reset and a new connection put back besides the screen: the modes a
 	 * program asked for end with it, so a program that hid the cursor and was cut off
 	 * does not leave the next shell without one.
 	 */
 	private void resetModes() {
-		terminal.showCursor(true);
+		softReset();
 		terminal.enableBracketedPaste(false);
-		terminal.enableApplicationCursorKeys(false);
 		terminal.enableMouseReporting(0);
 		terminal.enableSgrMouseEncoding(false);
 		terminal.enableFocusReporting(false);
 		terminal.enableSynchronizedOutput(false); // or the screen would stay frozen
 		text.setGraphemeMode(false);
 		text.setLink(null); // a link a program opened and did not close
-		text.setAutoWrap(true);
-		originMode = false;
-		lineDrawing[0] = false;
-		lineDrawing[1] = false;
-		invokedCharset = 0;
 		tabStops.clear();
 		tabStopsColumns = 0;
+		programTabStops = false;
 		lastGraphic = null;
+		repeatable = null;
 		// a later ESC 8 must not bring back a cursor, a pending wrap, a rendition or a
 		// character set from before: every slot is as if nothing had been saved
-		Arrays.fill(savedCursorLine, 0);
-		Arrays.fill(savedCursorColumn, 0);
-		Arrays.fill(savedWrapPending, false);
-		Arrays.fill(savedStyle, null);
-		Arrays.fill(savedOriginMode, false);
-		for (boolean[] saved : savedLineDrawing) {
-			Arrays.fill(saved, false);
-		}
-		Arrays.fill(savedInvokedCharset, 0);
+		Arrays.fill(saved, null);
 	}
 
 	/**
@@ -997,9 +1051,6 @@ public class VT100Emulator implements ControlListener {
 		// throwing an exception (SPR 107450). The display will be messed up, but what
 		// did you user expect by making the terminal so small?
 
-		if (ansiCommandCharacter != 'b') {
-			lastGraphic = null;
-		}
 		switch (ansiCommandCharacter) {
 		case '@':
 			// Insert character(s).
@@ -1132,8 +1183,8 @@ public class VT100Emulator implements ControlListener {
 
 		case 'b':
 			// Repeat the preceding graphic character (REP)
-			if (lastGraphic != null) {
-				String c = lastGraphic;
+			if (repeatable != null) {
+				String c = repeatable;
 				// past a screenful every line written is a line of c scrolled up: whole lines
 				// of them more change neither the screen nor the cursor, so a huge count
 				// costs no more than a screenful and a line. A line holds columns / width
@@ -1163,6 +1214,7 @@ public class VT100Emulator implements ControlListener {
 			ensureTabStops();
 			if (getAnsiParameter(0) == 3) {
 				tabStops.clear();
+				programTabStops = true;
 			} else if (isAnsiParameterDefault(0)) {
 				tabStops.clear(getCursorColumn());
 			}
@@ -1869,7 +1921,7 @@ public class VT100Emulator implements ControlListener {
 			// but into a slot of their own, so that ESC 8 on the normal screen still
 			// brings back what ESC 7 saved there.
 			if (!alternateScreen) {
-				saveModes(SCREEN_SWITCH);
+				save(SCREEN_SWITCH);
 			}
 			text.enableAlternateScreen(true, true);
 			alternateScreen = true;
@@ -2061,7 +2113,7 @@ public class VT100Emulator implements ControlListener {
 		// firstNonControlCharacterIndex in newText.
 		while (hasNextChar()) {
 			character = getNextChar();
-			if (character < '\u0020' || character == '\u007f') {
+			if (isControl(character)) {
 				pushBackChar(character);
 				break;
 			}
@@ -2149,6 +2201,9 @@ public class VT100Emulator implements ControlListener {
 
 	/** one stop every 8 columns on the columns the terminal has gained */
 	private void ensureTabStops() {
+		if (programTabStops) {
+			return;
+		}
 		int columns = text.getColumns();
 		for (int c = (tabStopsColumns + 7) / 8 * 8; c < columns; c += 8) {
 			tabStops.set(c);
@@ -2333,9 +2388,6 @@ public class VT100Emulator implements ControlListener {
 		// back the shell's rendition, which the reset then resets
 		text.enableAlternateScreen(false);
 		alternateScreen = false;
-		text.setStyle(text.getDefaultStyle());
-		text.setScrollRegion(-1, -1);
-		text.setInsertMode(false);
 		resetModes();
 	}
 
