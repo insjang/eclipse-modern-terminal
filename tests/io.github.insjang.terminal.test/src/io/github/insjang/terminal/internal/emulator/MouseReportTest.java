@@ -48,9 +48,14 @@ public class MouseReportTest {
 				VT100TerminalControl.mouseReport(false, 0 + 8, 5, 10, false));
 		assertEquals(CSI + "M" + (char) (32 + 19) + (char) 42 + (char) 37,
 				VT100TerminalControl.mouseReport(false, 2 + 16, 5, 10, false));
-		// no room past column or row 223: nothing is reported, as in xterm
-		assertEquals("", VT100TerminalControl.mouseReport(false, 0, 5, 224, true));
-		assertEquals("", VT100TerminalControl.mouseReport(false, 0, 224, 10, true));
+		// column 223 is the last byte, 255; past it, as xterm, a zero byte, so that a
+		// drag there still ends in a release
+		assertEquals(CSI + "M" + (char) 32 + (char) 255 + (char) 37,
+				VT100TerminalControl.mouseReport(false, 0, 5, 223, true));
+		assertEquals(CSI + "M" + (char) 32 + (char) 0 + (char) 37,
+				VT100TerminalControl.mouseReport(false, 0, 5, 224, true));
+		assertEquals(CSI + "M" + (char) 35 + (char) 42 + (char) 0,
+				VT100TerminalControl.mouseReport(false, 0, 300, 10, false));
 	}
 
 	@Test

@@ -47,7 +47,6 @@ import org.eclipse.swt.graphics.RGB;
 import org.eclipse.swt.graphics.Rectangle;
 import org.eclipse.swt.widgets.Caret;
 import org.eclipse.swt.widgets.Composite;
-import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.Listener;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
 import io.github.insjang.terminal.model.ITerminalTextDataReadOnly;
@@ -75,14 +74,8 @@ public class TextCanvas extends GridCanvas {
 	private ResizeListener fResizeListener;
 	private final List<ITerminalMouseListener> fMouseListeners;
 	private SelectionMode fSelMode = SelectionMode.NONE;
-	private IMouseWheelHandler fWheelHandler;
-	private IMouseButtonHandler fButtonHandler;
-	// the buttons whose press went to the program, as bits 1 << button: their releases go there too
-	private int fReportedButtons;
-	// whether the last press went to the program: its double-click and context menu are its too
-	private boolean fPressReported;
-	// the last click the program took: where a shift-drag starts while nothing is selected
-	private Point fReportedClick;
+	// whose each gesture of the mouse is, the program's or the terminal's
+	private final MouseRouter fMouse = new MouseRouter();
 
 	private enum SelectionMode {
 		NONE, DRAG, WORD, LINE
@@ -182,41 +175,28 @@ public class TextCanvas extends GridCanvas {
 			}
 		});
 		// Before every other mouse listener: a press the program takes is the program's
-		// alone. The terminal's own use of it (a selection, the middle-click paste, a
-		// double-click, the copy on release) must not happen too, so the event goes no
-		// further (SWT delivers no more listeners once the type is None). Shift keeps
-		// the mouse for the terminal.
+		// alone, and so is all that follows from it. The terminal's own use of it (a
+		// selection, the middle-click paste, a double-click, the copy on release) must not
+		// happen too, so the event goes no further (SWT delivers no more listeners once
+		// the type is None).
 		Listener reporter = event -> {
-			switch (event.type) {
-			case SWT.MouseDown:
-				fPressReported = wouldReport(event.stateMask) && report(event, event.button, true);
-				if (!fPressReported) {
-					// a release of this button lost earlier (a dialog took it) is not waited for
-					fReportedButtons &= ~(1 << event.button);
-					return;
-				}
-				fReportedButtons |= 1 << event.button;
+			Point cell = cell(event.x, event.y);
+			boolean program = switch (event.type) {
+			case SWT.MouseDown -> fMouse.press(event.button, event.stateMask, cell);
+			case SWT.MouseUp -> fMouse.release(event.button, event.stateMask, cell);
+			default -> fMouse.doubleClick(); // SWT.MouseDoubleClick
+			};
+			if (!program) {
+				return;
+			}
+			if (event.type == SWT.MouseDown) {
 				// The click went to the program, so whatever the terminal had
 				// selected is no longer what the pointer is pointing at.
 				fCellCanvasModel.setSelection(-1, -1, -1, -1);
 				fCellCanvasModel.expandHoverSelectionAt(-1, -1);
 				fDraggingStart = null;
-				// a later shift-drag starts from here: the anchor, kept apart too, as
-				// the model gives no anchor while nothing is selected
-				fReportedClick = cell(event.x, event.y);
-				fCellCanvasModel.setSelectionAnchor(fReportedClick);
-				break;
-			case SWT.MouseUp:
-				// a release goes wherever its press went, however the keyboard stands by then
-				if ((fReportedButtons & 1 << event.button) == 0) {
-					return;
-				}
-				fReportedButtons &= ~(1 << event.button);
-				report(event, event.button, false);
-				break;
-			default: // SWT.MouseDoubleClick
-				if (!fPressReported) {
-					return;
+				if (event.button == 1) {
+					fCellCanvasModel.setSelectionAnchor(cell);
 				}
 			}
 			event.type = SWT.None;
@@ -226,7 +206,7 @@ public class TextCanvas extends GridCanvas {
 		addListener(SWT.MouseDoubleClick, reporter);
 		// the context menu of a right-click the program took; the menu key still opens it
 		addListener(SWT.MenuDetect, event -> {
-			if (event.detail == SWT.MENU_MOUSE && fPressReported) {
+			if (event.detail == SWT.MENU_MOUSE && fMouse.menuTaken()) {
 				event.doit = false;
 			}
 		});
@@ -281,16 +261,15 @@ public class TextCanvas extends GridCanvas {
 					fHasSelection = false;
 					if ((e.stateMask & SWT.SHIFT) != 0) {
 						Point anchor = fCellCanvasModel.getSelectionAnchor();
-						if (anchor == null && fReportedClick != null
-								&& fReportedClick.y < fCellCanvasModel.getTerminalText().getHeight()) {
-							anchor = fReportedClick; // unless the text was cleared below it since
+						if (anchor == null) {
+							anchor = fMouse.clickAnchor(fCellCanvasModel.getTerminalText().getHeight());
 						}
 						if (anchor != null) {
 							fDraggingStart = anchor;
 						}
 					} else {
 						fCellCanvasModel.setSelectionAnchor(fDraggingStart);
-						fReportedClick = null;
+						fMouse.forgetClick();
 					}
 					fDraggingEnd = null;
 				}
@@ -356,10 +335,7 @@ public class TextCanvas extends GridCanvas {
 			}
 		});
 		addMouseMoveListener(e -> {
-			int held = heldButton(e.stateMask, fReportedButtons);
-			// a button held down is a drag of the program's only if its press was the program's
-			if (fDraggingStart == null && held >= 0 && wouldReport(e.stateMask)
-					&& fButtonHandler.mouseMoved(held, modifiers(e.stateMask), cell(e.x, e.y))) {
+			if (fMouse.move(e.stateMask, cell(e.x, e.y), fDraggingStart != null)) {
 				return;
 			}
 			if (fDraggingStart != null) {
@@ -715,93 +691,52 @@ public class TextCanvas extends GridCanvas {
 	}
 
 	/**
-	 * Hands the wheel to whoever can pass it on to the program being run.
+	 * Hands the mouse to whoever can pass it on to the program being run, with the
+	 * cell of the text under the pointer, history lines included.
 	 */
-	public interface IMouseWheelHandler {
+	public interface IMouseHandler {
+		/** @return whether the program took the press or release */
+		boolean button(int button, int modifiers, Point cell, boolean pressed);
+
 		/**
-		 * @param count lines the wheel asked for, positive when scrolling up
-		 * @param cell  the cell of the text under the pointer, history lines included
+		 * @param button the button held, 0 for none
+		 * @return whether the program took the move
+		 */
+		boolean moved(int button, int modifiers, Point cell);
+
+		/**
+		 * @param lines lines the wheel asked for, positive when scrolling up
 		 * @return whether the program took it
 		 */
-		boolean mouseWheel(int count, int modifiers, Point cell);
+		boolean wheel(int lines, int modifiers, Point cell);
+	}
+
+	public void setMouseHandler(IMouseHandler handler) {
+		fMouse.setProgram(handler);
 	}
 
 	/**
-	 * Hands a button or the pointer moving to whoever can pass it on to the program
-	 * being run, with the cell of the text under the pointer, history lines included.
+	 * A program started or stopped listening to the mouse: the last click it was told
+	 * of is no longer where a shift-drag starts.
 	 */
-	public interface IMouseButtonHandler {
-		/** @return whether the program took it */
-		boolean mouseButton(int button, int modifiers, Point cell, boolean pressed);
-
-		/** @return whether the program took it */
-		boolean mouseMoved(int button, int modifiers, Point cell);
-	}
-
-	public void setMouseButtonHandler(IMouseButtonHandler handler) {
-		fButtonHandler = handler;
+	public void forgetProgramClick() {
+		fMouse.forgetClick();
 	}
 
 	/**
-	 * Holding shift keeps the event for the terminal, which is how a selection is
-	 * still made with the mouse while a program is listening for it. Holding MOD1
-	 * alone keeps it too, since that is how a path or a link on the screen is opened.
-	 * Asked of a press and of the pointer moving; a release is not its own decision
-	 * but goes wherever the press it ends went, however the keyboard stands by then.
+	 * @return the cell of the text under the point, its line counting the history above
+	 *         the screen too; null while the canvas has no cells yet
 	 */
-	private boolean wouldReport(int stateMask) {
-		return fButtonHandler != null && (stateMask & SWT.SHIFT) == 0
-				&& (stateMask & SWT.MODIFIER_MASK) != SWT.MOD1 && getCellWidth() > 0 && getCellHeight() > 0;
-	}
-
-	private boolean report(Event e, int button, boolean pressed) {
-		return fButtonHandler.mouseButton(button, modifiers(e.stateMask), cell(e.x, e.y), pressed);
-	}
-
-	/** the cell of the text under the point: its line counts the history above the screen too */
 	private Point cell(int x, int y) {
-		return screenPointToCell(Math.max(0, x), Math.max(0, y));
-	}
-
-	/**
-	 * What xterm adds to a button for the keys held with it: 8 for alt, 16 for
-	 * control. Shift is never among them, being what keeps the mouse for the
-	 * terminal.
-	 */
-	static int modifiers(int stateMask) {
-		return ((stateMask & SWT.ALT) != 0 ? 8 : 0) | ((stateMask & SWT.CTRL) != 0 ? 16 : 0);
-	}
-
-	/**
-	 * @param reported the buttons whose press went to the program, as bits 1 &lt;&lt; button
-	 * @return the first button held whose press went to the program; 0 when none is
-	 *         held, -1 when every button held is the terminal's
-	 */
-	static int heldButton(int stateMask, int reported) {
-		int[] masks = { SWT.BUTTON1, SWT.BUTTON2, SWT.BUTTON3 };
-		boolean held = false;
-		for (int button = 1; button <= 3; button++) {
-			if ((stateMask & masks[button - 1]) != 0) {
-				held = true;
-				if ((reported & 1 << button) != 0) {
-					return button;
-				}
-			}
+		if (getCellWidth() <= 0 || getCellHeight() <= 0) {
+			return null;
 		}
-		return held ? -1 : 0;
-	}
-
-	public void setMouseWheelHandler(IMouseWheelHandler handler) {
-		fWheelHandler = handler;
+		return screenPointToCell(Math.max(0, x), Math.max(0, y));
 	}
 
 	@Override
 	protected boolean handleMouseWheel(int x, int y, int count, int stateMask) {
-		// shift keeps the wheel for the terminal's own scrolling, as it keeps the buttons
-		if (fWheelHandler == null || (stateMask & SWT.SHIFT) != 0 || getCellWidth() <= 0 || getCellHeight() <= 0) {
-			return false;
-		}
-		return fWheelHandler.mouseWheel(count, modifiers(stateMask), cell(x, y));
+		return fMouse.wheel(count, stateMask, cell(x, y));
 	}
 
 	@Override
@@ -918,7 +853,7 @@ public class TextCanvas extends GridCanvas {
 	 */
 	public void clearSelection() {
 		fCellCanvasModel.setSelection(-1, -1, -1, -1);
-		fReportedClick = null;
+		fMouse.forgetClick();
 	}
 
 	/**

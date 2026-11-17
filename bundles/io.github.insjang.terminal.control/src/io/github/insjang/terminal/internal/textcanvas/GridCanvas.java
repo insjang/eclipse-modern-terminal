@@ -31,7 +31,11 @@ abstract public class GridCanvas extends VirtualCanvas {
 	public GridCanvas(Composite parent, int style) {
 		super(parent, style);
 		addListener(SWT.MouseWheel, event -> {
-			if (!handleMouseWheel(event.x, event.y, event.count, event.stateMask) && getVerticalBar().isVisible()) {
+			// Windows set to scroll a page at a time counts notches, not lines: a notch is three
+			// lines here, as GTK and the Windows default count them. Another number of lines per
+			// notch in the Windows settings is not known to SWT's API, and still counts as lines.
+			int lines = event.detail == SWT.SCROLL_PAGE ? 3 * event.count : event.count;
+			if (!handleMouseWheel(event.x, event.y, lines, event.stateMask) && getVerticalBar().isVisible()) {
 				int delta = -fCellHeight * event.count;
 				scrollYDelta(delta);
 			}

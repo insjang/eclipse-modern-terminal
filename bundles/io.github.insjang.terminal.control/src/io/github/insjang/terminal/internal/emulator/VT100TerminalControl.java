@@ -183,14 +183,10 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	// set by the reader job, read by the display thread on a key press
 	private volatile boolean fApplicationCursorKeys;
-	// set by the reader job, read by the display thread on the mouse and on focus
-	private volatile int fMouseMode;
-	private volatile boolean fSgrMouseEncoding;
+	// set by the reader job, read by the display thread on focus
 	private volatile boolean fFocusReporting;
-	// the cell a move was last reported in; reset by the reader job with the mode
-	private volatile int fLastReportedLine, fLastReportedColumn;
-	// lines the wheel moved that make no whole notch yet, up positive; reset with the mode
-	private volatile int fWheelLines;
+	// what a program that asked for the mouse is told of it
+	private final MouseReporter fMouse = new MouseReporter();
 
 	/**
 	 * Listens to changes in the preferences
@@ -1018,8 +1014,7 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		fCtlText = new TextCanvas(fWndParent, fPollingTextCanvasModel, SWT.NONE,
 				new TextLineRenderer(() -> fCtlText, fPollingTextCanvasModel));
 
-		fCtlText.setMouseWheelHandler(this::reportMouseWheel);
-		fCtlText.setMouseButtonHandler(new MouseReporter());
+		fCtlText.setMouseHandler(fMouse);
 		fCtlText.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
 		fCtlText.addResizeHandler((lines, columns) -> fTerminalText.setDimensions(lines, columns));
 		fCtlText.addMouseListener(new MouseAdapter() {
@@ -1764,72 +1759,73 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 
 	@Override
 	public void enableMouseReporting(int mode) {
-		fMouseMode = mode;
-		// what was told of the mouse before belongs to the program that asked then
-		fLastReportedLine = fLastReportedColumn = -1;
-		fWheelLines = 0;
+		fMouse.setMode(mode);
 	}
 
 	@Override
 	public void enableSgrMouseEncoding(boolean enable) {
-		fSgrMouseEncoding = enable;
+		fMouse.fSgr = enable;
 	}
 
 	/**
-	 * A wheel notch is reported as a press of button 64 or 65, which is how a
-	 * terminal has always told a program that the wheel moved. Without this the
-	 * wheel only ever scrolled the terminal's own view, and a program drawing its
-	 * own scrollable screen never heard about it.
-	 *
-	 * @return whether the program was told, in which case the canvas stays put
+	 * One mode a program asked for, and what it has been told in it. A new mode is a
+	 * new session: nothing told to the program that asked before carries over.
 	 */
-	private boolean reportMouseWheel(int count, int modifiers, Point cell) {
-		Point at = onScreen(cell);
-		if (fMouseMode == 0 || count == 0 || at == null || !isConnected()) {
-			return false;
+	private static final class MouseSession {
+		/** 1000 (buttons), 1002 (and drags), 1003 (and every move), 0 for none */
+		final int mode;
+		/** the cell the pointer was last reported in */
+		int line = -1, column = -1;
+		/** lines the wheel moved that make no whole notch yet, up positive */
+		int wheelLines;
+
+		MouseSession(int mode) {
+			this.mode = mode;
 		}
-		int button = (count > 0 ? 64 : 65) + modifiers; // up, down
-		// SWT counts lines; a notch is three of them, however the events split them,
-		// and what is left over counts toward the next one in the same direction.
-		if (Integer.signum(count) != Integer.signum(fWheelLines)) {
-			fWheelLines = 0;
-		}
-		fWheelLines += count;
-		int notches = Math.abs(fWheelLines) / 3;
-		fWheelLines %= 3;
-		if (notches == 0) {
-			return true; // the program's, told once the lines make a notch
-		}
-		StringBuilder report = new StringBuilder();
-		for (int i = 0; i < notches; i++) {
-			report.append(mouseReport(button, at.y, at.x, true));
-		}
-		sendBytes(mouseReportBytes(report.toString()));
-		return true;
 	}
 
 	/**
-	 * A press, a release and the pointer moving, told to the program the way a
-	 * terminal has always told it, so that a program drawing its own screen can be
-	 * clicked on. The terminal keeps the event when shift is held, which is how a
-	 * selection is still made with the mouse while a program is listening for it.
+	 * Presses, releases, moves and the wheel, told to a program that asked for them
+	 * the way a terminal has always told it, so that a program drawing its own screen
+	 * can be clicked on and scrolled. Whether a gesture is the program's at all is the
+	 * canvas's to decide; this only tells it.
 	 */
-	private class MouseReporter implements TextCanvas.IMouseButtonHandler {
+	private class MouseReporter implements TextCanvas.IMouseHandler {
+		// set by the reader job, read by the display thread, which alone changes the session
+		private volatile MouseSession fSession = new MouseSession(0);
+		volatile boolean fSgr;
+
+		void setMode(int mode) {
+			fSession = new MouseSession(mode);
+			// the last click told belongs to the program that asked then
+			if (fCtlText != null) {
+				fDisplay.asyncExec(() -> {
+					if (!fCtlText.isDisposed()) {
+						fCtlText.forgetProgramClick();
+					}
+				});
+			}
+		}
+
 		@Override
-		public boolean mouseButton(int button, int modifiers, Point cell, boolean pressed) {
-			Point at = onScreen(cell);
-			// a release is reported wherever it happens: its press was
-			if (fMouseMode == 0 || button < 1 || button > 3 || (at == null && pressed) || !isConnected()) {
+		public boolean button(int button, int modifiers, Point cell, boolean pressed) {
+			MouseSession session = fSession;
+			if (session.mode == 0 || button < 1 || button > 3 || !isConnected()) {
 				return false;
 			}
+			Point at = onScreen(cell);
 			if (at == null) {
+				if (pressed) {
+					return false; // over the history, which the program knows nothing of
+				}
+				// a release is reported wherever it happens: its press was
 				at = new Point(Math.max(1, Math.min(cell.x + 1, fPollingTextCanvasModel.getTerminalText().getWidth())), 1);
 			}
-			sendBytes(mouseReportBytes(mouseReport(button - 1 + modifiers, at.y, at.x, pressed)));
+			send(button - 1 + modifiers, at, pressed);
 			// the program now knows the pointer is here: a drag after this press, or
 			// after one that ended elsewhere, is reported from here on
-			fLastReportedLine = at.y;
-			fLastReportedColumn = at.x;
+			session.line = at.y;
+			session.column = at.x;
 			if (pressed) {
 				// the press takes the terminal's selection away (the canvas clears it once
 				// this returns): the view's copy must know, after that
@@ -1839,21 +1835,54 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		}
 
 		@Override
-		public boolean mouseMoved(int button, int modifiers, Point cell) {
-			Point at = onScreen(cell);
+		public boolean moved(int button, int modifiers, Point cell) {
+			MouseSession session = fSession;
 			// 1002 is only interested while a button is held, 1003 in every move.
-			if (fMouseMode < 1002 || (fMouseMode == 1002 && button == 0) || at == null || !isConnected()) {
+			if (session.mode < 1002 || (session.mode == 1002 && button == 0) || !isConnected()) {
 				return false;
 			}
-			int line = at.y;
-			int column = at.x;
-			if (line == fLastReportedLine && column == fLastReportedColumn) {
+			Point at = onScreen(cell);
+			if (at == null) {
+				return false;
+			}
+			if (at.y == session.line && at.x == session.column) {
 				return true; // still the same cell, and a cell is all the program is told
 			}
-			fLastReportedLine = line;
-			fLastReportedColumn = column;
-			sendBytes(mouseReportBytes(mouseReport((button == 0 ? 3 : button - 1) + 32 + modifiers, line, column, true)));
+			session.line = at.y;
+			session.column = at.x;
+			send((button == 0 ? 3 : button - 1) + 32 + modifiers, at, true);
 			return true;
+		}
+
+		/**
+		 * A wheel notch is reported as a press of button 64 or 65, never released.
+		 * SWT counts lines; a notch is three of them, however the events split them,
+		 * and what is left over counts toward the next one in the same direction.
+		 */
+		@Override
+		public boolean wheel(int lines, int modifiers, Point cell) {
+			MouseSession session = fSession;
+			if (session.mode == 0 || lines == 0 || !isConnected()) {
+				return false;
+			}
+			Point at = onScreen(cell);
+			if (at == null) {
+				return false; // over the history: the view scrolls
+			}
+			if (Integer.signum(lines) != Integer.signum(session.wheelLines)) {
+				session.wheelLines = 0;
+			}
+			session.wheelLines += lines;
+			int notches = Math.abs(session.wheelLines) / 3;
+			session.wheelLines %= 3;
+			for (int i = 0; i < notches; i++) {
+				send((lines > 0 ? 64 : 65) + modifiers, at, true);
+			}
+			return true; // the program's, told once the lines make a notch
+		}
+
+		private void send(int button, Point at, boolean pressed) {
+			sendBytes(mouseReportBytes(mouseReport(fSgr, button, at.y, at.x, pressed)));
 		}
 	}
 
@@ -1901,22 +1930,22 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 		return new Point(Math.max(1, Math.min(cell.x + 1, width)), Math.min(line, screenLines));
 	}
 
-	private String mouseReport(int button, int line, int column, boolean pressed) {
-		return mouseReport(fSgrMouseEncoding, button, line, column, pressed);
-	}
-
 	public static String mouseReport(boolean sgr, int button, int line, int column, boolean pressed) {
 		if (sgr) {
 			return "\u001b[<" + button + ';' + column + ';' + line + (pressed ? 'M' : 'm'); //$NON-NLS-1$
 		}
-		// The older spelling has no room past column 223 and no way to say which
-		// button came up, so a release is reported as button 3, meaning "some button",
-		// with the keys held as in a press. Past 223 nothing is reported, as in xterm.
-		if (column > 223 || line > 223) {
-			return ""; //$NON-NLS-1$
-		}
-		return "\u001b[M" + (char) (32 + (pressed ? button : button | 3)) + (char) (32 + column) //$NON-NLS-1$
-				+ (char) (32 + line);
+		// The older spelling has no way to say which button came up, so a release is
+		// reported as button 3, meaning "some button", with the keys held as in a press.
+		return "\u001b[M" + (char) (32 + (pressed ? button : button | 3)) + legacyPosition(column) //$NON-NLS-1$
+				+ legacyPosition(line);
+	}
+
+	/**
+	 * A column or line in one byte, which has no room past 223: as xterm, anything
+	 * further is sent as a zero byte, so that a drag past it still ends in a release.
+	 */
+	private static char legacyPosition(int value) {
+		return value > 223 ? 0 : (char) (32 + value);
 	}
 
 	/**
