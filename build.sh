@@ -20,7 +20,7 @@ for b in $BUNDLES; do
 	CP="$C:$CP"
 	rsync -a --include='*/' --exclude='*.java' --prune-empty-dirs "$SRC/src/" "$C/"
 	# the bin.includes of build.properties, without the manifest (rewritten below)
-	for f in plugin.xml plugin.properties .options README.txt about.html about_files HelpContexts.xml contexts.xml icons os OSGI-INF META-INF/p2.inf; do
+	for f in plugin.xml plugin.properties .options README.txt about.html about_files HelpContexts.xml contexts.xml icons os OSGI-INF META-INF/p2.inf schema; do
 		[ -e "$SRC/$f" ] && mkdir -p "$C/$(dirname "$f")" && cp -r "$SRC/$f" "$C/$f"
 	done
 	VER=$(sed -n 's/^Bundle-Version: //p' "$SRC/META-INF/MANIFEST.MF" | tr -d '\r' | sed "s/qualifier/$QUALIFIER/")
