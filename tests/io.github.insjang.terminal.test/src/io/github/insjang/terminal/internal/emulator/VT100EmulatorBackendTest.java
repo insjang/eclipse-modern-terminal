@@ -107,22 +107,45 @@ public class VT100EmulatorBackendTest {
 		assertEquals(4, vt100.getColumns());
 		assertEqualsTerm(s, toMultiLineText(term));
 
+		// the cursor is on 3333: the line below it goes, not the cursor's line
 		vt100.setCursor(0, 2);
 		vt100.setDimensions(2, 4);
 		assertEquals(0, vt100.getCursorLine());
 		assertEquals(2, vt100.getCursorColumn());
+		assertEqualsTerm("0000\n" + "1111\n" + "2222\n" + "3333\n" + "4444", toMultiLineText(term));
 
 		vt100.setCursor(0, 2);
 		vt100.setDimensions(5, 4);
 		assertEquals(3, vt100.getCursorLine());
 		assertEquals(2, vt100.getCursorColumn());
 
-		assertEqualsTerm(s, toMultiLineText(term));
-
 		vt100.setCursor(0, 3);
 		vt100.setDimensions(5, 2);
 		assertEquals(0, vt100.getCursorLine());
 		assertEquals(1, vt100.getCursorColumn());
+	}
+
+	@Test
+	public void testShrinkKeepsTheCursorOnItsLine() {
+		// a prompt on the top line, as after clear: shrinking the screen step by step
+		// keeps the cursor on the prompt, so a shell redrawing it never stamps it on
+		// another line
+		ITerminalTextData term = makeITerminalTextData();
+		VT100EmulatorBackend vt100 = new VT100EmulatorBackend(term);
+		term.setMaxHeight(100);
+		vt100.setDimensions(5, 4);
+		fill(term, "h000\n" + "h111\n" + "PPPP\n" + "aaaa\n" + "bbbb\n" + "cccc\n" + "dddd");
+		vt100.setDimensions(5, 4);
+		vt100.setCursor(0, 1);
+		for (int lines = 4; lines >= 1; lines--) {
+			vt100.setDimensions(lines, 4);
+			assertEquals(0, vt100.getCursorLine());
+			assertEquals("PPPP", new String(term.getChars(vt100.toAbsoluteLine(0))));
+		}
+		// the history above the prompt stays; the lines below it are gone, as in tmux
+		assertEqualsTerm("h000\n" + "h111\n" + "PPPP", toMultiLineText(term));
+		vt100.setDimensions(3, 4);
+		assertEquals(2, vt100.getCursorLine());
 	}
 
 	@Test

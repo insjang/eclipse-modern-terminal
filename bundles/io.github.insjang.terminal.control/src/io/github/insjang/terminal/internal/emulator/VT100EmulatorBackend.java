@@ -348,17 +348,21 @@ public class VT100EmulatorBackend implements IVT100EmulatorBackend {
 				return;
 			}
 			int height = fTerminal.getHeight();
+			if (lines < fLines) {
+				// A shorter screen loses the lines below the cursor first, as in tmux, and
+				// only then pushes lines from the top into the history: the cursor stays on
+				// its line, so a shell that redraws its prompt there on the resize draws it
+				// over itself, not over the line that used to be below it.
+				int below = Math.min(fLines - lines, fLines - 1 - cl);
+				if (below > 0) {
+					height -= below;
+					fLines -= below;
+					fTerminal.setDimensions(height, fTerminal.getWidth());
+				}
+			}
 			// absolute cursor line
 			int acl = cl + height - fLines;
 			int newLines = Math.max(lines, height);
-			if (lines < fLines) {
-				if (height == fLines) {
-					// if the terminal has no history, then resize by
-					// setting the size to the new size
-					// TODO We are assuming that cursor line points at end of text
-					newLines = Math.max(lines, cl + 1);
-				}
-			}
 			fLines = lines;
 			fColumns = cols;
 			// make the terminal at least as high as we need lines
