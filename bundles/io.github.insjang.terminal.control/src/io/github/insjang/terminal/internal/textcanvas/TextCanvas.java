@@ -962,4 +962,19 @@ public class TextCanvas extends GridCanvas {
 	public String getHoverSelection() {
 		return fCellCanvasModel.getHoverSelectionText();
 	}
+
+	/** @return the word at the cell, found as the hover finds it, which is left as it was; null for none */
+	public String getWordAt(int line, int column) {
+		int hoverLine = -1;
+		int hoverColumn = -1;
+		Point start = fCellCanvasModel.getHoverSelectionStart();
+		if (start != null) {
+			hoverLine = start.y;
+			hoverColumn = start.x;
+		}
+		fCellCanvasModel.expandHoverSelectionAt(line, column);
+		String word = fCellCanvasModel.getHoverSelectionText();
+		fCellCanvasModel.expandHoverSelectionAt(hoverLine, hoverColumn);
+		return word == null || word.isEmpty() ? null : word;
+	}
 }

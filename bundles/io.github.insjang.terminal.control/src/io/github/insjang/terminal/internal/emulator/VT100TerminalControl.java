@@ -1983,6 +1983,11 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	}
 
 	@Override
+	public String getWordAt(int line, int column) {
+		return fCtlText.getWordAt(line, column);
+	}
+
+	@Override
 	public void showCursor(boolean show) {
 		synchronized (fModeLock) {
 			fCursorHidden = !show;

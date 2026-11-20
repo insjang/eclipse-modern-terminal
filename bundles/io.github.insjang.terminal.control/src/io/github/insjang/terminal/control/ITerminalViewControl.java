@@ -208,6 +208,18 @@ public interface ITerminalViewControl {
 	String getHoverSelection();
 
 	/**
+	 * The word at a cell as a Ctrl+click takes it (a path, a URL), without underlining it.
+	 *
+	 * @param line a line of the text, history included, as mouse listeners are given it
+	 * @param column a column, as mouse listeners are given it
+	 * @return the word, or null if the cell holds none
+	 * @since 1.4
+	 */
+	default String getWordAt(int line, int column) {
+		return null;
+	}
+
+	/**
 	 * The working directory the shell last reported with OSC 7, or null if it never did.
 	 *
 	 * @since 1.1

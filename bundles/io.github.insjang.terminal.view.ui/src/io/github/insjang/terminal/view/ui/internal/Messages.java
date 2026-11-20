@@ -79,6 +79,13 @@ public class Messages extends NLS {
 	public static String OpenSystem_title;
 	public static String OpenSystem_question;
 	public static String OpenSystem_macros;
+	public static String PathMenu_open;
+	public static String PathMenu_openInBrowser;
+	public static String PathMenu_copyPath;
+	public static String PathMenu_showInProjectExplorer;
+	public static String PathMenu_openInSystemExplorer;
+	public static String PathMenu_openLink;
+	public static String PathMenu_copyLink;
 	public static String RunSelection_noTerminal;
 
 	public static String NewTerminalViewAction_menu;

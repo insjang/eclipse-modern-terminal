@@ -47,7 +47,7 @@ final class MouseRouter {
 	 */
 	boolean press(int button, int stateMask, Point cell) {
 		int bit = 1 << button;
-		boolean program = listens(stateMask, cell) && heldButton(stateMask, fProgramButtons) >= 0
+		boolean program = takes(stateMask, cell) && heldButton(stateMask, fProgramButtons) >= 0
 				&& fProgram.button(button, modifiers(stateMask), cell, true);
 		fLastPressProgram = program;
 		if (button == 3) {
@@ -93,7 +93,7 @@ final class MouseRouter {
 	boolean move(int stateMask, Point cell, boolean terminalDragging) {
 		int held = heldButton(stateMask, fProgramButtons);
 		// a button held down is a drag of the program's only if its press was the program's
-		return !terminalDragging && held >= 0 && listens(stateMask, cell)
+		return !terminalDragging && held >= 0 && takes(stateMask, cell)
 				&& fProgram.moved(held, modifiers(stateMask), cell);
 	}
 
@@ -122,6 +122,16 @@ final class MouseRouter {
 
 	private boolean listens(int stateMask, Point cell) {
 		return fProgram != null && cell != null && (stateMask & SWT.SHIFT) == 0;
+	}
+
+	/**
+	 * Whether a press or a move is the program's: as for the wheel, except that MOD1
+	 * held alone keeps it for the terminal too, being how a path or a link on the
+	 * screen is underlined and opened (Ctrl+click), also while a program such as
+	 * Claude Code listens for the mouse.
+	 */
+	private boolean takes(int stateMask, Point cell) {
+		return listens(stateMask, cell) && (stateMask & SWT.MODIFIER_MASK) != SWT.MOD1;
 	}
 
 	/**

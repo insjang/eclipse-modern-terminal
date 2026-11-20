@@ -106,6 +106,15 @@ What the terminal shows comes from programs and servers, so Ctrl+click (on a pat
   - On Linux and macOS files always open inside Eclipse (xdg-open picks the program by the content, not the name)
 - A web link opens in the browser; an OSC 8 link whose text is not its address shows the address first, with the host in ASCII (punycode) and unusual characters escaped
 - An OSC 8 file link opens only a file on this computer; one to another host is ignored
+- A folder shows in the Project Explorer when it is in the workspace, otherwise it opens in the system's file manager
+- Ctrl+click and the underline work also while a program takes the mouse, as Claude Code does
+
+Right-click on a path, a URL or an OSC 8 link puts what can be done with it at the top of the context menu (Shift+right-click while a program takes the mouse):
+
+- A file: Open (as Ctrl+click), Open in Web Browser (HTML), Copy Path, Show in Project Explorer (in the workspace), Open in System Explorer (its folder)
+- A folder: Copy Path, Show in Project Explorer, Open in System Explorer
+- A URL: Open Link, Copy Link
+- Copy Path copies the path on this computer: a WSL path as its Windows path (`/mnt/d/a` is `D:\a`)
 
 ## Shell integration (OSC 133)
 

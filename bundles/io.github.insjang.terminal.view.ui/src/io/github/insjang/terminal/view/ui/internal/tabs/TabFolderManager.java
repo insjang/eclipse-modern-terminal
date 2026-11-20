@@ -371,7 +371,9 @@ public class TabFolderManager extends PlatformObject implements ISelectionProvid
 	}
 
 	private void addOpenResourceSupport(ITerminalViewControl terminal) {
-		terminal.addMouseListener(new OpenFileMouseHandler(getParentView().getSite(), terminal));
+		OpenFileMouseHandler handler = new OpenFileMouseHandler(getParentView().getSite(), terminal);
+		terminal.addMouseListener(handler);
+		terminal.getControl().setData(OpenFileMouseHandler.KEY, handler);
 	}
 
 	/**

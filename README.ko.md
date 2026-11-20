@@ -106,6 +106,15 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
   - Linux·macOS에서는 항상 Eclipse 안에서 열기 (xdg-open은 이름이 아니라 내용으로 프로그램을 고름)
 - 웹 링크는 브라우저로 열기, 보이는 글자가 주소와 다른 OSC 8 링크는 주소를 먼저 보여 줌 (호스트는 ASCII(punycode), 특수 문자는 이스케이프)
 - OSC 8 파일 링크는 이 PC의 파일만 열고, 다른 호스트를 가리키면 무시
+- 폴더는 워크스페이스 안이면 Project Explorer에서 보여 주고, 밖이면 시스템 파일 탐색기로 열기
+- Claude Code처럼 프로그램이 마우스를 받는 중에도 Ctrl+클릭과 밑줄이 동작
+
+경로, URL, OSC 8 링크 위에서 우클릭하면 할 수 있는 일이 메뉴 맨 위에 나옴 (프로그램이 마우스를 받는 중에는 Shift+우클릭):
+
+- 파일: Open (Ctrl+클릭과 같음), Open in Web Browser (HTML), Copy Path, Show in Project Explorer (워크스페이스 안), Open in System Explorer (그 폴더)
+- 폴더: Copy Path, Show in Project Explorer, Open in System Explorer
+- URL: Open Link, Copy Link
+- Copy Path는 이 PC의 경로를 복사: WSL 경로는 Windows 경로로 (`/mnt/d/a`는 `D:\a`)
 
 ## 셸 통합 (OSC 133)
 

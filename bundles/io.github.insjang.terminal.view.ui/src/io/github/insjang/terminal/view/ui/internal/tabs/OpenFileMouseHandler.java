@@ -25,6 +25,7 @@ import java.util.regex.Pattern;
 import org.eclipse.core.commands.ExecutionException;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IResource;
+import org.eclipse.core.resources.IWorkspaceRoot;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.Adapters;
 import org.eclipse.core.runtime.CoreException;
@@ -38,11 +39,18 @@ import org.eclipse.e4.ui.model.application.ui.basic.MPart;
 import org.eclipse.e4.ui.model.application.ui.basic.MPartStack;
 import org.eclipse.e4.ui.workbench.modeling.EModelService;
 import org.eclipse.jface.text.BadLocationException;
+import org.eclipse.jface.action.Action;
+import org.eclipse.jface.action.IAction;
+import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.dialogs.MessageDialog;
+import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.window.Window;
 import org.eclipse.osgi.util.NLS;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.dnd.Clipboard;
+import org.eclipse.swt.dnd.TextTransfer;
+import org.eclipse.swt.dnd.Transfer;
 import org.eclipse.swt.program.Program;
 import io.github.insjang.terminal.connector.Logger;
 import io.github.insjang.terminal.control.ITerminalMouseListener;
@@ -53,6 +61,8 @@ import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.IEditorRegistry;
+import org.eclipse.ui.IPageLayout;
+import org.eclipse.ui.IViewPart;
 import org.eclipse.ui.IWorkbenchPage;
 import org.eclipse.ui.IWorkbenchPartSite;
 import org.eclipse.ui.IWorkbenchWindow;
@@ -60,6 +70,7 @@ import org.eclipse.ui.PartInitException;
 import org.eclipse.ui.PlatformUI;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.internal.ide.dialogs.OpenResourceDialog;
+import org.eclipse.ui.part.ISetSelectionTarget;
 import org.eclipse.ui.texteditor.IDocumentProvider;
 import org.eclipse.ui.texteditor.ITextEditor;
 import org.osgi.framework.Bundle;
@@ -85,6 +96,24 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	 */
 	private boolean neededBundlesAvailable;
 
+	/** The key of this handler in the data of the terminal's control, where the context menu finds it. */
+	static final String KEY = OpenFileMouseHandler.class.getName();
+
+	/** What the last right press was on, for the context menu it opens: taken once by the menu. */
+	private String menuLink;
+	private String menuWord;
+	private boolean menuPending;
+
+	/**
+	 * A path as the terminal shows it, resolved as it opens.
+	 *
+	 * @param text the path without what was around it and without its :line:column
+	 * @param location the path on this system: absolute, a WSL path turned into a Windows one
+	 * @param lineAndCol the :line:column after the path, without the first colon; null for none
+	 */
+	record PathTarget(String text, String location, String lineAndCol) {
+	}
+
 	OpenFileMouseHandler(IWorkbenchPartSite site, ITerminalViewControl terminal) {
 		this.site = site;
 		this.terminal = terminal;
@@ -104,16 +133,34 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		}
 	}
 
-	@SuppressWarnings("restriction")
 	@Override
 	public void mouseUp(ITerminalTextDataReadOnly terminalText, int line, int column, int button, int stateMask) {
 		if ((stateMask & SWT.MODIFIER_MASK) != SWT.MOD1) {
 			// Only handle Ctrl-click
 			return;
 		}
-		String hover = terminal.getHoverSelection();
-		// a hyperlink a program put there (OSC 8) wins over the text under the mouse
-		String link = terminalText.getLink(line, column);
+		open(terminalText.getLink(line, column), terminal.getHoverSelection());
+	}
+
+	@Override
+	public void mouseDown(ITerminalTextDataReadOnly terminalText, int line, int column, int button, int stateMask) {
+		if (button == 3) {
+			// what the context menu this press opens is about
+			menuLink = terminalText.getLink(line, column);
+			menuWord = terminal.getWordAt(line, column);
+			menuPending = true;
+		}
+	}
+
+	/**
+	 * Opens what a Ctrl+click or the context menu's Open is on: a web URL in the browser, a file in an
+	 * editor, a folder in the Project Explorer (or the system's file manager outside the workspace).
+	 *
+	 * @param link the hyperlink a program put there (OSC 8), which wins over the word there; null for none
+	 * @param hover the word there, as the hover finds it; null for none
+	 */
+	@SuppressWarnings("restriction")
+	private void open(String link, String hover) {
 		// a URL with an icon glued to its front, as Claude Code prints them, opens from its scheme
 		String textToOpen = link != null ? LinkPolicy.target(link, localHostName())
 				: hover != null ? LinkPolicy.fromScheme(hover) : null;
@@ -123,7 +170,6 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 						NLS.bind(Messages.OpenLink_question, LinkPolicy.display(textToOpen)))) {
 			return;
 		}
-		String lineAndCol = null;
 		if (textToOpen != null && textToOpen.length() > 0) {
 			try {
 				// if the selection looks like a web URL, open using the browser
@@ -140,39 +186,15 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 				if (!neededBundlesAvailable) {
 					return;
 				}
+				PathTarget target = resolvePath(textToOpen, link != null);
+				textToOpen = target.text();
+				String location = target.location();
+				String lineAndCol = target.lineAndCol();
+				if (isFolder(location)) {
+					showFolder(location);
+					return;
+				}
 				selectEditorStack();
-
-				// extract the path from file:// URLs
-				if (link == null && textToOpen.startsWith("file://")) { //$NON-NLS-1$
-					textToOpen = textToOpen.substring(7);
-				}
-				// a path in a sentence comes with what is around it: (a.txt), `a.txt`, a.txt,
-				if (link == null) {
-					textToOpen = SURROUNDING.matcher(textToOpen).replaceAll(""); //$NON-NLS-1$
-				}
-				// remove optional position info name:[row[:col]]
-				if (link == null) {
-					int startOfRowCol = textToOpen.indexOf(':');
-					if (startOfRowCol == 1 && textToOpen.length() > 2) {
-						// assume this is the device separator on Windows
-						startOfRowCol = textToOpen.indexOf(':', startOfRowCol + 1);
-					}
-					if (startOfRowCol >= 0) {
-						lineAndCol = textToOpen.substring(startOfRowCol + 1);
-						textToOpen = textToOpen.substring(0, startOfRowCol);
-					}
-				}
-				Optional<String> fullPath = Optional.empty();
-				if (!textToOpen.startsWith("/") && !new File(textToOpen).isAbsolute()) { //$NON-NLS-1$
-					// relative path: try to append to the working directory
-					Optional<String> workingDirectory = terminal.getTerminalConnector().getWorkingDirectory();
-					if (workingDirectory.isPresent()) {
-						fullPath = Optional.of(workingDirectory.get() + "/" + textToOpen); //$NON-NLS-1$
-					}
-				}
-				// if the selection is a file location that maps to a resource
-				// open the resource
-				String location = toWindowsPath(fullPath.orElse(textToOpen));
 				IFile fileForLocation = ResourcesPlugin.getWorkspace().getRoot()
 						.getFileForLocation(new Path(location));
 				if (fileForLocation != null && fileForLocation.exists()) {
@@ -248,6 +270,173 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 
 		}
 
+	}
+
+	/**
+	 * @param textToOpen the path as Ctrl+click took it, or the local path of a file link
+	 * @param fromLink whether it came from a hyperlink (OSC 8), which names the file exactly
+	 */
+	private PathTarget resolvePath(String textToOpen, boolean fromLink) {
+		String lineAndCol = null;
+		if (!fromLink) {
+			// extract the path from file:// URLs
+			if (textToOpen.startsWith("file://")) { //$NON-NLS-1$
+				textToOpen = textToOpen.substring(7);
+			}
+			// a path in a sentence comes with what is around it: (a.txt), `a.txt`, a.txt,
+			textToOpen = SURROUNDING.matcher(textToOpen).replaceAll(""); //$NON-NLS-1$
+			// remove optional position info name:[row[:col]]
+			int startOfRowCol = textToOpen.indexOf(':');
+			if (startOfRowCol == 1 && textToOpen.length() > 2) {
+				// assume this is the device separator on Windows
+				startOfRowCol = textToOpen.indexOf(':', startOfRowCol + 1);
+			}
+			if (startOfRowCol >= 0) {
+				lineAndCol = textToOpen.substring(startOfRowCol + 1);
+				textToOpen = textToOpen.substring(0, startOfRowCol);
+			}
+		}
+		String full = textToOpen;
+		if (!textToOpen.startsWith("/") && !new File(textToOpen).isAbsolute()) { //$NON-NLS-1$
+			// relative path: try to append to the working directory
+			Optional<String> workingDirectory = terminal.getTerminalConnector().getWorkingDirectory();
+			if (workingDirectory.isPresent()) {
+				full = workingDirectory.get() + "/" + textToOpen; //$NON-NLS-1$
+			}
+		}
+		return new PathTarget(textToOpen, toWindowsPath(full), lineAndCol);
+	}
+
+	private static boolean isFolder(String location) {
+		return !isNetworkPath(location) && new File(location).isDirectory();
+	}
+
+	/** A folder in the workspace is shown in the Project Explorer, any other in the system's file manager. */
+	private void showFolder(String location) {
+		IResource resource = workspaceResource(location);
+		if (resource != null) {
+			showInProjectExplorer(resource);
+		} else {
+			openInSystemExplorer(location);
+		}
+	}
+
+	/**
+	 * @return the file or folder of the workspace at the location, refreshed from the disk when the
+	 *         workspace does not know it yet (a program just made it); null outside the workspace
+	 */
+	private IResource workspaceResource(String location) {
+		if (!neededBundlesAvailable || isNetworkPath(location)) {
+			return null;
+		}
+		IWorkspaceRoot root = ResourcesPlugin.getWorkspace().getRoot();
+		Path path = new Path(location);
+		IResource resource = new File(location).isDirectory() ? root.getContainerForLocation(path)
+				: root.getFileForLocation(path);
+		if (resource == null || resource.getType() == IResource.ROOT) {
+			return null;
+		}
+		if (!resource.exists() && resource.getParent() != null) {
+			try {
+				resource.getParent().refreshLocal(IResource.DEPTH_ONE, null);
+			} catch (CoreException e) {
+				// as it is
+			}
+		}
+		return resource.exists() ? resource : null;
+	}
+
+	private void showInProjectExplorer(IResource resource) {
+		try {
+			IViewPart view = site.getPage().showView(IPageLayout.ID_PROJECT_EXPLORER);
+			if (view instanceof ISetSelectionTarget target) {
+				target.selectReveal(new StructuredSelection(resource));
+			}
+		} catch (PartInitException e) {
+			ILog.of(getClass()).error("Failed to show " + resource.getFullPath() + " in the Project Explorer", e); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+	}
+
+	/** Opens the folder, or the folder of the file, in the system's file manager. */
+	private static void openInSystemExplorer(String location) {
+		File file = new File(location);
+		File folder = file.isDirectory() ? file : file.getParentFile();
+		if (folder != null && !isNetworkPath(folder.getPath()) && folder.isDirectory()) {
+			Program.launch(folder.getPath());
+		}
+	}
+
+	private void copy(String text) {
+		Clipboard clipboard = new Clipboard(site.getShell().getDisplay());
+		try {
+			clipboard.setContents(new Object[] { text }, new Transfer[] { TextTransfer.getInstance() });
+		} finally {
+			clipboard.dispose();
+		}
+	}
+
+	/**
+	 * Puts what the context menu can do with the path or link the right-click was on into the group:
+	 * nothing when it was on neither, or when the menu came from the keyboard.
+	 */
+	void fillMenu(IMenuManager menu, String group) {
+		String link = menuLink;
+		String word = menuWord;
+		boolean pending = menuPending;
+		menuLink = null;
+		menuWord = null;
+		menuPending = false;
+		if (!pending) {
+			return;
+		}
+		String text = link != null ? LinkPolicy.target(link, localHostName())
+				: word != null ? LinkPolicy.fromScheme(word) : null;
+		if (text == null || text.isEmpty()) {
+			return;
+		}
+		if (LinkPolicy.isWeb(text)) {
+			menu.appendToGroup(group, action(Messages.PathMenu_openLink, () -> open(link, word)));
+			menu.appendToGroup(group, action(Messages.PathMenu_copyLink, () -> copy(text)));
+			return;
+		}
+		PathTarget target = resolvePath(text, link != null);
+		String location = target.location();
+		File file = new File(location);
+		if (isNetworkPath(location) || !file.exists()) {
+			return; // a word that names no file
+		}
+		IResource resource = workspaceResource(location);
+		if (!file.isDirectory()) {
+			menu.appendToGroup(group, action(Messages.PathMenu_open, () -> open(link, word)));
+			String name = file.getName().toLowerCase(Locale.ROOT);
+			if (name.endsWith(".html") || name.endsWith(".htm")) { //$NON-NLS-1$ //$NON-NLS-2$
+				menu.appendToGroup(group, action(Messages.PathMenu_openInBrowser, () -> openInBrowser(file)));
+			}
+		}
+		menu.appendToGroup(group, action(Messages.PathMenu_copyPath, () -> copy(file.getPath())));
+		if (resource != null) {
+			menu.appendToGroup(group, action(Messages.PathMenu_showInProjectExplorer,
+					() -> showInProjectExplorer(resource)));
+		}
+		menu.appendToGroup(group, action(Messages.PathMenu_openInSystemExplorer,
+				() -> openInSystemExplorer(location)));
+	}
+
+	private void openInBrowser(File file) {
+		try {
+			PlatformUI.getWorkbench().getBrowserSupport().getExternalBrowser().openURL(file.toURI().toURL());
+		} catch (PartInitException | MalformedURLException e) {
+			ILog.of(getClass()).error("Failed to open " + file + " in the web browser", e); //$NON-NLS-1$ //$NON-NLS-2$
+		}
+	}
+
+	private static IAction action(String label, Runnable run) {
+		return new Action(label) {
+			@Override
+			public void run() {
+				run.run();
+			}
+		};
 	}
 
 	/**

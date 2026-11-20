@@ -20,8 +20,9 @@ import java.util.function.Consumer;
 
 import org.eclipse.core.runtime.Assert;
 import org.eclipse.core.runtime.PlatformObject;
-import org.eclipse.jface.action.IContributionItem;
 import org.eclipse.jface.action.IMenuListener2;
+import org.eclipse.jface.action.GroupMarker;
+import org.eclipse.jface.action.IContributionItem;
 import org.eclipse.jface.action.IMenuManager;
 import org.eclipse.jface.action.MenuManager;
 import org.eclipse.jface.action.Separator;
@@ -87,6 +88,7 @@ public class TabFolderMenuHandler extends PlatformObject {
 		public void menuAboutToShow(IMenuManager manager) {
 			removeInvalidContributions(manager);
 			updateMenuItems(true);
+			fillPathItems(manager);
 		}
 
 		/**
@@ -469,6 +471,11 @@ public class TabFolderMenuHandler extends PlatformObject {
 	protected void doFillContextMenu(MenuManager manager) {
 		Assert.isNotNull(manager);
 
+		// what can be done with the path or link the right-click was on comes first
+		manager.add(new GroupMarker(PATH_GROUP));
+		// named, so that it ends the group: items appended to it go before this, not at the end
+		manager.add(new Separator(PATH_GROUP + ".end")); //$NON-NLS-1$
+
 		// Loop all actions and add them to the menu manager
 		for (AbstractTerminalAction action : contextMenuActions) {
 			manager.add(action);
@@ -485,6 +492,33 @@ public class TabFolderMenuHandler extends PlatformObject {
 		// Menu contributions will end up here
 		manager.add(new Separator());
 		manager.add(new Separator(IWorkbenchActionConstants.MB_ADDITIONS));
+	}
+
+	/** The group at the top of the menu for the path or link a right-click was on. */
+	private static final String PATH_GROUP = "terminalPath"; //$NON-NLS-1$
+
+	/** Replaces the items for the path or link the last right-click was on, if it was on one. */
+	void fillPathItems(IMenuManager manager) {
+		IContributionItem group = manager.find(PATH_GROUP);
+		if (group == null) {
+			return;
+		}
+		// the items of the last time: from the group marker to the separator after it
+		boolean in = false;
+		for (IContributionItem item : manager.getItems()) {
+			if (item == group) {
+				in = true;
+			} else if (in && item.isSeparator()) {
+				break;
+			} else if (in) {
+				manager.remove(item);
+			}
+		}
+		ITerminalViewControl terminal = getActiveTerminalViewControl();
+		if (terminal != null && terminal.getControl() != null
+				&& terminal.getControl().getData(OpenFileMouseHandler.KEY) instanceof OpenFileMouseHandler handler) {
+			handler.fillMenu(manager, PATH_GROUP);
+		}
 	}
 
 	/**
