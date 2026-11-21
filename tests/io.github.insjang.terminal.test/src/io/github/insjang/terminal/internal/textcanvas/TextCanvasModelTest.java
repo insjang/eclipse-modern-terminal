@@ -10,6 +10,11 @@
 package io.github.insjang.terminal.internal.textcanvas;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import java.util.ArrayList;
+import java.util.List;
 
 import org.eclipse.swt.graphics.Point;
 import io.github.insjang.terminal.internal.model.TerminalTextData;
@@ -85,6 +90,40 @@ public class TextCanvasModelTest {
 		assertEquals("\uD55C\uAE00", model.getSelectedText());
 		assertEquals(new Point(0, 0), model.getSelectionStart());
 		assertEquals(new Point(3, 0), model.getSelectionEnd());
+	}
+
+	@Test
+	public void testHoverUnderlinesOnlyWhatTheTestAccepts() {
+		TerminalTextData data = new TerminalTextData();
+		data.setDimensions(2, 30);
+		data.setChars(0, 0, "word a/b.md link".toCharArray(), null);
+		for (int c = 12; c < 16; c++) {
+			data.setLink(0, c, "https://example.com/x");
+		}
+		ITerminalTextDataSnapshot snapshot = data.makeSnapshot();
+		snapshot.updateSnapshot(true);
+		AbstractTextCanvasModel model = new AbstractTextCanvasModel(snapshot) {
+		};
+		List<String> asked = new ArrayList<>();
+		model.setHoverTest((link, word) -> {
+			asked.add(link + " " + word);
+			return link != null || word.endsWith(".md");
+		});
+		model.expandHoverSelectionAt(0, 1);
+		assertFalse(model.hasHoverSelection(0)); // a plain word is not underlined
+		assertEquals("word", model.getHoverSelectionText()); // but is still what a click takes
+		model.expandHoverSelectionAt(0, 6);
+		assertTrue(model.hasHoverSelection(0));
+		assertTrue(model.hasHoverSelection(0)); // asked once for the word, not for every paint
+		model.expandHoverSelectionAt(0, 13);
+		assertTrue(model.hasHoverSelection(0)); // the hyperlink under the pointer is given
+		assertEquals(List.of("null word", "null a/b.md", "https://example.com/x link"), asked);
+		// the line is redrawn with another word under the pointer: it is asked about again
+		data.setChars(0, 12, "next".toCharArray(), null);
+		model.update();
+		assertFalse(model.hasHoverSelection(0));
+		model.setHoverTest(null);
+		assertTrue(model.hasHoverSelection(0)); // no test underlines every word, as before
 	}
 
 	@Test

@@ -963,6 +963,12 @@ public class TextCanvas extends GridCanvas {
 		return fCellCanvasModel.getHoverSelectionText();
 	}
 
+	/** @param test see {@link ITextCanvasModel#setHoverTest} */
+	public void setLinkTest(java.util.function.BiPredicate<String, String> test) {
+		fCellCanvasModel.setHoverTest(test);
+		redraw();
+	}
+
 	/** @return the word at the cell, found as the hover finds it, which is left as it was; null for none */
 	public String getWordAt(int line, int column) {
 		int hoverLine = -1;

@@ -108,6 +108,7 @@ Eclipse Terminal을 fork한 것으로, 별도 뷰 **Modern Terminal**로 기존 
 - OSC 8 파일 링크는 이 PC의 파일만 열고, 다른 호스트를 가리키면 무시
 - 폴더는 워크스페이스 안이면 Project Explorer에서 보여 주고, 밖이면 시스템 파일 탐색기로 열기
 - Claude Code처럼 프로그램이 마우스를 받는 중에도 Ctrl+클릭과 밑줄이 동작
+- Ctrl을 누르면 클릭으로 열리는 것에만 밑줄: URL, OSC 8 링크, 실제로 있는 파일·폴더
 
 경로, URL, OSC 8 링크 위에서 우클릭하면 할 수 있는 일이 메뉴 맨 위에 나옴 (프로그램이 마우스를 받는 중에는 Shift+우클릭):
 

@@ -17,6 +17,7 @@ package io.github.insjang.terminal.internal.textcanvas;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.function.BiPredicate;
 
 import org.eclipse.core.runtime.Platform;
 import org.eclipse.swt.graphics.Point;
@@ -53,6 +54,11 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 	private int fCols;
 
 	private TextRange fHoverRange = TextRange.EMPTY;
+	/** whether the hover word opens something, so that it is underlined: (link at the pointer, word); null underlines every word */
+	private BiPredicate<String, String> fHoverTest;
+	/** the hover range fHoverOpens was found for */
+	private TextRange fTestedRange;
+	private boolean fHoverOpens;
 	// the cell the hover was asked for, so it can be found again when its line is redrawn
 	private int fHoverLine = -1;
 	private int fHoverColumn = -1;
@@ -372,10 +378,29 @@ abstract public class AbstractTextCanvasModel implements ITextCanvasModel {
 
 	@Override
 	public boolean hasHoverSelection(int line) {
-		if (fHoverRange.isEmpty()) {
+		if (fHoverRange.isEmpty() || !hoverOpens()) {
 			return false;
 		}
 		return fHoverRange.contains(line);
+	}
+
+	@Override
+	public void setHoverTest(BiPredicate<String, String> test) {
+		fHoverTest = test;
+		fTestedRange = null;
+	}
+
+	/** @return whether the word under the pointer opens something, asked once for each hover range */
+	private boolean hoverOpens() {
+		if (fHoverTest == null) {
+			return true;
+		}
+		TextRange range = fHoverRange;
+		if (range != fTestedRange) {
+			fHoverOpens = fHoverTest.test(fSnapshot.getLink(fHoverLine, fHoverColumn), range.text);
+			fTestedRange = range;
+		}
+		return fHoverOpens;
 	}
 
 	@Override

@@ -161,9 +161,7 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 	 */
 	@SuppressWarnings("restriction")
 	private void open(String link, String hover) {
-		// a URL with an icon glued to its front, as Claude Code prints them, opens from its scheme
-		String textToOpen = link != null ? LinkPolicy.target(link, localHostName())
-				: hover != null ? LinkPolicy.fromScheme(hover) : null;
+		String textToOpen = target(link, hover);
 		// a link whose text says something else is shown before it is opened, file links too
 		if (link != null && textToOpen != null && LinkPolicy.confirm(link, textToOpen, hover)
 				&& !MessageDialog.openQuestion(site.getShell(), Messages.OpenLink_title,
@@ -389,8 +387,7 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		if (!pending) {
 			return;
 		}
-		String text = link != null ? LinkPolicy.target(link, localHostName())
-				: word != null ? LinkPolicy.fromScheme(word) : null;
+		String text = target(link, word);
 		if (text == null || text.isEmpty()) {
 			return;
 		}
@@ -399,12 +396,11 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 			menu.appendToGroup(group, action(Messages.PathMenu_copyLink, () -> copy(text)));
 			return;
 		}
-		PathTarget target = resolvePath(text, link != null);
-		String location = target.location();
-		File file = new File(location);
-		if (isNetworkPath(location) || !file.exists()) {
+		File file = existing(text, link != null);
+		if (file == null) {
 			return; // a word that names no file
 		}
+		String location = file.getPath();
 		IResource resource = workspaceResource(location);
 		if (!file.isDirectory()) {
 			menu.appendToGroup(group, action(Messages.PathMenu_open, () -> open(link, word)));
@@ -420,6 +416,52 @@ public class OpenFileMouseHandler implements ITerminalMouseListener {
 		}
 		menu.appendToGroup(group, action(Messages.PathMenu_openInSystemExplorer,
 				() -> openInSystemExplorer(location)));
+	}
+
+	/**
+	 * Whether a Ctrl+click on the word opens something: a web URL, or a file or folder that exists,
+	 * as the context menu finds them. The Ctrl hover underlines only such words.
+	 *
+	 * @param link the hyperlink (OSC 8) at the pointer, null for none
+	 * @param word the word at the pointer, null for none
+	 */
+	boolean opens(String link, String word) {
+		String text = target(link, word);
+		if (text == null || text.isEmpty()) {
+			return false;
+		}
+		return LinkPolicy.isWeb(text) || neededBundlesAvailable && existing(text, link != null) != null;
+	}
+
+	/** @return what a link or a word opens, before it is resolved; null for nothing */
+	private String target(String link, String word) {
+		// a URL with an icon glued to its front, as Claude Code prints them, opens from its scheme
+		return link != null ? LinkPolicy.target(link, localHostName())
+				: word != null ? LinkPolicy.fromScheme(word) : null;
+	}
+
+	private String checkedLocation;
+	private long checkedAt;
+	private boolean checkedExists;
+
+	/**
+	 * @return the file or folder the path names, null if there is none or it is on another host
+	 */
+	private File existing(String text, boolean fromLink) {
+		String location = resolvePath(text, fromLink).location();
+		if (isNetworkPath(location)) {
+			return null;
+		}
+		File file = new File(location);
+		// ponytail: one remembered answer, as a program that redraws asks again for the same word
+		// many times a second (a WSL path from Windows is slow to probe); a map if menus and hovers mix
+		long now = System.nanoTime();
+		if (!location.equals(checkedLocation) || now - checkedAt > 1_000_000_000L) {
+			checkedExists = file.exists();
+			checkedLocation = location;
+			checkedAt = now;
+		}
+		return checkedExists ? file : null;
 	}
 
 	private void openInBrowser(File file) {

@@ -374,6 +374,7 @@ public class TabFolderManager extends PlatformObject implements ISelectionProvid
 		OpenFileMouseHandler handler = new OpenFileMouseHandler(getParentView().getSite(), terminal);
 		terminal.addMouseListener(handler);
 		terminal.getControl().setData(OpenFileMouseHandler.KEY, handler);
+		terminal.setLinkTest(handler::opens);
 	}
 
 	/**

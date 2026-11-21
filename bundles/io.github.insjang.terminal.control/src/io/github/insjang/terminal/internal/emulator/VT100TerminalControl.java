@@ -1988,6 +1988,11 @@ public class VT100TerminalControl implements ITerminalControlForText, ITerminalC
 	}
 
 	@Override
+	public void setLinkTest(java.util.function.BiPredicate<String, String> test) {
+		fCtlText.setLinkTest(test);
+	}
+
+	@Override
 	public void showCursor(boolean show) {
 		synchronized (fModeLock) {
 			fCursorHidden = !show;

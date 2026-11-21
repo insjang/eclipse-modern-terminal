@@ -108,6 +108,7 @@ What the terminal shows comes from programs and servers, so Ctrl+click (on a pat
 - An OSC 8 file link opens only a file on this computer; one to another host is ignored
 - A folder shows in the Project Explorer when it is in the workspace, otherwise it opens in the system's file manager
 - Ctrl+click and the underline work also while a program takes the mouse, as Claude Code does
+- Holding Ctrl underlines only what a click opens: a URL, an OSC 8 link, or a file or folder that exists
 
 Right-click on a path, a URL or an OSC 8 link puts what can be done with it at the top of the context menu (Shift+right-click while a program takes the mouse):
 

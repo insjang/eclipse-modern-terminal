@@ -99,6 +99,12 @@ public interface ITextCanvasModel {
 	void expandHoverSelectionAt(int line, int col);
 
 	/**
+	 * @param test whether the word under the pointer opens something and is underlined, given the
+	 *        hyperlink (OSC 8) at the pointer, or null, and the word; null underlines every word
+	 */
+	void setHoverTest(java.util.function.BiPredicate<String, String> test);
+
+	/**
 	 * @param line
 	 * @return true if line is part of the hover selection
 	 */

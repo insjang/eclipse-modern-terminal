@@ -220,6 +220,16 @@ public interface ITerminalViewControl {
 	}
 
 	/**
+	 * Which words the Ctrl hover underlines: those a Ctrl+click opens, rather than every word.
+	 *
+	 * @param test given the hyperlink (OSC 8) at the pointer, or null, and the word there: whether
+	 *        it opens something; null underlines every word
+	 * @since 1.5
+	 */
+	default void setLinkTest(java.util.function.BiPredicate<String, String> test) {
+	}
+
+	/**
 	 * The working directory the shell last reported with OSC 7, or null if it never did.
 	 *
 	 * @since 1.1
